@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "zenith", "zenith.csproj", "{9058E7D2-5F19-42EB-B93E-A3453B1EAC9F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9058E7D2-5F19-42EB-B93E-A3453B1EAC9F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9058E7D2-5F19-42EB-B93E-A3453B1EAC9F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9058E7D2-5F19-42EB-B93E-A3453B1EAC9F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9058E7D2-5F19-42EB-B93E-A3453B1EAC9F}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {FEFAD4D3-D7A4-4C10-B12A-E5B213CD7EC1}
+	EndGlobalSection
+EndGlobal
