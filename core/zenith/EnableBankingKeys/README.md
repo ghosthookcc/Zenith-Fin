@@ -1,0 +1,1 @@
+﻿# This folder contains all .pem files for API access using EnableBanking
