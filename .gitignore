@@ -7,7 +7,7 @@
 
 app.config
 config.json
-**/EnableBankingKeys/*.pem
+*.pem
 
 # User-specific files
 *.rsuser
