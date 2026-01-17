@@ -11,10 +11,11 @@ namespace ZenithFin.EnableBanking
 {
     internal class Authenticator
     {
-        private readonly string jwtAudience = "api.enablebanking.com";
-        private readonly string jwtIssuer = "enablebanking.com";
-
         internal Workspace workspace;
+        internal Client client;
+
+        private readonly string _jwtAudience = "api.enablebanking.com";
+        private readonly string _jwtIssuer = "enablebanking.com";
 
         public string GenerateToken(string keyPath, string applicationId)
         {
@@ -31,8 +32,8 @@ namespace ZenithFin.EnableBanking
             DateTime now = DateTime.Now;
             long unixTimeNowInSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
 
-            JwtSecurityToken jsonWebToken = new(audience: jwtAudience,
-                                                 issuer: jwtIssuer,
+            JwtSecurityToken jsonWebToken = new(audience: _jwtAudience,
+                                                 issuer: _jwtIssuer,
                                                  claims: new[]
                                                  {
                                                      new Claim(JwtRegisteredClaimNames.Iat,
@@ -45,7 +46,7 @@ namespace ZenithFin.EnableBanking
             return new JwtSecurityTokenHandler().WriteToken(jsonWebToken);
         }
 
-        public async Task<bool> Authenticate(Client client)
+        public async Task<bool> Authenticate()
         {
             if (workspace.config != null)
             {
@@ -56,6 +57,9 @@ namespace ZenithFin.EnableBanking
                 Console.WriteLine("Created application JwT:");
                 Console.WriteLine(jsonWebToken + "\n");
                 client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jsonWebToken);
+                client.Http.DefaultRequestHeaders
+                           .Accept
+                           .Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
                 dynamic response = await Wrapper.GET.Application(client)
                                                     .SendAsync();
@@ -92,30 +96,42 @@ namespace ZenithFin.EnableBanking
                     { "code", code! }
                 };
 
-                /*
                 response = await Wrapper.POST.Sessions(client)
                                              .WithBody(body)
-                                             .SendAsync<Response>();
+                                             .SendAsync();
 
-                json = await response.Content.ReadAsStringAsync();
-                Dictionary<string, JsonElement>? jsonAsData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
-
-                Console.WriteLine($"New user session {jsonAsData?["session_id"]} has been created. The following accounts are available:");
+                Console.WriteLine($"New user session {response.sessionId} has been created. The following accounts are available:");
                 Console.WriteLine("==========================================\n");
-                foreach (JsonElement account in jsonAsData!["accounts"].EnumerateArray())
+
+                List<Response.AccountsBalances> balances = new ();
+                foreach (Response.AccountData account in response.accounts)
                 {
-                    Console.WriteLine($"- {account}\n");
+                    balances.Add(await Wrapper.GET.AccountsBalancesById(client,
+                                                                        account.uid)
+                                                  .SendAsync());
+                    Console.WriteLine($"- {account.ToString()}\n");
                 }
-                Console.WriteLine("==========================================");
-                */
+                Console.WriteLine("==========================================\n");
+
+                Console.WriteLine("Balances:");
+                Console.WriteLine("==========================================\n");
+                foreach (Response.AccountsBalances data in balances)
+                {
+                    foreach (Response.Balance balance in data.balances)
+                    {
+                        Console.WriteLine($"{balance.balanceType} - {balance.balanceAmount.amount} {balance.balanceAmount.currency}\n");
+                    }
+                }
+                Console.WriteLine("==========================================\n");
                 return true;
             }
             return false;
         }
 
-        internal Authenticator(Workspace workspace)
+        internal Authenticator(Workspace workspace, Client client)
         {
             this.workspace = workspace;
+            this.client = client;
         }
     }
 }

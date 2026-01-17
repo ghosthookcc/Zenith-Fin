@@ -7,9 +7,8 @@ namespace ZenithFin
     {
         static async Task Main(string[] args)
         {
-            Client client = new ();
             EnableBankingWorkspace workspace = new("EnableBanking/config.json");
-            await workspace.authenticator.Authenticate(client);
+            await workspace.authenticator.Authenticate();
         }
     }
 }

@@ -1,6 +1,7 @@
 ﻿using Org.BouncyCastle.Asn1.Ocsp;
 using System.Net;
 using System.Text.Json;
+using ZenithFin;
 using ZenithFin.EnableBanking;
 
 internal sealed class RequestBuilder
@@ -13,6 +14,12 @@ internal sealed class RequestBuilder
     private object? _body;
     private Dictionary<string, string>? _query;
     private Dictionary<string, string>? _headers;
+
+    private readonly JsonSerializerOptions _options = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = new SnakeCaseNamingPolicy(),
+        PropertyNameCaseInsensitive = true,
+    };
 
     public RequestBuilder WithBody(object body)
     {
@@ -44,11 +51,17 @@ internal sealed class RequestBuilder
         HttpResponseMessage response = await _client.SendAsync(_method, _route, _body, _query, _headers);
         string json = await response.Content.ReadAsStringAsync();
 
-        return JsonSerializer.Deserialize(json, _route.response)!;
+        return JsonSerializer.Deserialize(json, 
+                                          _route.response, 
+                                          _options)!;
     }
     public async Task<HttpResponseMessage> SendAsyncRaw()
     {
-        return await _client.SendAsync(_method, _route, _body, _query, _headers);
+        return await _client.SendAsync(_method, 
+                                       _route, 
+                                       _body, 
+                                       _query, 
+                                       _headers);
     }
 
     public RequestBuilder(Client client, HttpMethod method, Routing.Route route)
