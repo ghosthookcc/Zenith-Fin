@@ -5,7 +5,6 @@
         public Authenticator authenticator;
         public EnableBankingWorkspace(string configPath) : base(configPath)
         {
-
             this.authenticator = new(this);
         }
     }

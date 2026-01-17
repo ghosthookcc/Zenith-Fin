@@ -6,7 +6,7 @@ namespace ZenithFin.EnableBanking
     {
         public static class POST
         {
-            public static RequestBuilder Authenticate(Client client)
+            public static RequestBuilder Authentication(Client client)
             {
                 return new (client, HttpMethod.Post, Routing.Authentication.Authenticate);
             }

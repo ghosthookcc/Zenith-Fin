@@ -49,8 +49,6 @@ namespace ZenithFin.EnableBanking
         {
             if (workspace.config != null)
             {
-                HttpResponseMessage response;
-
                 string keyPath = workspace.config["keyPath"];
                 string applicationId = workspace.config["applicationId"];
 
@@ -59,7 +57,8 @@ namespace ZenithFin.EnableBanking
                 Console.WriteLine(jsonWebToken + "\n");
                 client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jsonWebToken);
 
-                response = await Wrapper.GET.Application(client).SendAsync();
+                dynamic response = await Wrapper.GET.Application(client)
+                                                    .SendAsync();
 
                 Dictionary<string, object> body = new()
                 {
@@ -79,13 +78,10 @@ namespace ZenithFin.EnableBanking
                     { "psu_type", "personal" }
                 };
 
-                response = await Wrapper.POST.Authenticate(client)
+                response = await Wrapper.POST.Authentication(client)
                                              .WithBody(body) 
                                              .SendAsync();
-
-                string json = await response.Content.ReadAsStringAsync();
-                Dictionary<string, string>? jsonAsDictionary = JsonSerializer.Deserialize<Dictionary<string, string>>(json);
-                Console.WriteLine($"To authenticate open URL {jsonAsDictionary?["url"]}");
+                Console.WriteLine($"To authenticate open URL {response.url}");
 
                 Console.Write("Paste here the URL you have been redirected to: ");
                 string? redirectedUrl = Console.ReadLine();
@@ -96,9 +92,10 @@ namespace ZenithFin.EnableBanking
                     { "code", code! }
                 };
 
+                /*
                 response = await Wrapper.POST.Sessions(client)
                                              .WithBody(body)
-                                             .SendAsync();
+                                             .SendAsync<Response>();
 
                 json = await response.Content.ReadAsStringAsync();
                 Dictionary<string, JsonElement>? jsonAsData = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json);
@@ -110,6 +107,7 @@ namespace ZenithFin.EnableBanking
                     Console.WriteLine($"- {account}\n");
                 }
                 Console.WriteLine("==========================================");
+                */
                 return true;
             }
             return false;

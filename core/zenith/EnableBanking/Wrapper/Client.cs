@@ -6,12 +6,12 @@ namespace ZenithFin.EnableBanking
     {
         public HttpClient Http { get; private set; }
         public async Task<HttpResponseMessage> SendAsync(HttpMethod method,
-                                                         string route,
+                                                         Routing.Route route,
                                                          object? body = null,
                                                          Dictionary<string, string>? query = null,
                                                          Dictionary<string, string>? headers = null)
         {
-            string uri = route;
+            string uri = route.endpoint;
 
             if (query?.Any() == true)
             {

@@ -2,16 +2,18 @@
 {
     internal static class Routing
     {
-        public static class Application
+        internal record Route (string endpoint, Type response);
+
+        public class Application
         {
-            public const string Root = "/application";
-            public static string ByIdentifier(string identifier) => $"/application/{identifier}";
+            public readonly static Route Root = new ("/application", typeof(Response.Application));
+            public static Route ByIdentifier (string identifier) => new ($"/application/{identifier}", typeof(Response.Application));
         }
 
-        public static class Authentication
+        public class Authentication
         {
-            public const string Authenticate = "/auth";
-            public const string Sessions = "/sessions";
+            public readonly static Route Authenticate = new ("/auth", typeof(Response.Authenticate));
+            public readonly static Route Sessions = new ("/sessions", typeof(Response.Authenticate));
         }
     }
 }
