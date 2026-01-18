@@ -1,14 +1,16 @@
-﻿using System.Text.Json;
-using ZenithFin.EnableBanking;
+﻿using ZenithFin.EnableBanking;
+using ZenithFin.Api;
 
 namespace ZenithFin
 {
     class Program
     {
-        static async Task Main(string[] args)
+        static readonly EnableBankingWorkspace Enablebanking = new("EnableBanking/workspace.json");
+        static readonly ZenithFinApiWorkspace ZenithFin = new("Api/workspace.json");
+        static void Main(string[] args)
         {
-            EnableBankingWorkspace workspace = new("EnableBanking/config.json");
-            await workspace.authenticator.Authenticate();
+            //await workspace.authenticator.Authenticate();
+            ZenithFin.Manager.Start();
         }
     }
 }

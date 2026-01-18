@@ -9,7 +9,7 @@
     "check": "npm run check.fmt && npm run check.lint && astro check",
     "check.fmt": "prettier --check .",
     "check.lint": "eslint \"**/*.{js,jsx,ts,tsx,astro}\"",
-    "dev": "astro dev",
+    "dev": "astro dev --port 4444",
     "fix": "npm run lint && npm run fmt",
     "fmt": "prettier --write .",
     "lint": "eslint --fix \"**/*.{js,jsx,ts,tsx,astro}\"",

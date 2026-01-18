@@ -51,10 +51,18 @@ namespace ZenithFin.EnableBanking
         {
             if (workspace.config != null)
             {
-                string keyPath = workspace.config["keyPath"];
-                string applicationId = workspace.config["applicationId"];
+                string? keyPath = workspace.config
+                                           .RootElement
+                                           .GetProperty("EnableBanking")
+                                           .GetProperty("keyPath")
+                                           .GetString();
+                string? applicationId = workspace.config
+                                                 .RootElement
+                                                 .GetProperty("EnableBanking")
+                                                 .GetProperty("applicationId")
+                                                 .GetString();
 
-                string jsonWebToken = GenerateToken(keyPath, applicationId);
+                string jsonWebToken = GenerateToken(keyPath!, applicationId!);
                 Console.WriteLine("Created application JwT:");
                 Console.WriteLine(jsonWebToken + "\n");
                 client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jsonWebToken);
@@ -79,7 +87,12 @@ namespace ZenithFin.EnableBanking
                         { "country", "SE" }
                     }},
                     { "state", System.Guid.NewGuid().ToString() },
-                    { "redirect_url", "https://localhost:4444/" },
+                    { "redirect_url", workspace.config
+                                               .RootElement
+                                               .GetProperty("EnableBanking")
+                                               .GetProperty("redirectUrl")
+                                               .GetString()!
+                    },
                     { "psu_type", "personal" }
                 };
 
@@ -122,9 +135,8 @@ namespace ZenithFin.EnableBanking
                     {
                         Console.WriteLine($"{balance.balanceType} - {balance.balanceAmount.amount} {balance.balanceAmount.currency}");
                     }
-                    Debug.WriteLine("");
                 }
-                Console.WriteLine("==========================================\n");
+                Console.WriteLine("\n==========================================\n");
                 return true;
             }
             return false;

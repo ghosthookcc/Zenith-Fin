@@ -4,10 +4,11 @@ namespace ZenithFin
 {
     class Workspace
     {
-        public Dictionary<string, string>? config = new();
+        public JsonDocument? config;
         public Workspace(string configPath)
         {
-            config = JsonSerializer.Deserialize<Dictionary<string, string>>(File.ReadAllText(configPath));
+            var jsonText = File.ReadAllText(configPath);
+            config = JsonDocument.Parse(jsonText);
         }
     }
 }
