@@ -1,4 +1,5 @@
 ﻿using Microsoft.IdentityModel.Tokens;
+using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
@@ -119,8 +120,9 @@ namespace ZenithFin.EnableBanking
                 {
                     foreach (Response.Balance balance in data.balances)
                     {
-                        Console.WriteLine($"{balance.balanceType} - {balance.balanceAmount.amount} {balance.balanceAmount.currency}\n");
+                        Console.WriteLine($"{balance.balanceType} - {balance.balanceAmount.amount} {balance.balanceAmount.currency}");
                     }
+                    Debug.WriteLine("");
                 }
                 Console.WriteLine("==========================================\n");
                 return true;
