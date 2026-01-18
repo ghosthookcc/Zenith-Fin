@@ -1,4 +1,6 @@
-﻿namespace ZenithFin.EnableBanking
+﻿using ZenithFin.Utility;
+
+namespace ZenithFin.EnableBanking
 {
     class EnableBankingWorkspace : Workspace
     {

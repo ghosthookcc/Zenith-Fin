@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Web;
+using ZenithFin.Utility;
 
 namespace ZenithFin.EnableBanking
 {

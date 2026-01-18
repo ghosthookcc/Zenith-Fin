@@ -1,6 +1,6 @@
 ﻿using System.Text.Json;
 
-namespace ZenithFin
+namespace ZenithFin.Utility
 {
     class Workspace
     {

@@ -1,4 +1,6 @@
-﻿namespace ZenithFin.Api
+﻿using ZenithFin.Utility;
+
+namespace ZenithFin.Api
 {
     
     class ZenithFinApiWorkspace : Workspace

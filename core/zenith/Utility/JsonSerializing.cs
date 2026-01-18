@@ -1,7 +1,7 @@
 ﻿using System.Text;
 using System.Text.Json;
 
-namespace ZenithFin
+namespace ZenithFin.Utility
 {
     public sealed class SnakeCaseNamingPolicy : JsonNamingPolicy
     {

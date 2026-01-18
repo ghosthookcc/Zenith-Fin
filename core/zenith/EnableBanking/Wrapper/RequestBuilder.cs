@@ -1,5 +1,5 @@
 ﻿using System.Text.Json;
-using ZenithFin;
+using ZenithFin.Utility;
 using ZenithFin.EnableBanking;
 
 internal sealed class RequestBuilder
