@@ -1,8 +1,4 @@
-﻿using GoCardless.Resources;
-using System.Security.Principal;
-using static ZenithFin.EnableBanking.Response;
-
-namespace ZenithFin.EnableBanking
+﻿namespace ZenithFin.EnableBanking
 {
     public static class Response
     {

@@ -1,6 +1,4 @@
-﻿using Org.BouncyCastle.Asn1.Ocsp;
-using System.Net;
-using System.Text.Json;
+﻿using System.Text.Json;
 using ZenithFin;
 using ZenithFin.EnableBanking;
 
