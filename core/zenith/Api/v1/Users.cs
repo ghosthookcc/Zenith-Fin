@@ -2,7 +2,10 @@
 
 namespace ZenithFin.Api.v1
 {
-    public class Routing : ControllerBase
+    [ApiController]
+    [ApiVersion("1.0")]
+    [Route("api/v{version:apiVersion}/users")]
+    public class Users : ControllerBase
     {
         [HttpGet]
         public IActionResult GetAll()

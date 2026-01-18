@@ -1,4 +1,6 @@
-﻿namespace ZenithFin.Api
+﻿using Microsoft.AspNetCore.Mvc;
+
+namespace ZenithFin.Api
 {
     public class ApiManager
     {
@@ -10,6 +12,13 @@
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
+
+            builder.Services.AddApiVersioning(options =>
+            {
+                options.DefaultApiVersion = new ApiVersion(1, 0);
+                options.AssumeDefaultVersionWhenUnspecified = true;
+                options.ReportApiVersions = true;
+            });
 
             _app = builder.Build();
 
