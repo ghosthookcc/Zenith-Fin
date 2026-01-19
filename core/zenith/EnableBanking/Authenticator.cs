@@ -74,31 +74,18 @@ namespace ZenithFin.EnableBanking
                 dynamic response = await Wrapper.GET.Application(client)
                                                     .SendAsync();
 
-                Dictionary<string, object> body = new()
-                {
-                    {
-                        "access", new Dictionary<string, string>()
-                        {
-                            { "valid_until", DateTime.UtcNow.AddDays(10).ToString("u") }
-                        }},
-                    {
-                    "aspsp", new Dictionary<string, string>()
-                    {
-                        { "name", "Nordea" },
-                        { "country", "SE" }
-                    }},
-                    { "state", System.Guid.NewGuid().ToString() },
-                    { "redirect_url", workspace.config
-                                               .RootElement
-                                               .GetProperty("EnableBanking")
-                                               .GetProperty("redirectUrl")
-                                               .GetString()!
-                    },
-                    { "psu_type", "personal" }
-                };
+                Request.Authenticate authenticationBody = new (new EnableBankingDtos.Access(DateTime.UtcNow.AddDays(10)),
+                                                               new EnableBankingDtos.Aspsp("Nordea", "SE"),
+                                                               Guid.NewGuid().ToString(),
+                                                               workspace.config
+                                                                        .RootElement
+                                                                        .GetProperty("EnableBanking")
+                                                                        .GetProperty("redirectUrl")
+                                                                        .GetString()!,
+                                                               "personal");
 
                 response = await Wrapper.POST.Authentication(client)
-                                             .WithBody(body) 
+                                             .WithBody(authenticationBody) 
                                              .SendAsync();
                 Console.WriteLine($"To authenticate open URL {response.url}");
 
@@ -106,20 +93,17 @@ namespace ZenithFin.EnableBanking
                 string? redirectedUrl = Console.ReadLine();
 
                 string? code = HttpUtility.ParseQueryString(new Uri(redirectedUrl!).Query)["code"];
-                body = new()
-                {
-                    { "code", code! }
-                };
+                Request.Sessions sessionsBody = new (code!);
 
                 response = await Wrapper.POST.Sessions(client)
-                                             .WithBody(body)
+                                             .WithBody(sessionsBody)
                                              .SendAsync();
 
                 Console.WriteLine($"New user session {response.sessionId} has been created. The following accounts are available:");
                 Console.WriteLine("==========================================\n");
 
                 List<Response.AccountsBalances> balances = new ();
-                foreach (Response.AccountData account in response.accounts)
+                foreach (EnableBankingDtos.AccountData account in response.accounts)
                 {
                     balances.Add(await Wrapper.GET.AccountsBalancesById(client,
                                                                         account.uid)
@@ -132,7 +116,7 @@ namespace ZenithFin.EnableBanking
                 Console.WriteLine("==========================================\n");
                 foreach (Response.AccountsBalances data in balances)
                 {
-                    foreach (Response.Balance balance in data.balances)
+                    foreach (EnableBankingDtos.Balance balance in data.balances)
                     {
                         Console.WriteLine($"{balance.balanceType} - {balance.balanceAmount.amount} {balance.balanceAmount.currency}");
                     }

@@ -46,7 +46,12 @@ internal sealed class RequestBuilder
 
     public async Task<dynamic> SendAsync()
     {
-        HttpResponseMessage response = await _client.SendAsync(_method, _route, _body, _query, _headers);
+        HttpResponseMessage response = await _client.SendAsync(_method, 
+                                                               _route, 
+                                                               _body, 
+                                                               _query, 
+                                                               _headers, 
+                                                               _options);
         string json = await response.Content.ReadAsStringAsync();
 
         return JsonSerializer.Deserialize(json, 
@@ -59,7 +64,8 @@ internal sealed class RequestBuilder
                                        _route, 
                                        _body, 
                                        _query, 
-                                       _headers);
+                                       _headers,
+                                       _options);
     }
 
     public RequestBuilder(Client client, HttpMethod method, Routing.Route route)

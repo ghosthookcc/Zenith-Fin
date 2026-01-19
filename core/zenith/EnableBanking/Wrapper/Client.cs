@@ -1,4 +1,5 @@
-﻿using System.Net.Http.Json;
+﻿using System.Net.Http.Headers;
+using System.Text.Json;
 
 namespace ZenithFin.EnableBanking
 {
@@ -9,7 +10,8 @@ namespace ZenithFin.EnableBanking
                                                          Routing.Route route,
                                                          object? body = null,
                                                          Dictionary<string, string>? query = null,
-                                                         Dictionary<string, string>? headers = null)
+                                                         Dictionary<string, string>? headers = null,
+                                                         JsonSerializerOptions? options = null)
         {
             string uri = route.endpoint;
 
@@ -22,7 +24,10 @@ namespace ZenithFin.EnableBanking
 
             if (body != null)
             {
-                request.Content = JsonContent.Create(body);
+                options = options ?? new JsonSerializerOptions();
+                request.Content = JsonContent.Create(body, 
+                                                     mediaType: new MediaTypeHeaderValue("application/json"),
+                                                     options: options);
             }
 
             if (headers != null)
