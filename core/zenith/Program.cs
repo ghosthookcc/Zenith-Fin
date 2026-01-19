@@ -9,8 +9,7 @@ namespace ZenithFin
         static readonly ZenithFinApiWorkspace ZenithFin = new("Api/workspace.json");
         static async Task Main(string[] args)
         {
-            await EnableBanking.authenticator.Authenticate();
-            //ZenithFin.Manager.Start();
+            await ZenithFin.Manager.StartAsync();
         }
     }
 }

@@ -88,40 +88,6 @@ namespace ZenithFin.EnableBanking
                                              .WithBody(authenticationBody) 
                                              .SendAsync();
                 Console.WriteLine($"To authenticate open URL {response.url}");
-
-                Console.Write("Paste here the URL you have been redirected to: ");
-                string? redirectedUrl = Console.ReadLine();
-
-                string? code = HttpUtility.ParseQueryString(new Uri(redirectedUrl!).Query)["code"];
-                Request.Sessions sessionsBody = new (code!);
-
-                response = await Wrapper.POST.Sessions(client)
-                                             .WithBody(sessionsBody)
-                                             .SendAsync();
-
-                Console.WriteLine($"New user session {response.sessionId} has been created. The following accounts are available:");
-                Console.WriteLine("==========================================\n");
-
-                List<Response.AccountsBalances> balances = new ();
-                foreach (EnableBankingDtos.AccountData account in response.accounts)
-                {
-                    balances.Add(await Wrapper.GET.AccountsBalancesById(client,
-                                                                        account.uid)
-                                                  .SendAsync());
-                    Console.WriteLine($"- {account.ToString()}\n");
-                }
-                Console.WriteLine("==========================================\n");
-
-                Console.WriteLine("Balances:");
-                Console.WriteLine("==========================================\n");
-                foreach (Response.AccountsBalances data in balances)
-                {
-                    foreach (EnableBankingDtos.Balance balance in data.balances)
-                    {
-                        Console.WriteLine($"{balance.balanceType} - {balance.balanceAmount.amount} {balance.balanceAmount.currency}");
-                    }
-                }
-                Console.WriteLine("\n==========================================\n");
                 return true;
             }
             return false;

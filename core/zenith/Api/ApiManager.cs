@@ -5,7 +5,7 @@ namespace ZenithFin.Api
     public class ApiManager
     {
         private WebApplication? _app;
-        public void Start()
+        public async Task StartAsync()
         {
             WebApplicationBuilder builder = WebApplication.CreateBuilder();
 
@@ -32,7 +32,7 @@ namespace ZenithFin.Api
 
             _app.MapControllers();
 
-            _app.Run();
+            await _app!.RunAsync();
         }
     }
 }
