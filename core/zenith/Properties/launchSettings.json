@@ -5,6 +5,13 @@
       "launchBrowser": false,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "https": {
+        "commandNMame": "Project",
+        "dotnetRunMessages": true,
+        "launchBrowser": false,
+        "applicationUrl": "https://localhost:4444;https://localhost:4446",
+        "environmentVariables": "Development"
       }
     }
   }

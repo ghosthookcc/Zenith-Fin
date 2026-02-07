@@ -1,0 +1,20 @@
+model User {
+  id BigInt @id @default(autoincrement())
+  full_name String @db.VarChar(70)
+  email String @db.VarChar(255) @unique
+  phone String @db.VarChar(32) @unique
+  password_hash String @db.VarChar(255)
+  created_at DateTime @default(now())
+
+  status UserStatus?
+
+  @@index([email])
+}
+
+model UserStatus {
+    userId BigInt @id
+    last_updated DateTime @updatedAt
+    is_active Boolean @default(false)
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}

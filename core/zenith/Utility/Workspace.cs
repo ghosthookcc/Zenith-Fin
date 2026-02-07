@@ -2,7 +2,7 @@
 
 namespace ZenithFin.Utility
 {
-    class Workspace
+    public class Workspace
     {
         public JsonDocument? config;
         public Workspace(string configPath)

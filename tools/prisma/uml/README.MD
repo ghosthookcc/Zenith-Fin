@@ -1,0 +1,1 @@
+# This is where the live schema UML SVG will be saved when generating using ERD

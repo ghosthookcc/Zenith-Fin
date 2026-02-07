@@ -13,11 +13,13 @@
         {
             public readonly static Route Authenticate = new ("/auth", typeof(Response.Authenticate));
             public readonly static Route Sessions = new ("/sessions", typeof(Response.Sessions));
+            public readonly static Route Aspsps = new ("/aspsps", typeof(Response.Aspsps));
+            public static Route AuthorizedAspspsByIdentifer(string identifier) => new($"/applications/{identifier}/aspsps", typeof(Response.AuthorizedAspsps));
         }
 
         public class AccountsBalances
         {
-            public static Route ByIdentifier(Guid id) => new($"/accounts/{id.ToString()}/balances", typeof(Response.AccountsBalances));
+            public static Route ByIdentifier(Guid id) => new ($"/accounts/{id.ToString()}/balances", typeof(Response.AccountsBalances));
         }
     }
 }

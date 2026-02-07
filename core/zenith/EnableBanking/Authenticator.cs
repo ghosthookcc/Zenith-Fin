@@ -1,13 +1,11 @@
 ﻿using Microsoft.IdentityModel.Tokens;
-using System.Diagnostics;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
-using System.Web;
 using ZenithFin.Utility;
+
+using static ZenithFin.EnableBanking.EnableBankingEntities;
 
 namespace ZenithFin.EnableBanking
 {
@@ -19,10 +17,21 @@ namespace ZenithFin.EnableBanking
         private readonly string _jwtAudience = "api.enablebanking.com";
         private readonly string _jwtIssuer = "enablebanking.com";
 
-        public string GenerateToken(string keyPath, string applicationId)
+        public string GenerateToken()
         {
+            string? keyPath = workspace.config!
+                                       .RootElement
+                                       .GetProperty("EnableBanking")
+                                       .GetProperty("keyPath")
+                                       .GetString();
+            string? applicationId = workspace.config
+                                             .RootElement
+                                             .GetProperty("EnableBanking")
+                                             .GetProperty("applicationId")
+                                             .GetString();
+
             using RSA rsa = RSA.Create();
-            rsa.ImportFromPem(File.ReadAllText(keyPath));
+            rsa.ImportFromPem(File.ReadAllText(keyPath!));
 
             RsaSecurityKey rsaKey = new(rsa);
 
@@ -35,47 +44,39 @@ namespace ZenithFin.EnableBanking
             long unixTimeNowInSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
 
             JwtSecurityToken jsonWebToken = new(audience: _jwtAudience,
-                                                 issuer: _jwtIssuer,
-                                                 claims: new[]
-                                                 {
-                                                     new Claim(JwtRegisteredClaimNames.Iat,
-                                                               unixTimeNowInSeconds.ToString(),
-                                                               ClaimValueTypes.Integer64)
-                                                 },
-                                                 expires: now.AddMinutes(30),
-                                                 signingCredentials: signingCredentials);
+                                                issuer: _jwtIssuer,
+                                                claims: new[]
+                                                {
+                                                    new Claim(JwtRegisteredClaimNames.Iat,
+                                                              unixTimeNowInSeconds.ToString(),
+                                                              ClaimValueTypes.Integer64)
+                                                },
+                                                expires: now.AddMinutes(5),
+                                                signingCredentials: signingCredentials);
             jsonWebToken.Header.Add("kid", applicationId);
-            return new JwtSecurityTokenHandler().WriteToken(jsonWebToken);
+
+            string token = new JwtSecurityTokenHandler().WriteToken(jsonWebToken);
+
+            client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+            client.Http.DefaultRequestHeaders
+                       .Accept
+                       .Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            Console.WriteLine("Created application JwT:");
+            Console.WriteLine(token + "\n");
+
+            return token;
         }
 
         public async Task<bool> Authenticate()
         {
             if (workspace.config != null)
             {
-                string? keyPath = workspace.config
-                                           .RootElement
-                                           .GetProperty("EnableBanking")
-                                           .GetProperty("keyPath")
-                                           .GetString();
-                string? applicationId = workspace.config
-                                                 .RootElement
-                                                 .GetProperty("EnableBanking")
-                                                 .GetProperty("applicationId")
-                                                 .GetString();
-
-                string jsonWebToken = GenerateToken(keyPath!, applicationId!);
-                Console.WriteLine("Created application JwT:");
-                Console.WriteLine(jsonWebToken + "\n");
-                client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", jsonWebToken);
-                client.Http.DefaultRequestHeaders
-                           .Accept
-                           .Add(new MediaTypeWithQualityHeaderValue("application/json"));
-
                 dynamic response = await Wrapper.GET.Application(client)
                                                     .SendAsync();
 
-                Request.Authenticate authenticationBody = new (new EnableBankingDtos.Access(DateTime.UtcNow.AddDays(10)),
-                                                               new EnableBankingDtos.Aspsp("Nordea", "SE"),
+                Request.Authenticate authenticationBody = new (new Access(DateTime.UtcNow.AddDays(10)),
+                                                               new Aspsp("Nordea", "SE"),
                                                                Guid.NewGuid().ToString(),
                                                                workspace.config
                                                                         .RootElement

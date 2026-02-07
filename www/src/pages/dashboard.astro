@@ -1,0 +1,19 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { Dashboard } from '../components/Dashboard';
+---
+
+<Layout title="Index page">
+	<main id="app">
+        <Dashboard client:load />
+	</main>
+</Layout>
+
+<style>
+#app {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+    text-align: center;
+}
+</style>

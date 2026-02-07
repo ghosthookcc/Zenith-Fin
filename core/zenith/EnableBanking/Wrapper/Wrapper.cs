@@ -1,7 +1,4 @@
-﻿using System.Text;
-using System.Text.Json;
-
-namespace ZenithFin.EnableBanking
+﻿namespace ZenithFin.EnableBanking
 {
     internal static class Wrapper
     {
@@ -15,6 +12,12 @@ namespace ZenithFin.EnableBanking
             public static RequestBuilder Sessions(Client client)
             {
                 return new (client, HttpMethod.Post, Routing.Authentication.Sessions);
+            }
+
+            public static RequestBuilder AuthorizedAspsps(Client client,
+                                                          string identifier)
+            {
+                return new(client, HttpMethod.Post, Routing.Authentication.AuthorizedAspspsByIdentifer(identifier));
             }
         }
         public static class GET
@@ -35,6 +38,10 @@ namespace ZenithFin.EnableBanking
                 return request;
             }
 
+            public static RequestBuilder Aspsps(Client client)
+            {
+                return new (client, HttpMethod.Get, Routing.Authentication.Aspsps);
+            }
         }
     }
 }

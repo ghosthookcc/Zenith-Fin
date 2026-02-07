@@ -1,0 +1,1 @@
+# Contains a history of PostgreSQL migrations

@@ -1,6 +1,7 @@
 ﻿namespace ZenithFin.Api.Auth
 {
-    public class JwtGenerator
+    public class JwtAuthenticator
     {
+
     }
 }

@@ -2,15 +2,15 @@
 
 namespace ZenithFin.EnableBanking
 {
-    class EnableBankingWorkspace : Workspace
+    public class EnableBankingWorkspace : Workspace
     {
-        public Authenticator authenticator;
+        internal Authenticator Authenticator;
 
-        private Client _client = new Client();
+        internal Client Client = new Client();
 
         public EnableBankingWorkspace(string configPath) : base(configPath)
         {
-            this.authenticator = new(this, _client);
+            this.Authenticator = new(this, Client);
         }
     }
 }
