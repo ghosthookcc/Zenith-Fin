@@ -26,5 +26,4 @@ namespace ZenithFin.EnableBanking
 
         internal sealed record AuthorizedAspsps() : Base;
     }
-
 }

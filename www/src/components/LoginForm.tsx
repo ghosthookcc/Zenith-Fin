@@ -1,28 +1,54 @@
 import { component$, useSignal, $ } from '@builder.io/qwik';
+import { fetchWithTimeout } from '../utils/network';
 
-export const LoginForm = component$(() => {
-  const email = useSignal('');
-  const password = useSignal('');
-  const error = useSignal('');
-  const loading = useSignal(false);
+export const LoginForm = component$(() => 
+{
+    const email = useSignal('');
+    const password = useSignal('');
 
-  const handleSubmit = $(async () => {
-    error.value = '';
-    loading.value = true;
+    const error = useSignal('');
+    const loading = useSignal(false);
 
-    try {
-      // TODO: replace with real auth call
-      await new Promise((r) => setTimeout(r, 800));
+    const handleSubmit = $(async () => 
+    {
+        error.value = '';
+        loading.value = true;
 
-      console.log({
-        email: email.value,
-        password: password.value,
-      });
-    } catch {
-      error.value = 'Invalid email or password';
-    } finally {
-      loading.value = false;
-    }
+        try
+        {
+            const response = await fetchWithTimeout('/api/login',
+            {
+                method: 'POST',
+                headers:
+                {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(
+                {
+                    email: email.value,
+                    password: password.value,
+                }, 5000),
+            });
+
+            const data = await response.json(); 
+
+            if (!data.success)
+            {
+                throw new Error(data.message || "Login failed");
+            }
+            else if (data.success && data.url)
+            {
+                window.location.href = data.url;
+            }
+        }
+        catch (errno: any)
+        {
+            error.value = errno.message;
+        }
+        finally
+        {
+            loading.value = false;
+        }
   });
 
   return (

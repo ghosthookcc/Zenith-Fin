@@ -7,14 +7,15 @@ model User {
   created_at DateTime @default(now())
 
   status UserStatus?
+  sessions Session[]
 
   @@index([email])
 }
 
 model UserStatus {
-    userId BigInt @id
+    user_id BigInt @id
     last_updated DateTime @updatedAt
     is_active Boolean @default(false)
 
-    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+    user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }

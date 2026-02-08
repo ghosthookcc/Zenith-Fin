@@ -1,11 +1,11 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { Dashboard } from '../components/Dashboard';
+export const prerender = false;
 ---
 
-<Layout title="Index page">
+<Layout title="Dashboard">
 	<main id="app">
-        <Dashboard client:load />
+        <p>Dashboard</p>
 	</main>
 </Layout>
 

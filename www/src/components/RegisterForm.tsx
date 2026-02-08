@@ -50,7 +50,7 @@ export const RegisterForm = component$(() =>
                 throw new Error(data.message || "Registration failed");
             }
         }
-        catch (errno)
+        catch (errno: any)
         {
             error.value = errno.message;
         }

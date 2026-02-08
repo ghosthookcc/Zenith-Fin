@@ -2,10 +2,12 @@ import type { APIRoute } from "astro";
 
 import { Agent } from 'undici';
 
-const insecureDispatcher = new Agent({
-  connect: {
-    rejectUnauthorized: false, // ⛔ ignore self-signed cert (DEV ONLY)
-  },
+const insecureDispatcher = new Agent(
+{
+    connect: 
+    {
+        rejectUnauthorized: false,
+    },
 });
 
 export const prerender = false;
@@ -15,41 +17,40 @@ export const POST: APIRoute = async ({ request }) =>
   console.log('🟢 SERVER: POST handler called');
   try 
   {
-    const body = await request.json();
+      const body = await request.json();
+          
+      console.log('🟢 SERVER: Received data:', body);
 
-    console.log('🟢 SERVER: Received data:', body);
-
-    const response = await fetch(
-      'https://localhost:4446/api/v1/auth/users/register',
+      const response = await fetch("https://localhost:4446/api/v1/auth/users/register",
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          firstName: body.firstName,
-          lastName: body.lastName,
-          email: body.email,
-          phone: body.phone,
-          password: body.password,
-        }),
-        dispatcher: insecureDispatcher,
-      }
-    );
+          method: 'POST',
+          headers: 
+          {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            firstName: body.firstName,
+            lastName: body.lastName,
+            email: body.email,
+            phone: body.phone,
+            password: body.password,
+          }),
+          dispatcher: insecureDispatcher,
+      });
 
-    console.log('🟢 SERVER: Received response:', response); 
+      console.log('🟢 SERVER: Received response:', response); 
 
-    const data = await response.json();
-    console.log('🟢 SERVER: Received response as json:', data); 
+      const data = await response.json();
+      console.log('🟢 SERVER: Received response as json:', data); 
 
-    return new Response(
-        JSON.stringify(
-        {
-            message: data.message,
-            success: data.success,
-        }),
-        { status: data.code }
-    );
+      return new Response(
+          JSON.stringify(
+          {
+              message: data.message,
+              success: data.success,
+          }),
+          { status: data.code }
+      );
   }
   catch (errno)
   {
