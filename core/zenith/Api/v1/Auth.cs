@@ -15,21 +15,8 @@ namespace ZenithFin.Api.v1
     public class Auth : ControllerBase
     {
         private readonly EnableBankingWorkspace _workspace;
-
         private readonly UserService _userService;
-
         private readonly JwtAuthenticator _jwtAuthenticator;
-
-        [HttpGet]
-        [ResourceGuard]
-        [Route("aspsp/auth")]
-        public IActionResult AuthenticateBankSessionStart([FromQuery] string code,
-                                                          [FromQuery] string state,
-                                                          [FromQuery] string? error = null)
-        {
-            // validateBankingRedirect();
-            return Ok();
-        }
 
         [HttpPost]
         [Route("users/register")]
@@ -40,7 +27,7 @@ namespace ZenithFin.Api.v1
                 if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
                 {
                     return BadRequest(new RegisterDto.RegisterResponse
-                    { 
+                    {
                         Message = "Email and password are required",
                         Success = false,
                         Code = StatusCodes.Status400BadRequest
@@ -103,7 +90,7 @@ namespace ZenithFin.Api.v1
                 });
             }
 
-            SessionCreated session = await _userService.CreateSessionAsync((long)userId, 
+            SessionCreated session = await _userService.CreateSessionAsync((long)userId,
                                                                            _jwtAuthenticator.Protector);
 
             string jsonWebToken = _jwtAuthenticator.CreateJwtForSession(session.UserId,
@@ -130,62 +117,24 @@ namespace ZenithFin.Api.v1
         }
 
         [HttpGet]
+        [ResourceGuard]
         [Route("users/session")]
-        public async Task<IActionResult> UserHasSession()
+        public void UserHasSession() { }
+
+        [HttpPost]
+        [ResourceGuard]
+        [Route("aspsp/connect")]
+        public void AuthenticateAspsp([FromBody] AspspDto.AuthenticationRequest request)
         {
-            if (!Request.Headers.TryGetValue("Authorization", out var authenticationHeader))
-            {
-                Console.WriteLine("No Authorization header!");
-                return Unauthorized();
-            }
 
-            try
-            {
-                var token = authenticationHeader.ToString().Replace("Bearer ", "");
-                if (string.IsNullOrEmpty(token))
-                {
-                    Console.WriteLine("No token in Authorization header!");
-                    return Unauthorized();
-                }
-
-                ClaimsPrincipal? principal = await _jwtAuthenticator.ValidateJwtForSession(token);
-                if (principal == null)
-                {
-                    Console.WriteLine("Token validation failed - invalid or expired session");
-                    return Unauthorized();
-                }
-
-                Claim? userId = principal.FindFirst(ClaimTypes.NameIdentifier);
-                if (userId == null)
-                {
-                    Console.WriteLine("No user ID in token claims");
-                    return Unauthorized();
-                }
-
-                Console.WriteLine($"Session valid for user: {userId.Value}");
-
-                return Ok(new
-                {
-                    success = true,
-                    userId = userId.Value,
-                    message = "Session is valid"
-                });
-            }
-            catch (Exception errno)
-            {
-                Console.WriteLine(errno.Message);
-                return Unauthorized();
-            }
         }
 
-        public Auth(EnableBankingWorkspace workspace, 
+        public Auth(EnableBankingWorkspace workspace,
                     UserService userService,
                     JwtAuthenticator jwtAuthenticator)
         {
             _workspace = workspace;
-
             _userService = userService;
-
             _jwtAuthenticator = jwtAuthenticator;
         }
     }

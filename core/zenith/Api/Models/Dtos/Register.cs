@@ -4,18 +4,18 @@
     {
         public class RegisterRequest
         {
-            public required string FirstName { get; set; }
-            public required string LastName { get; set; }
-            public required string Email { get; set; }
-            public required string Phone { get; set; }
-            public required string Password { get; set; }
+            public string FirstName { get; set; } = null!;
+            public string LastName { get; set; } = null!;
+            public string Email { get; set; } = null!;
+            public string Phone { get; set; } = null!;
+            public string Password { get; set; } = null!;
         }
 
         public class RegisterResponse
         {
-            public required string Message { get; set; }
-            public required bool Success { get; set; }
-            public required int Code { get; set; }
+            public string Message { get; set; } = null!;
+            public bool Success { get; set; }
+            public int Code { get; set; }
         }
     }
 }

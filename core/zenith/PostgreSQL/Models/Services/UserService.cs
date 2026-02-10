@@ -48,7 +48,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
             return Hashing.VerifyPassword(request.Password, attempt.PasswordHash!) ? attempt.UserId : null;
         }
 
-        public async Task<SessionCreated> CreateSessionAsync(long userId, Protector protector)
+        public async Task<SessionCreated> CreateSessionAsync(long userId, 
+                                                             Protector protector)
         {
             Guid sessionId = Guid.NewGuid();
 

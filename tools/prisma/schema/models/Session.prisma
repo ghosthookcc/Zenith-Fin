@@ -1,30 +1,16 @@
 model Session {
     session_id String @id @db.Uuid
-    user_id BigInt 
+    user_id    BigInt
 
-    jwt_secret_encrypted String @unique @db.Text
-    issued_at DateTime @default(now())
-    expires_at DateTime
-    revoked_at DateTime?
-
-    sessions AspspSession[]
+    jwt_secret_encrypted String    @unique @db.Text
+    issued_at            DateTime  @default(now())
+    expires_at           DateTime
+    revoked_at           DateTime?
 
     user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
+    pending_bank_connections PendingBankConnection[]
+    bank_connections         BankConnection[]
+
     @@index([user_id])
-}
-
-model AspspSession {
-    aspsp_session_id String @id @db.Uuid
-    active_session_id String @db.Uuid
-
-    aspsp_id String @unique
-    secret_hash String @unique @db.VarChar(255)
-
-    issued_at DateTime @default(now())
-    expires_at DateTime
-
-    session Session @relation(fields: [active_session_id], references: [session_id], onDelete: Cascade)
-
-    @@index([active_session_id])
 }

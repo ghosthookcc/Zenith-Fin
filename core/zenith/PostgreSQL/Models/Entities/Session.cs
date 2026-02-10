@@ -2,10 +2,10 @@
 {
     public sealed class SessionEntity
     {
-        public required Guid SessionId { get; set; }
-        public required long UserId { get; set; }
-        public required string JwtSecretEncrypted { get; set; } = null!;
-        public required DateTime IssuedAt { get; set; }
-        public required DateTime ExpiresAt { get; set; }
+        public Guid SessionId { get; set; }
+        public long UserId { get; set; }
+        public string JwtSecretEncrypted { get; set; } = null!;
+        public DateTime IssuedAt { get; set; }
+        public DateTime ExpiresAt { get; set; }
     }
 }

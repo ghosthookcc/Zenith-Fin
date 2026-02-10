@@ -20,7 +20,8 @@ export const POST: APIRoute = async ({ request, cookies }) => {
             return new Response(
                 JSON.stringify(
                 {
-                    message: "No token provided", success: false 
+                    message: "No token provided",
+                    success: false
                 }),
                 { status: 401 }
             );

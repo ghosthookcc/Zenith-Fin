@@ -5,6 +5,7 @@ using System.Security.Claims;
 using ZenithFin.PostgreSQL.Models.Repositories;
 using Microsoft.AspNetCore.DataProtection;
 using ZenithFin.PostgreSQL.Models.Dtos;
+using ZenithFin.Utility;
 
 namespace ZenithFin.Api.Auth
 {
@@ -13,7 +14,7 @@ namespace ZenithFin.Api.Auth
         private readonly IConfiguration _config;
         private readonly UserRepository _userRepository;
 
-        public readonly Protector Protector; 
+        public readonly Protector Protector;
 
         public JwtAuthenticator(IConfiguration config,
                                 UserRepository userRepository,
@@ -22,12 +23,13 @@ namespace ZenithFin.Api.Auth
             _config = config;
             _userRepository = userRepository;
 
-            Protector = new (provider);
+            Protector = new(provider,
+                            ProtectorPurpose.UserSession);
         }
 
-        public string CreateJwtForSession(long userId, 
-                                          string sessionId, 
-                                          string rawSecret, 
+        public string CreateJwtForSession(long userId,
+                                          string sessionId,
+                                          string rawSecret,
                                           DateTime expiresAt)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(rawSecret));
@@ -58,7 +60,7 @@ namespace ZenithFin.Api.Auth
 
                 var token = handler.ReadJwtToken(jwt);
 
-                Console.WriteLine("📋 Claims in token:");
+                Console.WriteLine("Claims in token:");
                 foreach (var claim in token.Claims)
                 {
                     Console.WriteLine($"   Type: {claim.Type}, Value: {claim.Value}");
@@ -113,18 +115,5 @@ namespace ZenithFin.Api.Auth
                 return null;
             }
         }
-    }
-
-    public sealed class Protector
-    {
-        private readonly IDataProtector _protector;
-
-        public Protector(IDataProtectionProvider provider)
-        {
-            _protector = provider.CreateProtector("jwt-session-secret");
-        }
-
-        public string Encrypt(string raw) => _protector.Protect(raw);
-        public string Decrypt(string encrypted) => _protector.Unprotect(encrypted);
     }
 }

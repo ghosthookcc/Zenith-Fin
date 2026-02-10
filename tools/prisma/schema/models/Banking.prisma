@@ -1,0 +1,35 @@
+model PendingBankConnection {
+    id                BigInt @id @default(autoincrement())
+    active_session_id String @db.Uuid
+
+    state String @unique
+
+    expires_at DateTime
+
+    sesssion Session @relation(fields: [active_session_id], references: [session_id])
+
+    @@index([active_session_id])
+    @@index([state])
+}
+
+model BankConnection {
+    id                BigInt @id @default(autoincrement())
+    active_session_id String @db.Uuid
+
+    aspsp_name    String
+    aspsp_country String
+    psu_type      String @default("personal")
+
+    aspsp_authorization_id String? @unique
+
+    access_token_encrypted  String @unique @db.Text
+    refresh_token_encrypted String @unique @db.Text
+
+    token_expires_at   DateTime
+    consent_expires_at DateTime
+
+    session Session @relation(fields: [active_session_id], references: [session_id])
+
+    @@unique([active_session_id, aspsp_name, aspsp_country])
+    @@index([active_session_id])
+}

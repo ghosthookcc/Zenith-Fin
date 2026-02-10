@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.CookiePolicy;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
 using ZenithFin.Api.Auth;
 using ZenithFin.EnableBanking;
@@ -20,9 +21,11 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<UserRepository>();
             builder.Services.AddSingleton<UserService>();
 
-            builder.Services.AddTransient<JwtAuthenticator>();
+            builder.Services.AddSingleton<JwtAuthenticator>();
 
-            builder.Services.AddDataProtection();
+            builder.Services.AddDataProtection()
+                            .PersistKeysToFileSystem(new DirectoryInfo("./"))
+                            .SetApplicationName("ZenithFin");
 
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();

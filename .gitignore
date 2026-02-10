@@ -15,6 +15,9 @@ yarn.lock
 *.sln.docstates
 *.env
 
+key-*.xml
+
+
 *.userprefs
 
 mono_crash.*

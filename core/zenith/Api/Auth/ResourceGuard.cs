@@ -7,37 +7,85 @@ namespace ZenithFin.Api.Auth
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method)]
     public class ResourceGuardAttribute : Attribute, IAsyncActionFilter
     {
-        private readonly string _cookieName;
-
-        public ResourceGuardAttribute(string cookieName = "AuthToken")
-        {
-            _cookieName = cookieName;
-        }
-
-        public async Task OnActionExecutionAsync(ActionExecutingContext context, 
+        public async Task OnActionExecutionAsync(ActionExecutingContext context,
                                                  ActionExecutionDelegate next)
         {
-            var cookies = context.HttpContext.Request.Cookies;
+            HttpRequest Request = context.HttpContext.Request;
 
-            if (!cookies.TryGetValue(_cookieName, out var token) || string.IsNullOrEmpty(token))
+            if (!Request.Headers.TryGetValue("Authorization", out var authenticationHeader))
             {
-                context.Result = new RedirectResult("https://localhost:4444/");
+                Console.WriteLine("No Authorization header!");
+                context.Result = new UnauthorizedObjectResult(new
+                {
+                    message = "No authorization header provided"
+                });
                 return;
             }
 
             try
             {
-                var jwtAuthenticator = context.HttpContext.RequestServices.GetRequiredService<JwtAuthenticator>();
-                ClaimsPrincipal? principal = await jwtAuthenticator.ValidateJwtForSession(token);
-                if (principal != null)
+                var token = authenticationHeader.ToString().Replace("Bearer ", "");
+                if (string.IsNullOrEmpty(token))
                 {
-                    context.HttpContext.User = principal;
+                    Console.WriteLine("No token in Authorization header!");
+                    context.Result = new UnauthorizedObjectResult(new
+                    {
+                        message = "No token provided"
+                    });
+                    return;
                 }
-                await next();
+
+                JwtAuthenticator? jwtAuthenticator = context.HttpContext.RequestServices.GetService<JwtAuthenticator>();
+                if (jwtAuthenticator == null)
+                {
+                    throw new InvalidOperationException("JwtAuthenticator could not be retrived as a service");
+                }
+
+                ClaimsPrincipal? principal = await jwtAuthenticator.ValidateJwtForSession(token);
+                if (principal == null)
+                {
+                    Console.WriteLine("Token validation failed - invalid or expired session");
+                    context.Result = new UnauthorizedObjectResult(new
+                    {
+                        message = "Invalid or expired session"
+                    });
+                    return;
+                }
+
+                Claim? userId = principal.FindFirst(ClaimTypes.NameIdentifier);
+                if (userId == null)
+                {
+                    Console.WriteLine("No user ID in token claims");
+                    context.Result = new UnauthorizedObjectResult(new
+                    {
+                        message = "Invalid token claims"
+                    });
+                    return;
+                }
+
+                Console.WriteLine($"Session valid for user: {userId.Value}");
+
+                context.HttpContext.Items["UserId"] = userId.Value;
+                context.HttpContext.Items["Principal"] = principal;
+
+                context.Result = new OkObjectResult(new
+                {
+                    success = true,
+                    userId = userId.Value,
+                    message = "Session is valid"
+                });
+                return;
             }
-            catch
+            catch (Exception errno)
             {
-                context.Result = new RedirectResult("https://localhost:4444/");
+                Console.WriteLine(errno.Message);
+                context.Result = new UnauthorizedObjectResult(new
+                {
+                    message = "Authentication failed",
+                    error = errno.Message,
+                    success = false
+                });
+                return;
             }
         }
     }

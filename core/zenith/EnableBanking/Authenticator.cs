@@ -14,10 +14,38 @@ namespace ZenithFin.EnableBanking
         internal Workspace workspace;
         internal Client client;
 
+        private readonly object _lock = new();
+
         private readonly string _jwtAudience = "api.enablebanking.com";
         private readonly string _jwtIssuer = "enablebanking.com";
 
-        public string GenerateToken()
+        private string? _jwt;
+        private DateTime _expiresAt;
+
+        private static readonly TimeSpan RefreshSkew = TimeSpan.FromSeconds(90);
+
+        public string? GetToken()
+        {
+            lock (_lock)
+            {
+                if (_jwt != null && DateTime.UtcNow < _expiresAt - RefreshSkew) return _jwt;
+
+                RotateToken();
+                return _jwt;
+            }
+        }
+
+        private void RotateToken()
+        {
+            _jwt = GenerateToken();
+
+            var handler = new JwtSecurityTokenHandler();
+            var token = handler.ReadJwtToken(_jwt);
+
+            _expiresAt = token.ValidTo;
+        }
+
+        private string GenerateToken()
         {
             string? keyPath = workspace.config!
                                        .RootElement
@@ -40,7 +68,7 @@ namespace ZenithFin.EnableBanking
                 CryptoProviderFactory = new CryptoProviderFactory { CacheSignatureProviders = false }
             };
 
-            DateTime now = DateTime.Now;
+            DateTime now = DateTime.UtcNow;
             long unixTimeNowInSeconds = new DateTimeOffset(now).ToUnixTimeSeconds();
 
             JwtSecurityToken jsonWebToken = new(audience: _jwtAudience,
@@ -49,7 +77,9 @@ namespace ZenithFin.EnableBanking
                                                 {
                                                     new Claim(JwtRegisteredClaimNames.Iat,
                                                               unixTimeNowInSeconds.ToString(),
-                                                              ClaimValueTypes.Integer64)
+                                                              ClaimValueTypes.Integer64),
+                                                    new Claim(JwtRegisteredClaimNames.Jti,
+                                                              Guid.NewGuid().ToString())
                                                 },
                                                 expires: now.AddMinutes(5),
                                                 signingCredentials: signingCredentials);
@@ -58,9 +88,6 @@ namespace ZenithFin.EnableBanking
             string token = new JwtSecurityTokenHandler().WriteToken(jsonWebToken);
 
             client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-            client.Http.DefaultRequestHeaders
-                       .Accept
-                       .Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             Console.WriteLine("Created application JwT:");
             Console.WriteLine(token + "\n");
@@ -75,7 +102,7 @@ namespace ZenithFin.EnableBanking
                 dynamic response = await Wrapper.GET.Application(client)
                                                     .SendAsync();
 
-                Request.Authenticate authenticationBody = new (new Access(DateTime.UtcNow.AddDays(10)),
+                Request.Authenticate authenticationBody = new(new Access(DateTime.UtcNow.AddDays(10)),
                                                                new Aspsp("Nordea", "SE"),
                                                                Guid.NewGuid().ToString(),
                                                                workspace.config
@@ -86,7 +113,7 @@ namespace ZenithFin.EnableBanking
                                                                "personal");
 
                 response = await Wrapper.POST.Authentication(client)
-                                             .WithBody(authenticationBody) 
+                                             .WithBody(authenticationBody)
                                              .SendAsync();
                 Console.WriteLine($"To authenticate open URL {response.url}");
                 return true;
@@ -94,10 +121,15 @@ namespace ZenithFin.EnableBanking
             return false;
         }
 
-        internal Authenticator(Workspace workspace, Client client)
+        internal Authenticator(Workspace workspace,
+                               Client client)
         {
             this.workspace = workspace;
             this.client = client;
+
+            client.Http.DefaultRequestHeaders
+                       .Accept
+                       .Add(new MediaTypeWithQualityHeaderValue("application/json"));
         }
     }
 }

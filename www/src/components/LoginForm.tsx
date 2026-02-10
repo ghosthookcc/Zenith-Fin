@@ -1,7 +1,7 @@
 import { component$, useSignal, $ } from '@builder.io/qwik';
 import { fetchWithTimeout } from '../utils/network';
 
-export const LoginForm = component$(() => 
+export const LoginForm = component$(() =>
 {
     const email = useSignal('');
     const password = useSignal('');
@@ -9,7 +9,7 @@ export const LoginForm = component$(() =>
     const error = useSignal('');
     const loading = useSignal(false);
 
-    const handleSubmit = $(async () => 
+    const handleSubmit = $(async () =>
     {
         error.value = '';
         loading.value = true;
@@ -27,10 +27,10 @@ export const LoginForm = component$(() =>
                 {
                     email: email.value,
                     password: password.value,
-                }, 5000),
-            });
+                }),
+            }, 5000);
 
-            const data = await response.json(); 
+            const data = await response.json();
 
             if (!data.success)
             {
