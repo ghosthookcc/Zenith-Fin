@@ -1,11 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using ZenithFin.EnableBanking;
-using ZenithFin.Api.Models.Dtos;
-using ZenithFin.PostgreSQL.Models.Services;
-using ZenithFin.Api.Auth;
-using ZenithFin.Utility;
-using ZenithFin.PostgreSQL.Models.Dtos;
 using System.Security.Claims;
+using System.Text.Json;
+using ZenithFin.Api.Auth;
+using ZenithFin.Api.Models.Dtos;
+using ZenithFin.EnableBanking;
+using ZenithFin.PostgreSQL.Models.Dtos;
+using ZenithFin.PostgreSQL.Models.Services;
+using ZenithFin.Utility;
 
 namespace ZenithFin.Api.v1
 {
@@ -124,9 +125,9 @@ namespace ZenithFin.Api.v1
         [HttpPost]
         [ResourceGuard]
         [Route("aspsp/connect")]
-        public void AuthenticateAspsp([FromBody] AspspDto.AuthenticationRequest request)
+        public IActionResult AuthenticateAspsp([FromBody] AspspDto.AuthenticationRequest request)
         {
-
+            return Ok(request);
         }
 
         public Auth(EnableBankingWorkspace workspace,

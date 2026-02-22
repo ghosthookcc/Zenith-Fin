@@ -6,15 +6,17 @@ namespace ZenithFin.Api.Models.Dtos
     {
         public class AuthenticationRequest
         {
-            public string Email { get; set; } = null!;
-            public string Password { get; set; } = null!;
+            public IReadOnlyList<AuthenticationAspsp> Aspsps { get; set; } = null!;
+        }
+        public class AuthenticationAspsp
+        {
+            public string Bank { get; set; } = null!;
+            public string Country { get; set; } = null!;
+            public string PsuType { get; set; } = null!;
         }
 
-        public class AuthenticationResponse
+        public class AuthenticationResponse : CommonDto.Normalized
         {
-            public string Message { get; set; } = null!;
-            public bool Success { get; set; }
-            public int Code { get; set; }
             public string Url { get; set; } = null!;
         }
 
@@ -23,7 +25,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string Message { get; set; } = null!;
             public bool Success { get; set; }
             public int Code { get; set; }
-            public string Url { get; set; } = null!;
+            public AllAspsps Aspsps { get; set; } = null!;
         }
 
         public class AllAspsps

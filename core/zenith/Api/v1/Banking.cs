@@ -20,7 +20,7 @@ namespace ZenithFin.Api.v1
         private readonly JwtAuthenticator _jwtAuthenticator;
 
         [HttpGet]
-        [ResourceGuard]
+        //[ResourceGuard]
         [Route("all")]
         public IActionResult ListAspsps()
         {
@@ -28,7 +28,14 @@ namespace ZenithFin.Api.v1
                                                    .RootElement
                                                    .GetProperty("EnableBanking")
                                                    .Deserialize<AspspDto.AllAspsps>();
-            return Ok(aspsps);
+            AspspDto.AspspsResponse response = new();
+            response.Message = "Retrived ASPSPS";
+            response.Success = true;
+            response.Code = StatusCodes.Status200OK;
+
+            if (aspsps != null) response.Aspsps = aspsps;
+
+            return Ok(response);
         }
 
         public Banking(EnableBankingWorkspace workspace,

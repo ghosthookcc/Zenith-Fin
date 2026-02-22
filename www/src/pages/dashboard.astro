@@ -1,19 +1,12 @@
 ---
 import Layout from "../layouts/Layout.astro";
+import AspspList from "../components/data/AspspList";
+
 export const prerender = false;
 ---
-
 <Layout title="Dashboard">
-	<main id="app">
-        <p>Dashboard</p>
-	</main>
+  <main id="app">
+    <p>Dashboard</p>
+    <AspspList client:load />
+  </main>
 </Layout>
-
-<style>
-#app {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
-}
-</style>

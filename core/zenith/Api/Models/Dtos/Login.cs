@@ -8,11 +8,8 @@
             public string Password { get; set; } = null!;
         }
 
-        public class LoginResponse
+        public class LoginResponse : CommonDto.Normalized
         {
-            public string Message { get; set; } = null!;
-            public bool Success { get; set; }
-            public int Code { get; set; }
             public string Url { get; set; } = null!;
         }
     }

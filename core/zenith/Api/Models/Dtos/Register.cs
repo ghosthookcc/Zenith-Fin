@@ -11,11 +11,6 @@
             public string Password { get; set; } = null!;
         }
 
-        public class RegisterResponse
-        {
-            public string Message { get; set; } = null!;
-            public bool Success { get; set; }
-            public int Code { get; set; }
-        }
+        public class RegisterResponse : CommonDto.Normalized {}
     }
 }

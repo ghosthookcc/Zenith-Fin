@@ -14,7 +14,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
     try
     {
         const body = await request.json();
-
         console.log('🟢 SERVER: Received data:', body);
 
         const response = await fetch("https://localhost:4446/api/v1/auth/users/login",
