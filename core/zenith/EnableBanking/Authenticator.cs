@@ -19,7 +19,7 @@ namespace ZenithFin.EnableBanking
     struct AspspAuthenticationCallbackAttempt
     {
         public string? sessionId;
-        public DateTime? expiresAt;
+        public DateTimeOffset? expiresAt;
         public bool success;
     }
     internal class Authenticator
@@ -52,7 +52,7 @@ namespace ZenithFin.EnableBanking
         }
 
         public async Task<AspspAuthenticationAttempt> Authenticate(AuthenticationAspsp aspsp,
-                                                                   DateTime? expiresAt,
+                                                                   DateTimeOffset? expiresAt,
                                                                    string state)
         {
             if (workspace.config != null)
@@ -64,7 +64,7 @@ namespace ZenithFin.EnableBanking
 
                 if (expiresAt == null)
                 {
-                    expiresAt = DateTime.UtcNow.AddDays(30);
+                    expiresAt = DateTimeOffset.UtcNow.AddDays(30);
                 }
 
                 Request.Authenticate authenticationBody = new(new Access(expiresAt.Value),

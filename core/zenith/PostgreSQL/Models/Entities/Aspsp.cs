@@ -27,6 +27,6 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         [Column("aspsp_name")] public string? AspspName { get; init; }
         [Column("aspsp_country")] public string? AspspCountry { get; init; }
         [Column("psu_type")] public string? AspspPsuType { get; init; }
-        [Column("consent_expires_at")] public DateTime? ConsentExpiresAt { get; init; }
+        [Column("consent_expires_at")] public DateTimeOffset? ConsentExpiresAt { get; init; }
     }
 }

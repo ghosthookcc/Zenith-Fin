@@ -36,13 +36,13 @@ namespace ZenithFin.PostgreSQL.Models.Services
             await _bankingRepository.InsertPendingAspspAuthenticationAsync(authentication);
         }
 
-        public async Task StartAspspSessionAsync(string bankingSessionId, DateTime expiresAt,
+        public async Task StartAspspSessionAsync(string bankingSessionId, DateTimeOffset expiresAt,
                                                  string userSessionId,
                                                  string state)
         {
             Guid activeSessionId = Guid.Parse(userSessionId);
             string aspspSessionId = bankingSessionId;
-            DateTime consentExpiresAt = expiresAt;
+            DateTimeOffset consentExpiresAt = expiresAt;
 
             PendingBankSession? authentication = await _bankingRepository.SelectPendingBankAuthenticationAsync(activeSessionId,
                                                                                                                state);

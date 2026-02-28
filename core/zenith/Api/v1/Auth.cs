@@ -140,7 +140,7 @@ namespace ZenithFin.Api.v1
                 Success = true,
                 Url = "https://localhost:4444/dashboard",
                 Code = StatusCodes.Status302Found,
-                JwtLifeSpanInSeconds = (DateTime.Now - session.ExpiresAt).TotalSeconds
+                JwtLifeSpanInSeconds = (session.ExpiresAt - DateTime.UtcNow).TotalSeconds
             });
         }
 
@@ -180,22 +180,26 @@ namespace ZenithFin.Api.v1
             {
                 string state = Guid.NewGuid().ToString();
                 DateTime? expiresAt = await _userService.GetSessionExpirationDate(sessionId);
+                DateTimeOffset? expiresAtUtc = expiresAt.HasValue ? new DateTimeOffset(expiresAt.Value).ToUniversalTime() : null;
 
-                AspspAuthenticationAttempt attempt = await _workspace.Authenticator.Authenticate(aspsp,
-                                                                                                 expiresAt,
-                                                                                                 state);
-                if (attempt.success && attempt.url != null)
+                if (expiresAtUtc.HasValue)
                 {
-                    AspspDto.AspspUrl url = new () 
-                    { 
-                        Bank = aspsp.Bank, 
-                        Url = attempt.url 
-                    };
-                    pendingUrls.Add(url);
+                    AspspAuthenticationAttempt attempt = await _workspace.Authenticator.Authenticate(aspsp,
+                                                                                                     expiresAtUtc.Value.ToUniversalTime(),
+                                                                                                     state);
+                    if (attempt.success && attempt.url != null)
+                    {
+                        AspspDto.AspspUrl url = new()
+                        {
+                            Bank = aspsp.Bank,
+                            Url = attempt.url
+                        };
+                        pendingUrls.Add(url);
 
-                    await _bankingService.StartPendingAspspAuthenticationAsync(aspsp,
-                                                                               state,
-                                                                               sessionId);
+                        await _bankingService.StartPendingAspspAuthenticationAsync(aspsp,
+                                                                                   state,
+                                                                                   sessionId);
+                    }
                 }
             }
 

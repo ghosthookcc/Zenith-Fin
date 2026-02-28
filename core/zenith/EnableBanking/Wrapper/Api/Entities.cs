@@ -28,7 +28,7 @@
                                              IReadOnlyList<string>? addressLine);
         public sealed record Aspsp(string name,
                                    string country);
-        public sealed record Access(DateTime validUntil);
+        public sealed record Access(DateTimeOffset validUntil);
         public sealed record AccountData(AccountId accountId,
                                            IReadOnlyList<OtherAccountId> allAccountIds,
                                            AccountServicer accountServicer,
