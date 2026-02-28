@@ -16,13 +16,20 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         const body = await request.json();
         console.log('🟢 SERVER: Received data:', body);
 
+        const token = cookies.get("AuthToken")?.value;
+        const headers: Record<string, string> = 
+        {
+            "Content-Type": "application/json",
+        }
+        if (token)
+        {
+            headers["Authorization"] = `Bearer ${token}`;
+        }
+
         const response = await fetch("https://localhost:4446/api/v1/auth/users/login",
         {
             method: "POST",
-            headers:
-            {
-                "Content-Type": "application/json",
-            },
+            headers,
             body: JSON.stringify(
             {
                 email: body.email,
@@ -52,7 +59,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
                     secure: true,
                     sameSite: "none",
                     path: "/",
-                    maxAge: 60 * 5
+                    maxAge: data.jwtLifeTimeInSeconds
                 });
                 console.log('🟢 SERVER: Cookie set in Astro');
             }

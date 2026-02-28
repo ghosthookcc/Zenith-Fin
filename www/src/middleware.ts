@@ -6,19 +6,28 @@ const insecureDispatcher = new Agent({ connect: { rejectUnauthorized: false } })
 
 const PUBLIC_ROUTES = ['/', '/api/login', '/api/register', '/api/session', '/favicon.ico'];
 
+const LOGGED_IN_LANDING_ROUTE = "/dashboard";
+
 export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies }, next) =>
 {
     const url = new URL(request.url);
     console.log('🔵 MIDDLEWARE: Request to:', url.pathname);
 
-    if (PUBLIC_ROUTES.includes(url.pathname))
-    {
-        console.log('🔵 MIDDLEWARE: Public route, skipping auth');
-        return next();
-    }
-
     const jwt = cookies.get('AuthToken')?.value;
     console.log('🔵 MIDDLEWARE: JWT present?', !!jwt);
+
+    const isPublic = PUBLIC_ROUTES.includes(url.pathname);
+    const isApi = url.pathname.startsWith("/api/");
+
+    if (isPublic)
+    {
+        console.log('🔵 MIDDLEWARE: Public route, skipping auth');
+        if (jwt && !isApi)
+        {
+            return redirect(LOGGED_IN_LANDING_ROUTE);
+        }
+        return next();
+    }
 
     if (!jwt)
     {
@@ -33,8 +42,8 @@ export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies 
             method: 'POST',
             headers:
             {
-                "Cookie": `AuthToken=${jwt}`,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Cookie": `AuthToken=${jwt}`
             },
             dispatcher: insecureDispatcher,
         });
@@ -59,7 +68,6 @@ export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies 
     {
         console.error('🔵 MIDDLEWARE: Session check failed:', errno);
         console.error('Session check failed', errno);
-        cookies.delete("AuthToken", { path: "/" });
         return redirect('/');
     }
 };

@@ -52,7 +52,7 @@ namespace ZenithFin.EnableBanking
         }
 
         public async Task<AspspAuthenticationAttempt> Authenticate(AuthenticationAspsp aspsp,
-                                                                   DateTime expiresAt,
+                                                                   DateTime? expiresAt,
                                                                    string state)
         {
             if (workspace.config != null)
@@ -62,7 +62,12 @@ namespace ZenithFin.EnableBanking
                 dynamic response = await Wrapper.GET.Application(client)
                                                     .SendAsync();
 
-                Request.Authenticate authenticationBody = new(new Access(expiresAt),
+                if (expiresAt == null)
+                {
+                    expiresAt = DateTime.UtcNow.AddDays(30);
+                }
+
+                Request.Authenticate authenticationBody = new(new Access(expiresAt.Value),
                                                               new Aspsp(aspsp.Bank, aspsp.Country),
                                                               state,
                                                               _redirectUrl!,

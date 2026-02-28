@@ -57,7 +57,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             string jwtSecretEncrypted = protector.Encrypt(jwtSecret);
 
             DateTime issuedAt = DateTime.UtcNow;
-            DateTime expiresAt = issuedAt.AddMinutes(5);
+            DateTime expiresAt = issuedAt.AddDays(30);
 
             var session = new SessionEntity
             { 
@@ -77,6 +77,26 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 RawJwtSecret = jwtSecret, 
                 ExpiresAt = expiresAt 
             };
+        }
+
+        public async Task<bool> IsUserSessionActiveAsync(string? sessionId)
+        {
+            if (sessionId == null)
+            {
+                return false;
+            }
+            ActiveSession? session = await _userRepository.GetSessionById(sessionId);
+            return session != null ? true : false;
+        }
+
+        public async Task<DateTime?> GetSessionExpirationDate(string? sessionId)
+        {
+            if (sessionId == null)
+            {
+                return null;
+            }
+            ActiveSession? session = await _userRepository.GetSessionById(sessionId);
+            return session != null ? session.ExpiresAt : null;
         }
     }
 }

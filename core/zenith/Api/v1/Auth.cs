@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-
+using System.Reflection.Metadata.Ecma335;
+using System.Security.Claims;
 using ZenithFin.Api.Auth;
 using ZenithFin.Api.Models.Dtos;
 
@@ -73,13 +74,34 @@ namespace ZenithFin.Api.v1
         [Route("users/login")]
         public async Task<IActionResult> AuthenticateUserSession([FromBody] LoginDto.LoginRequest request)
         {
+            string? authenticationHeader = Request.Headers["Authorization"];
+            if (!string.IsNullOrEmpty(authenticationHeader) && authenticationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+            {
+                string token = authenticationHeader.Substring("Bearer ".Length).Trim();
+                ClaimsPrincipal? principal = await _jwtAuthenticator.ValidateJwtForSession(token);
+                if (principal != null)
+                {
+                    string? sessionId = principal.FindFirst(ClaimTypes.Sid)?.Value;
+                    if (await _userService.IsUserSessionActiveAsync(sessionId))
+                    {
+                        return BadRequest(new LoginDto.LoginResponse
+                        {
+                            Message = "User already has an active session",
+                            Success = false,
+                            Code = StatusCodes.Status403Forbidden
+                        });
+                    }
+                }
+            }
+
             if (string.IsNullOrEmpty(request.Email) || string.IsNullOrEmpty(request.Password))
             {
-                return BadRequest(new RegisterDto.RegisterResponse
+                return BadRequest(new LoginDto.LoginResponse
                 {
                     Message = "Email and password are required",
                     Success = false,
-                    Code = StatusCodes.Status400BadRequest
+                    Code = StatusCodes.Status400BadRequest,
+                    JwtLifeSpanInSeconds = 0
                 });
             }
 
@@ -90,7 +112,8 @@ namespace ZenithFin.Api.v1
                 {
                     Message = "Password or email did not match a existing user",
                     Success = false,
-                    Code = StatusCodes.Status401Unauthorized
+                    Code = StatusCodes.Status401Unauthorized,
+                    JwtLifeSpanInSeconds = 0
                 });
             }
 
@@ -116,7 +139,8 @@ namespace ZenithFin.Api.v1
                 Message = "Login successful",
                 Success = true,
                 Url = "https://localhost:4444/dashboard",
-                Code = StatusCodes.Status302Found
+                Code = StatusCodes.Status302Found,
+                JwtLifeSpanInSeconds = (DateTime.Now - session.ExpiresAt).TotalSeconds
             });
         }
 
@@ -155,7 +179,7 @@ namespace ZenithFin.Api.v1
             foreach (AspspDto.AuthenticationAspsp aspsp in request.Aspsps)
             {
                 string state = Guid.NewGuid().ToString();
-                DateTime expiresAt = DateTime.UtcNow.AddDays(10);
+                DateTime? expiresAt = await _userService.GetSessionExpirationDate(sessionId);
 
                 AspspAuthenticationAttempt attempt = await _workspace.Authenticator.Authenticate(aspsp,
                                                                                                  expiresAt,

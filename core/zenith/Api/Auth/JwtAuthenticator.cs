@@ -102,7 +102,7 @@ namespace ZenithFin.Api.Auth
 
                     IssuerSigningKey = signingKey,
 
-                    ClockSkew = TimeSpan.FromMinutes(1)
+                    ClockSkew = TimeSpan.FromSeconds(90.0)
                 };
 
                 return handler.ValidateToken(jwt,
