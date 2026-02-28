@@ -17,7 +17,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         console.log('🟢 SERVER: Received data:', body);
 
         const token = cookies.get("AuthToken")?.value;
-        const headers: Record<string, string> = 
+        const headers: Record<string, string> =
         {
             "Content-Type": "application/json",
         }
@@ -43,26 +43,18 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         const data = await response.json();
         console.log('🟢 SERVER: Received response as json:', data);
 
-        const setCookieHeader = response.headers.get("set-cookie");
-        console.log('🟢 SERVER: Set-Cookie header:', setCookieHeader);
-
-        if (setCookieHeader)
+        if (data.success && data.token && data.jwtExpirationDate)
         {
-            const cookieMatch = setCookieHeader.match(/AuthToken=([^;]+)/);
-            if (cookieMatch)
+            const expires = new Date(data.jwtExpirationDate);
+            cookies.set("AuthToken", data.token,
             {
-                const tokenValue = cookieMatch[1];
-
-                cookies.set("AuthToken", tokenValue,
-                {
-                    httpOnly: true,
-                    secure: true,
-                    sameSite: "none",
-                    path: "/",
-                    maxAge: data.jwtLifeTimeInSeconds
-                });
-                console.log('🟢 SERVER: Cookie set in Astro');
-            }
+                httpOnly: true,
+                secure: true,
+                sameSite: "none",
+                path: "/",
+                expires,
+            });
+            console.log('🟢 SERVER: Cookie set with expires date:', expires.toUTCString());
         }
 
         return new Response(JSON.stringify(

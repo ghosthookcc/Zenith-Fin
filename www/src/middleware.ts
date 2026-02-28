@@ -24,7 +24,21 @@ export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies 
         console.log('🔵 MIDDLEWARE: Public route, skipping auth');
         if (jwt && !isApi)
         {
-            return redirect(LOGGED_IN_LANDING_ROUTE);
+            const response = await fetch(new URL('/api/session', url.origin),
+            {
+                method: 'POST',
+                headers:
+                {
+                    "Content-Type": "application/json",
+                    "Cookie": `AuthToken=${jwt}`
+                },
+                dispatcher: insecureDispatcher,
+            });
+            const data = await response.json();
+            if (data.success === true)
+            {
+                return redirect(LOGGED_IN_LANDING_ROUTE);
+            }
         }
         return next();
     }
@@ -53,7 +67,6 @@ export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies 
         if (!response.ok)
         {
             console.log('🔵 MIDDLEWARE: Session invalid, redirecting');
-            cookies.delete("AuthToken", { path: "/" });
             return redirect('/');
         }
 

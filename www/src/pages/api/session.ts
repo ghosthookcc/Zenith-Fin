@@ -36,31 +36,24 @@ export const POST: APIRoute = async ({ request, cookies }) => {
                 "Content-Type": "application/json",
             },
             dispatcher: insecureDispatcher,
-        });
+        }); 
 
-        if (!response.ok)
-        {
-            return new Response(
-                JSON.stringify(
-                {
-                    message: "Invalid session",
-                    success: false 
-                }),
-                { status: response.status }
-            );
-        }
-
-        console.log('🟢 SERVER: Received response:', response);
         const data = await response.json();
         console.log('🟢 SERVER: Received response as json:', data);
+
+        if (!data.success)
+        {
+            cookies.delete("AuthToken", { path: "/" });
+            return redirect("/");
+        }
 
         return new Response(
             JSON.stringify(
             {
-                success: true,
+                success: data.success,
                 userId: data.userId
             }),
-            { status: 200 }
+            { status: data.code }
         );
   }
   catch (errno)

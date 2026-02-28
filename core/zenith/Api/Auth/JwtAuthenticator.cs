@@ -30,7 +30,7 @@ namespace ZenithFin.Api.Auth
         public string CreateJwtForSession(long userId,
                                           string sessionId,
                                           string rawSecret,
-                                          DateTime expiresAt)
+                                          DateTimeOffset expiresAt)
         {
             var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(rawSecret));
             var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
@@ -46,7 +46,7 @@ namespace ZenithFin.Api.Auth
             JwtSecurityToken token = new JwtSecurityToken(issuer: "https://localhost:4446/",
                                                           audience: "https://localhost:4444/",
                                                           claims: claims,
-                                                          expires: expiresAt,
+                                                          expires: expiresAt.ToUniversalTime().DateTime,
                                                           signingCredentials: credentials);
 
             return new JwtSecurityTokenHandler().WriteToken(token);

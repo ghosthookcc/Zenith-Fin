@@ -17,7 +17,8 @@ namespace ZenithFin.Api.Auth
                 Console.WriteLine("No Authorization header!");
                 context.Result = new UnauthorizedObjectResult(new
                 {
-                    message = "No authorization header provided"
+                    message = "No authorization header provided",
+                    success = false
                 });
                 return;
             }
@@ -30,7 +31,8 @@ namespace ZenithFin.Api.Auth
                     Console.WriteLine("No token in Authorization header!");
                     context.Result = new UnauthorizedObjectResult(new
                     {
-                        message = "No token provided"
+                        message = "No token provided",
+                        success = false
                     });
                     return;
                 }
@@ -38,7 +40,7 @@ namespace ZenithFin.Api.Auth
                 JwtAuthenticator? jwtAuthenticator = context.HttpContext.RequestServices.GetService<JwtAuthenticator>();
                 if (jwtAuthenticator == null)
                 {
-                    throw new InvalidOperationException("JwtAuthenticator could not be retrived as a service");
+                    throw new InvalidOperationException("JwtAuthenticator sbe retrived as a service");
                 }
 
                 ClaimsPrincipal? principal = await jwtAuthenticator.ValidateJwtForSession(token);
@@ -47,7 +49,8 @@ namespace ZenithFin.Api.Auth
                     Console.WriteLine("Token validation failed - invalid or expired session");
                     context.Result = new UnauthorizedObjectResult(new
                     {
-                        message = "Invalid or expired session"
+                        message = "Invalid or expired session",
+                        success = false
                     });
                     return;
                 }
@@ -58,7 +61,8 @@ namespace ZenithFin.Api.Auth
                     Console.WriteLine("No user ID in token claims");
                     context.Result = new UnauthorizedObjectResult(new
                     {
-                        message = "Invalid token claims"
+                        message = "Invalid token claims",
+                        success = false
                     });
                     return;
                 }

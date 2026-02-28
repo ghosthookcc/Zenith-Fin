@@ -11,7 +11,8 @@
         public class LoginResponse : CommonDto.Normalized
         {
             public string Url { get; set; } = null!;
-            public double JwtLifeSpanInSeconds { get; set; }
+            public DateTimeOffset JwtExpirationDate { get; set; }
+            public string Token { get; set; } = null!;
         }
     }
 }

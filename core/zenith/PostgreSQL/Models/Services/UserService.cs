@@ -89,7 +89,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             return session != null ? true : false;
         }
 
-        public async Task<DateTime?> GetSessionExpirationDate(string? sessionId)
+        public async Task<DateTimeOffset?> GetSessionExpirationDate(string? sessionId)
         {
             if (sessionId == null)
             {

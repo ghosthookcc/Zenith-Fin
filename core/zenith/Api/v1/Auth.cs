@@ -100,8 +100,7 @@ namespace ZenithFin.Api.v1
                 {
                     Message = "Email and password are required",
                     Success = false,
-                    Code = StatusCodes.Status400BadRequest,
-                    JwtLifeSpanInSeconds = 0
+                    Code = StatusCodes.Status400BadRequest
                 });
             }
 
@@ -112,8 +111,7 @@ namespace ZenithFin.Api.v1
                 {
                     Message = "Password or email did not match a existing user",
                     Success = false,
-                    Code = StatusCodes.Status401Unauthorized,
-                    JwtLifeSpanInSeconds = 0
+                    Code = StatusCodes.Status401Unauthorized
                 });
             }
 
@@ -125,22 +123,14 @@ namespace ZenithFin.Api.v1
                                                                         session.RawJwtSecret,
                                                                         session.ExpiresAt);
 
-            Response.Cookies.Append("AuthToken", jsonWebToken,
-                                    new CookieOptions
-                                    {
-                                        HttpOnly = true,
-                                        Secure = true,
-                                        SameSite = SameSiteMode.None,
-                                        Expires = session.ExpiresAt
-                                    });
-
             return Ok(new LoginDto.LoginResponse()
             {
                 Message = "Login successful",
                 Success = true,
                 Url = "https://localhost:4444/dashboard",
                 Code = StatusCodes.Status302Found,
-                JwtLifeSpanInSeconds = (session.ExpiresAt - DateTime.UtcNow).TotalSeconds
+                JwtExpirationDate = session.ExpiresAt,
+                Token = jsonWebToken
             });
         }
 
@@ -179,13 +169,12 @@ namespace ZenithFin.Api.v1
             foreach (AspspDto.AuthenticationAspsp aspsp in request.Aspsps)
             {
                 string state = Guid.NewGuid().ToString();
-                DateTime? expiresAt = await _userService.GetSessionExpirationDate(sessionId);
-                DateTimeOffset? expiresAtUtc = expiresAt.HasValue ? new DateTimeOffset(expiresAt.Value).ToUniversalTime() : null;
+                DateTimeOffset? expiresAt = await _userService.GetSessionExpirationDate(sessionId);
 
-                if (expiresAtUtc.HasValue)
+                if (expiresAt.HasValue)
                 {
                     AspspAuthenticationAttempt attempt = await _workspace.Authenticator.Authenticate(aspsp,
-                                                                                                     expiresAtUtc.Value.ToUniversalTime(),
+                                                                                                     expiresAt,
                                                                                                      state);
                     if (attempt.success && attempt.url != null)
                     {
