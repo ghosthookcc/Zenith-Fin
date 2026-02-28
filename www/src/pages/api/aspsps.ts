@@ -9,20 +9,33 @@ const insecureDispatcher = new Agent({
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request }) => {
+export const POST: APIRoute = async ({ request, cookies }) => {
     console.log('🟢 SERVER: POST handler called');
     try
     {
+        const jwt = cookies.get("AuthToken")?.value;
+
+        if (!jwt)
+        {
+            return new Response(
+                JSON.stringify(
+                {
+                    message: "No token provided",
+                    success: false
+                }),
+                { status: 401 }
+            );
+        }
+
         const body = await request.json();
         console.log('🟢 SERVER: Received data:', body);
-
-        console.log(JSON.stringify({"aspsps" : body}));
 
         const response = await fetch("https://localhost:4446/api/v1/auth/aspsp/connect",
         {
             method: "POST",
             headers:
             {
+                "Authorization": `Bearer ${jwt}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({"aspsps" : body}),
@@ -36,10 +49,11 @@ export const POST: APIRoute = async ({ request }) => {
 
         return new Response(JSON.stringify(
                             {
-                                message: "test",
-                                success: true
+                                message: data.message,
+                                success: data.success,
+                                urls: data.urls
                             }),
-                            { status: 200 });
+                            { status: data.code });
   }
   catch (errno)
   {

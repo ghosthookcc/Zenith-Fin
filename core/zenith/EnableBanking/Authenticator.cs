@@ -3,12 +3,25 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
 using System.Security.Cryptography;
+using System.Text.Json;
 using ZenithFin.Utility;
 
+using static ZenithFin.Api.Models.Dtos.AspspDto;
 using static ZenithFin.EnableBanking.EnableBankingEntities;
 
 namespace ZenithFin.EnableBanking
 {
+    struct AspspAuthenticationAttempt
+    {
+        public string? url;
+        public bool success;
+    }
+    struct AspspAuthenticationCallbackAttempt
+    {
+        public string? sessionId;
+        public DateTime? expiresAt;
+        public bool success;
+    }
     internal class Authenticator
     {
         internal Workspace workspace;
@@ -18,6 +31,9 @@ namespace ZenithFin.EnableBanking
 
         private readonly string _jwtAudience = "api.enablebanking.com";
         private readonly string _jwtIssuer = "enablebanking.com";
+
+        private readonly string? _applicationId;
+        private readonly string? _redirectUrl;
 
         private string? _jwt;
         private DateTime _expiresAt;
@@ -35,6 +51,58 @@ namespace ZenithFin.EnableBanking
             }
         }
 
+        public async Task<AspspAuthenticationAttempt> Authenticate(AuthenticationAspsp aspsp,
+                                                                   DateTime expiresAt,
+                                                                   string state)
+        {
+            if (workspace.config != null)
+            {
+                GetToken();
+
+                dynamic response = await Wrapper.GET.Application(client)
+                                                    .SendAsync();
+
+                Request.Authenticate authenticationBody = new(new Access(expiresAt),
+                                                              new Aspsp(aspsp.Bank, aspsp.Country),
+                                                              state,
+                                                              _redirectUrl!,
+                                                              aspsp.PsuType);
+
+                response = await Wrapper.POST.Authentication(client)
+                                             .WithBody(authenticationBody)
+                                             .SendAsync();
+                Console.WriteLine($"To authenticate open URL {response.url}");
+                return new AspspAuthenticationAttempt() 
+                { 
+                    url = response.url, 
+                    success = true 
+                };
+            }
+            return new AspspAuthenticationAttempt()
+            {
+                url = null,
+                success = false
+            };
+        }
+
+        public async Task<AspspAuthenticationCallbackAttempt> AuthenticateCallback(string code)
+        {
+            GetToken();
+
+            Request.Sessions authenticationBody = new (code);
+
+            dynamic response = await Wrapper.POST.Sessions(client)
+                                                 .WithBody(authenticationBody)
+                                                 .SendAsync();
+
+            return new AspspAuthenticationCallbackAttempt
+            {
+                sessionId = response.sessionId,
+                expiresAt = response.access.validUntil,
+                success = true
+            };
+        }
+
         private void RotateToken()
         {
             _jwt = GenerateToken();
@@ -43,6 +111,17 @@ namespace ZenithFin.EnableBanking
             var token = handler.ReadJwtToken(_jwt);
 
             _expiresAt = token.ValidTo;
+
+            /*
+            JsonSerializerOptions options = new JsonSerializerOptions
+            {
+                WriteIndented = true
+            };
+
+            string jsonString = JsonSerializer.Serialize(await Wrapper.GET.Aspsps(client)
+                                                                          .SendAsync(), 
+                                                         options);
+            await File.WriteAllTextAsync("aspsps.json", jsonString);*/
         }
 
         private string GenerateToken()
@@ -81,7 +160,7 @@ namespace ZenithFin.EnableBanking
                                                     new Claim(JwtRegisteredClaimNames.Jti,
                                                               Guid.NewGuid().ToString())
                                                 },
-                                                expires: now.AddMinutes(5),
+                                                expires: now.AddHours(23).AddMinutes(60.0 - RefreshSkew.Minutes),
                                                 signingCredentials: signingCredentials);
             jsonWebToken.Header.Add("kid", applicationId);
 
@@ -95,32 +174,6 @@ namespace ZenithFin.EnableBanking
             return token;
         }
 
-        public async Task<bool> Authenticate()
-        {
-            if (workspace.config != null)
-            {
-                dynamic response = await Wrapper.GET.Application(client)
-                                                    .SendAsync();
-
-                Request.Authenticate authenticationBody = new(new Access(DateTime.UtcNow.AddDays(10)),
-                                                               new Aspsp("Nordea", "SE"),
-                                                               Guid.NewGuid().ToString(),
-                                                               workspace.config
-                                                                        .RootElement
-                                                                        .GetProperty("EnableBanking")
-                                                                        .GetProperty("redirectUrl")
-                                                                        .GetString()!,
-                                                               "personal");
-
-                response = await Wrapper.POST.Authentication(client)
-                                             .WithBody(authenticationBody)
-                                             .SendAsync();
-                Console.WriteLine($"To authenticate open URL {response.url}");
-                return true;
-            }
-            return false;
-        }
-
         internal Authenticator(Workspace workspace,
                                Client client)
         {
@@ -130,6 +183,20 @@ namespace ZenithFin.EnableBanking
             client.Http.DefaultRequestHeaders
                        .Accept
                        .Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            if (workspace.config != null)
+            {
+                _applicationId = workspace.config
+                                          .RootElement
+                                          .GetProperty("EnableBanking")
+                                          .GetProperty("applicationId")
+                                          .GetString()!;
+                _redirectUrl = workspace.config
+                                        .RootElement
+                                        .GetProperty("EnableBanking")
+                                        .GetProperty("redirectUrl")
+                                        .GetString()!;
+            }
         }
     }
 }

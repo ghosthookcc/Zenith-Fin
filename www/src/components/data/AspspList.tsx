@@ -9,8 +9,14 @@ interface Aspsp {
   checked?: boolean;
 }
 
+interface AuthUrl {
+    bank: string;
+    url: string;
+}
+
 export default component$(() => {
   const aspsps = useSignal<Aspsp[]>([]);
+  const authUrls = useSignal<AuthUrl[]>([]);
 
   const error = useSignal<string | null>(null);
   const loading = useSignal(true);
@@ -60,10 +66,8 @@ export default component$(() => {
               {
                   throw new Error(data.message || "Aspsp authentication failed");
               }
-              else if (data.success && data.url)
-              {
-                  window.location.href = data.url;
-              }
+
+              authUrls.value = data.urls || [];
           }
           catch (errno: any)
           {
@@ -126,6 +130,22 @@ export default component$(() => {
       )}
         <button type="submit">Authenticate</button>
       </form>
+
+      {authUrls.value.length > 0 && (
+          <div style={{ marginTop: "1rem" }}>
+            <h3>Authenticate with banks:</h3>
+            {authUrls.value.map(auth => (
+                <a href={auth.url}
+                   target="_blank"
+                   rel="noopener noreferrer">
+                    <button key={auth.url}
+                            style={{ display: "block", margin: "0.5rem 0" }}>
+                        Authenticate with {auth.bank}
+                    </button>
+                </a>
+            ))}
+          </div>
+      )}
     </div>
   );
 });

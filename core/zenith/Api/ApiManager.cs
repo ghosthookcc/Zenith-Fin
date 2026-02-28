@@ -21,7 +21,13 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<UserRepository>();
             builder.Services.AddSingleton<UserService>();
 
+            builder.Services.AddSingleton<BankingRepository>();
+            builder.Services.AddSingleton<BankingService>();
+
             builder.Services.AddSingleton<JwtAuthenticator>();
+
+            builder.Services.Configure<EnableBankingOptions>(builder.Configuration.GetSection("EnableBanking"));
+            builder.Services.AddTransient<EnableBankingWorkspace>();
 
             builder.Services.AddDataProtection()
                             .PersistKeysToFileSystem(new DirectoryInfo("./"))
@@ -30,8 +36,6 @@ namespace ZenithFin.Api
             builder.Services.AddControllers();
             builder.Services.AddEndpointsApiExplorer();
             builder.Services.AddSwaggerGen();
-
-            builder.Services.AddScoped(scopedService => new EnableBankingWorkspace("EnableBanking/workspace.json"));
 
             builder.Services.AddApiVersioning(options =>
             {

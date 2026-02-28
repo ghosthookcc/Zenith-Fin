@@ -1,12 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using System.Security.Claims;
-using System.Text.Json;
+
 using ZenithFin.Api.Auth;
 using ZenithFin.Api.Models.Dtos;
+
 using ZenithFin.EnableBanking;
+
 using ZenithFin.PostgreSQL.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Services;
-using ZenithFin.Utility;
 
 namespace ZenithFin.Api.v1
 {
@@ -16,7 +16,10 @@ namespace ZenithFin.Api.v1
     public class Auth : ControllerBase
     {
         private readonly EnableBankingWorkspace _workspace;
+
         private readonly UserService _userService;
+        private readonly BankingService _bankingService;
+
         private readonly JwtAuthenticator _jwtAuthenticator;
 
         [HttpPost]
@@ -120,22 +123,75 @@ namespace ZenithFin.Api.v1
         [HttpGet]
         [ResourceGuard]
         [Route("users/session")]
-        public void UserHasSession() { }
+        public IActionResult UserHasSession() 
+        {
+            string? userId = HttpContext.Items["UserId"] as string;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized("No session ID found");
+            return Ok(new
+            {
+                success = true,
+                userId = userId,
+                message = "Session is valid"
+            });
+        }
 
         [HttpPost]
         [ResourceGuard]
         [Route("aspsp/connect")]
-        public IActionResult AuthenticateAspsp([FromBody] AspspDto.AuthenticationRequest request)
+        public async Task<IActionResult> AuthenticateAspsp([FromBody] AspspDto.AuthenticationRequest request)
         {
-            return Ok(request);
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+            if (string.IsNullOrEmpty(sessionId))
+                return Unauthorized("No session ID found");
+            Console.WriteLine("SessionId: " + sessionId);
+
+            if (request?.Aspsps == null || !request.Aspsps.Any())
+            {
+                return BadRequest("No ASPSP(s) provided");
+            }
+
+            List<AspspDto.AspspUrl> pendingUrls = new ();
+            foreach (AspspDto.AuthenticationAspsp aspsp in request.Aspsps)
+            {
+                string state = Guid.NewGuid().ToString();
+                DateTime expiresAt = DateTime.UtcNow.AddDays(10);
+
+                AspspAuthenticationAttempt attempt = await _workspace.Authenticator.Authenticate(aspsp,
+                                                                                                 expiresAt,
+                                                                                                 state);
+                if (attempt.success && attempt.url != null)
+                {
+                    AspspDto.AspspUrl url = new () 
+                    { 
+                        Bank = aspsp.Bank, 
+                        Url = attempt.url 
+                    };
+                    pendingUrls.Add(url);
+
+                    await _bankingService.StartPendingAspspAuthenticationAsync(aspsp,
+                                                                               state,
+                                                                               sessionId);
+                }
+            }
+
+            return Ok(new AspspDto.AuthenticationResponse()
+            {
+                Message = "Created authentication callback urls",
+                Success = true,
+                Code = StatusCodes.Status200OK,
+                Urls = pendingUrls
+            });
         }
 
         public Auth(EnableBankingWorkspace workspace,
                     UserService userService,
+                    BankingService bankingService,
                     JwtAuthenticator jwtAuthenticator)
         {
             _workspace = workspace;
             _userService = userService;
+            _bankingService = bankingService;
             _jwtAuthenticator = jwtAuthenticator;
         }
     }

@@ -17,14 +17,16 @@ namespace ZenithFin.Api.Models.Dtos
 
         public class AuthenticationResponse : CommonDto.Normalized
         {
+            public List<AspspUrl> Urls { get; set; } = null!;
+        }
+        public class AspspUrl
+        {
             public string Url { get; set; } = null!;
+            public string Bank { get; set; } = null!;
         }
 
-        public class AspspsResponse
+        public class AspspsResponse : CommonDto.Normalized
         {
-            public string Message { get; set; } = null!;
-            public bool Success { get; set; }
-            public int Code { get; set; }
             public AllAspsps Aspsps { get; set; } = null!;
         }
 
@@ -37,6 +39,12 @@ namespace ZenithFin.Api.Models.Dtos
         {
             [JsonPropertyName("country")] public string Country { get; set; } = null!;
             [JsonPropertyName("psuType")] public string PsuType { get; set; } = null!;
+        }
+
+        public class AspspAuthenticationCallbackRequest()
+        {
+            [JsonPropertyName("state")] public string State { get; set; } = null!;
+            [JsonPropertyName("code")] public string Code { get; set; } = null!;
         }
     }
 }

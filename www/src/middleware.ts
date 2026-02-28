@@ -1,14 +1,12 @@
 import type { MiddlewareHandler } from 'astro';
 
-import { fetchWithTimeout } from './utils/network';
-
 import { Agent } from 'undici';
 
 const insecureDispatcher = new Agent({ connect: { rejectUnauthorized: false } });
 
 const PUBLIC_ROUTES = ['/', '/api/login', '/api/register', '/api/session', '/favicon.ico'];
 
-export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies }, next) => 
+export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies }, next) =>
 {
     const url = new URL(request.url);
     console.log('🔵 MIDDLEWARE: Request to:', url.pathname);
@@ -57,7 +55,7 @@ export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies 
 
         return next();
     }
-    catch (errno) 
+    catch (errno)
     {
         console.error('🔵 MIDDLEWARE: Session check failed:', errno);
         console.error('Session check failed', errno);

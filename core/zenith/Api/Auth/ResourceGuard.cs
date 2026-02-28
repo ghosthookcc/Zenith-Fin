@@ -67,14 +67,9 @@ namespace ZenithFin.Api.Auth
 
                 context.HttpContext.Items["UserId"] = userId.Value;
                 context.HttpContext.Items["Principal"] = principal;
+                context.HttpContext.Items["SessionId"] = principal.FindFirst(ClaimTypes.Sid)?.Value;
 
-                context.Result = new OkObjectResult(new
-                {
-                    success = true,
-                    userId = userId.Value,
-                    message = "Session is valid"
-                });
-                return;
+                await next();
             }
             catch (Exception errno)
             {

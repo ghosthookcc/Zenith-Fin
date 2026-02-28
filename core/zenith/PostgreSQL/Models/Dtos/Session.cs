@@ -13,4 +13,12 @@
         public string JwtSecretEncrypted { get; set; } = null!;
         public DateTime ExpiresAt { get; set; }
     }
+
+    public sealed class PendingBankSession
+    {
+        public string AspspName { get; set; } = null!;
+        public string AspspCountry { get; set; } = null!;
+        public string PsuType { get; set; } = null!;
+        public DateTime AuthExpiresAt { get; set; }
+    }
 }

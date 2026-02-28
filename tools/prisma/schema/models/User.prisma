@@ -1,13 +1,12 @@
 model User {
-  id            BigInt   @id @default(autoincrement())
-  full_name     String   @db.VarChar(70)
-  email         String   @unique @db.VarChar(255)
-  phone         String   @unique @db.VarChar(32)
-  password_hash String   @db.VarChar(255)
-  created_at    DateTime @default(now())
-
-  status   UserStatus?
-  sessions Session[]
+  id            BigInt      @id @default(autoincrement())
+  full_name     String      @db.VarChar(70)
+  email         String      @unique @db.VarChar(255)
+  phone         String      @unique @db.VarChar(32)
+  password_hash String      @db.VarChar(255)
+  created_at    DateTime    @default(now())
+  sessions      Session[]
+  status        UserStatus?
 
   @@index([email])
 }
@@ -16,6 +15,5 @@ model UserStatus {
   user_id      BigInt   @id
   last_updated DateTime @updatedAt
   is_active    Boolean  @default(false)
-
-  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
 }

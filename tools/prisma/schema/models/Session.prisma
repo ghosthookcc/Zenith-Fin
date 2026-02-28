@@ -1,16 +1,13 @@
 model Session {
-    session_id String @id @db.Uuid
-    user_id    BigInt
+  session_id               String                  @id @db.Uuid
+  user_id                  BigInt
+  jwt_secret_encrypted     String                  @unique
+  issued_at                DateTime                @default(now())
+  expires_at               DateTime
+  revoked_at               DateTime?
+  bank_connections         BankConnection[]
+  pending_bank_connections PendingBankConnection[]
+  user                     User                    @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
-    jwt_secret_encrypted String    @unique @db.Text
-    issued_at            DateTime  @default(now())
-    expires_at           DateTime
-    revoked_at           DateTime?
-
-    user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
-
-    pending_bank_connections PendingBankConnection[]
-    bank_connections         BankConnection[]
-
-    @@index([user_id])
+  @@index([user_id])
 }

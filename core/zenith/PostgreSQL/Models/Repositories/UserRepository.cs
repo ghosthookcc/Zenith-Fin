@@ -33,7 +33,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
         {
             const string sql = """
             SELECT id AS "UserId", 
-                   password_hash as "PasswordHash"
+                   password_hash AS "PasswordHash"
             FROM "User"
             WHERE email = @Email
             """;

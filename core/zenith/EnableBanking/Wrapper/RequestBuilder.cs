@@ -54,6 +54,8 @@ internal sealed class RequestBuilder
                                                                _options);
         string json = await response.Content.ReadAsStringAsync();
 
+        Console.WriteLine("Response:" + json);
+
         return JsonSerializer.Deserialize(json, 
                                           _route.response, 
                                           _options)!;
