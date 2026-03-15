@@ -11,6 +11,10 @@ using static ZenithFin.EnableBanking.EnableBankingEntities;
 
 namespace ZenithFin.EnableBanking
 {
+    struct TransactionFetchAttempt
+    {
+        public bool success;
+    }
     struct AspspAuthenticationAttempt
     {
         public string? url;
@@ -51,6 +55,12 @@ namespace ZenithFin.EnableBanking
             }
         }
 
+        public async Task<bool> FetchTransactions(string sessionId)
+        {
+            GetToken();
+            return true;
+        }
+
         public async Task<AspspAuthenticationAttempt> Authenticate(AuthenticationAspsp aspsp,
                                                                    DateTimeOffset? expiresAt,
                                                                    string state)
@@ -77,10 +87,10 @@ namespace ZenithFin.EnableBanking
                                              .WithBody(authenticationBody)
                                              .SendAsync();
                 Console.WriteLine($"To authenticate open URL {response.url}");
-                return new AspspAuthenticationAttempt() 
-                { 
-                    url = response.url, 
-                    success = true 
+                return new AspspAuthenticationAttempt()
+                {
+                    url = response.url,
+                    success = true
                 };
             }
             return new AspspAuthenticationAttempt()
@@ -94,7 +104,7 @@ namespace ZenithFin.EnableBanking
         {
             GetToken();
 
-            Request.Sessions authenticationBody = new (code);
+            Request.Sessions authenticationBody = new(code);
 
             dynamic response = await Wrapper.POST.Sessions(client)
                                                  .WithBody(authenticationBody)

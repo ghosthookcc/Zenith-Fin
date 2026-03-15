@@ -1,0 +1,15 @@
+model Account {
+    id BigInt @id @default(autoincrement())
+
+    bank_aspsp_id BigInt
+
+    iban     String?
+    name     String?
+    currency String
+
+    transactions       Transaction[]
+    bankConnection     BankConnection? @relation(fields: [bank_connection_id], references: [id])
+    bank_connection_id BigInt?
+
+    @@unique([bank_aspsp_id])
+}

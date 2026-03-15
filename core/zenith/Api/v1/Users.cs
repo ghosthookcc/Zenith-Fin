@@ -7,10 +7,6 @@ namespace ZenithFin.Api.v1
     [Route("api/v{version:apiVersion}/users")]
     public class Users : ControllerBase
     {
-        [HttpGet]
-        public IActionResult GetAll()
-        {
-            return Ok(new[] { "Alice", "Bob" });
-        }
+
     }
 }

@@ -15,8 +15,8 @@ model PendingBankConnection {
 }
 
 model BankConnection {
-    id                BigInt @id @default(autoincrement())
-    active_session_id String @db.Uuid
+    id      BigInt @id @default(autoincrement())
+    user_id BigInt
 
     aspsp_session_id String @unique
 
@@ -26,8 +26,17 @@ model BankConnection {
 
     consent_expires_at DateTime
 
-    session Session @relation(fields: [active_session_id], references: [session_id])
+    status BankStatus
 
-    @@unique([active_session_id, aspsp_name, aspsp_country])
-    @@index([active_session_id])
+    accounts Account[]
+    user     User?     @relation(fields: [user_id], references: [id])
+
+    @@unique([aspsp_name, aspsp_country])
+    @@index(user_id)
+}
+
+enum BankStatus {
+    ACTIVE
+    EXPIRED
+    REVOKED
 }

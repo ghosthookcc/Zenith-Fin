@@ -1,9 +1,12 @@
-﻿using Microsoft.AspNetCore.CookiePolicy;
+﻿using Dapper;
+using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using System.Data;
 using ZenithFin.Api.Auth;
 using ZenithFin.EnableBanking;
 using ZenithFin.PostgreSQL;
+using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Repositories;
 using ZenithFin.PostgreSQL.Models.Services;
 

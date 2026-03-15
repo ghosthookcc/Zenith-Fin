@@ -21,4 +21,9 @@
         public string PsuType { get; set; } = null!;
         public DateTimeOffset AuthExpiresAt { get; set; }
     }
+
+    public sealed class UserEssentials
+    {
+        public long UserId { get; set; }
+    }
 }

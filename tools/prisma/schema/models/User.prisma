@@ -1,12 +1,14 @@
 model User {
-  id            BigInt      @id @default(autoincrement())
-  full_name     String      @db.VarChar(70)
-  email         String      @unique @db.VarChar(255)
-  phone         String      @unique @db.VarChar(32)
-  password_hash String      @db.VarChar(255)
-  created_at    DateTime    @default(now())
-  sessions      Session[]
-  status        UserStatus?
+  id            BigInt   @id @default(autoincrement())
+  full_name     String   @db.VarChar(70)
+  email         String   @unique @db.VarChar(255)
+  phone         String   @unique @db.VarChar(32)
+  password_hash String   @db.VarChar(255)
+  created_at    DateTime @default(now())
+
+  sessions         Session[]
+  status           UserStatus?
+  bank_connections BankConnection[]
 
   @@index([email])
 }

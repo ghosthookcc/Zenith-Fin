@@ -40,7 +40,7 @@ namespace ZenithFin.Api.Auth
                 JwtAuthenticator? jwtAuthenticator = context.HttpContext.RequestServices.GetService<JwtAuthenticator>();
                 if (jwtAuthenticator == null)
                 {
-                    throw new InvalidOperationException("JwtAuthenticator sbe retrived as a service");
+                    throw new InvalidOperationException("JwtAuthenticator could not be retrived as a service");
                 }
 
                 ClaimsPrincipal? principal = await jwtAuthenticator.ValidateJwtForSession(token);

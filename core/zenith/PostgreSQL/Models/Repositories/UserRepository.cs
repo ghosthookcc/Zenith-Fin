@@ -55,6 +55,35 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             await connection.ExecuteAsync(sql, session);
         }
 
+        public async Task<UserEssentials?> GetUserIdBySessionId(string sessionId)
+        {
+            if (!Guid.TryParse(sessionId, out Guid sessionGuid))
+            {
+                Console.WriteLine($"Invalid session ID format: {sessionId}");
+                return null;
+            }
+
+            const string sql = """
+            SELECT user_id AS "UserId"
+            FROM "Session"
+            WHERE session_id = @SessionId
+            """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.QueryFirstOrDefaultAsync<UserEssentials?>(sql, new { SessionId = sessionGuid });
+        }
+        public async Task<UserEssentials?> GetUserIdBySessionId(Guid sessionId)
+        {
+            const string sql = """
+            SELECT user_id AS "UserId"
+            FROM "Session"
+            WHERE session_id = @SessionId
+            """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.QueryFirstOrDefaultAsync<UserEssentials?>(sql, new { SessionId = sessionId });
+        }
+
         public async Task<ActiveSession?> GetSessionById(string sessionId)
         {
             if (!Guid.TryParse(sessionId, out Guid sessionGuid))

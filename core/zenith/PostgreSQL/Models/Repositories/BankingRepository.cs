@@ -4,6 +4,7 @@ using ZenithFin.Api.Models.Dtos;
 
 using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Dtos;
+using Microsoft.EntityFrameworkCore.Design;
 
 namespace ZenithFin.PostgreSQL.Models.Repositories
 {
@@ -64,17 +65,67 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             return await connection.ExecuteAsync(sql, new { State = state }) > 0 ? true : false;
         }
 
-        public async Task InsertBankSessionAsActiveAsync(AspspBankingSessionEntity pendingBankSession)
+        public async Task<bool> InsertBankSessionAsActiveAsync(AspspBankingSessionEntity pendingBankSession)
         {
             const string sql = """
             INSERT INTO "BankConnection"
-            (active_session_id, aspsp_session_id, aspsp_name, aspsp_country, psu_type, consent_expires_at)
+            (user_id, aspsp_session_id, aspsp_name, aspsp_country, psu_type, consent_expires_at, status)
             VALUES
-            (@ActiveSessionId, @AspspSessionId, @AspspName, @AspspCountry, @AspspPsuType, @ConsentExpiresAt);
+            (@UserId, @AspspSessionId, @AspspName, @AspspCountry, @AspspPsuType, @ConsentExpiresAt, @Status::"BankStatus");
             """;
 
             using var connection = _connectionFactory.Create();
-            await connection.ExecuteAsync(sql, pendingBankSession);
+            return await connection.ExecuteAsync(sql, new
+            {
+                pendingBankSession.UserId,
+                pendingBankSession.AspspSessionId,
+                pendingBankSession.AspspName,
+                pendingBankSession.AspspCountry,
+                pendingBankSession.AspspPsuType,
+                pendingBankSession.ConsentExpiresAt,
+                Status = pendingBankSession.Status.ToString()
+            }) > 0 ? true : false;
+        }
+
+        public async Task<AspspBankConnectionDto[]?> AllBankSessionsAsync(long userId)
+        {
+            const string sql = """
+            SELECT aspsp_session_id AS AspspSessionId,
+                   aspsp_name AS AspspName, 
+                   aspsp_country AS AspspCountry, 
+                   consent_expires_at AS ConsentExpiresAt,
+                   status AS Status
+            FROM "BankConnection"
+            WHERE user_id = @UserId
+            """;
+
+            using var connection = _connectionFactory.Create();
+            IEnumerable<AspspBankConnectionDto> entries = await connection.QueryAsync<AspspBankConnectionDto>(sql, 
+                                                                                                              new { UserId = userId });
+            return entries.ToArray();
+        }
+
+        public async Task RefreshBankSessionAsync(string aspspSessionId,
+                                                  string newAspspSessionId,
+                                                  BankStatus newStatus,
+                                                  DateTimeOffset newConsentExpiresAt)
+        {
+            const string sql = """
+            UPDATE "BankConnection"
+            SET aspsp_session_id = @NewAspspSessionId,
+                status = @NewStatus::"BankStatus",
+                consent_expires_at = @NewConsentExpiresAt
+            WHERE aspsp_session_id = @AspspSessionId
+            """;
+
+            using var connection = _connectionFactory.Create();
+            await connection.ExecuteAsync(sql, new
+            {
+                AspspSessionId = aspspSessionId,
+                NewAspspSessionId = newAspspSessionId,
+                NewStatus = newStatus.ToString(),
+                NewConsentExpiresAt = newConsentExpiresAt
+            });
         }
     }
 }

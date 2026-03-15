@@ -1,0 +1,7 @@
+model Transaction {
+    id               BigInt   @id @default(autoincrement())
+    transaction_date DateTime @default(now())
+
+    account    Account? @relation(fields: [account_id], references: [id])
+    account_id BigInt?
+}

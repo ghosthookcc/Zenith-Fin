@@ -50,7 +50,7 @@ export default component$(() => {
 
           try
           {
-              const response = await fetchWithTimeout('/api/aspsps',
+              const response = await fetchWithTimeout('/api/aspsps/inactive',
               {
                   method: 'POST',
                   headers:
@@ -81,7 +81,7 @@ export default component$(() => {
 
   useVisibleTask$(async () => {
     try {
-      const response = await fetch('/api/aspsps', {
+      const response = await fetch('/api/aspsps/inactive', {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' },
       });
@@ -128,14 +128,14 @@ export default component$(() => {
           ))}
         </ul>
       )}
-        <button type="submit">Authenticate</button>
+        {aspsps.value.length > 0 && <button type="submit">Authenticate</button>}
       </form>
 
       {authUrls.value.length > 0 && (
           <div style={{ marginTop: "1rem" }}>
             <h3>Authenticate with banks:</h3>
             {authUrls.value.map(auth => (
-                <a href={auth.url}
+                <a key={auth.bank} href={auth.url}
                    target="_blank"
                    rel="noopener noreferrer">
                     <button key={auth.url}

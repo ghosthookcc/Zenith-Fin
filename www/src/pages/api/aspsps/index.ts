@@ -71,16 +71,31 @@ export const POST: APIRoute = async ({ request, cookies }) => {
   }
 };
 
-export const GET: APIRoute = async () => {
+export const GET: APIRoute = async ({ cookies }) => {
     console.log('🟢 SERVER: GET handler called');
     try
     {
+        const jwt = cookies.get("AuthToken")?.value;
+
+        if (!jwt)
+        {
+            return new Response(
+                JSON.stringify(
+                {
+                    message: "No token provided",
+                    success: false
+                }),
+                { status: 401 }
+            );
+        }
+
         const response = await fetch("https://localhost:4446/api/v1/aspsp/all",
         {
             method: "GET",
             headers:
             {
-                'Content-Type': 'application/json',
+                "Authorization": `Bearer ${jwt}`,
+                "Content-Type": "application/json",
             },
             dispatcher: insecureDispatcher,
         });

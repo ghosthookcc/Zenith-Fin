@@ -23,7 +23,7 @@ namespace ZenithFin.Api.v1
         private readonly JwtAuthenticator _jwtAuthenticator;
 
         [HttpGet]
-        //[ResourceGuard]
+        [ResourceGuard]
         [Route("all")]
         public IActionResult ListAspsps()
         {
@@ -31,12 +31,39 @@ namespace ZenithFin.Api.v1
                                                    .RootElement
                                                    .GetProperty("EnableBanking")
                                                    .Deserialize<AspspDto.AllAspsps>();
+
             AspspDto.AspspsResponse response = new();
             response.Message = "Retrived ASPSPS";
             response.Success = true;
             response.Code = StatusCodes.Status200OK;
 
             if (aspsps != null) response.Aspsps = aspsps;
+
+            return Ok(response);
+        }
+
+        [HttpGet]
+        [ResourceGuard]
+        [Route("all/inactive")]
+        public async Task<IActionResult> ListInactiveAspsps()
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+            if (string.IsNullOrEmpty(sessionId))
+                return Unauthorized("No session ID found");
+
+            AspspDto.AllAspsps? aspsps = _workspace.config!
+                                       .RootElement
+                                       .GetProperty("EnableBanking")
+                                       .Deserialize<AspspDto.AllAspsps>();
+
+            AspspDto.AspspsResponse response = new();
+            response.Message = "Retrived ASPSPS";
+            response.Success = true;
+            response.Code = StatusCodes.Status200OK;
+
+            AspspDto.AllAspsps? inactiveAspsps = await _bankingService.GetInactiveAspsps(sessionId,
+                                                                                         aspsps);
+            if (inactiveAspsps != null) response.Aspsps = inactiveAspsps;
 
             return Ok(response);
         }
@@ -63,6 +90,19 @@ namespace ZenithFin.Api.v1
             {
                 ExpiresAt = attempt.expiresAt
             });
+        }
+
+        [HttpGet]
+        [ResourceGuard]
+        [Route("accounts/process")]
+        public async Task<IActionResult> ProcessAccounts()
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+            if (string.IsNullOrEmpty(sessionId))
+                return Unauthorized("No session ID found");
+            bool attempt = await _workspace.Authenticator.FetchTransactions(sessionId);
+
+            return Ok(attempt);
         }
 
         public Banking(EnableBankingWorkspace workspace,

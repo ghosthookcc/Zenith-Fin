@@ -14,19 +14,29 @@ namespace ZenithFin.PostgreSQL.Models.Entities
 
     public class AspspBankConnectionEntity
     {
-        [Column("active_session_id")] public Guid? ActiveSessionId { get; init; }
+        [Column("aspsp_session_id")] public string? AspspSessionId { get; init; }
         [Column("aspsp_name")] public string? AspspName { get; init; }
         [Column("aspsp_country")] public string? AspspCountry { get; init; }
         [Column("psu_type")] public string? AspspPsuType { get; init; }
+        [Column("consent_expires_at")] public DateTime? ConsentExpiresAt { get; init; }
+        [Column("status")] public BankStatus? Status { get; init; }
     }
 
     public class AspspBankingSessionEntity
     {
-        [Column("active_session_id")] public Guid? ActiveSessionId { get; init; }
+        [Column("user_id")] public long? UserId { get; init; }
         [Column("aspsp_session_id")] public string? AspspSessionId { get; init; }
         [Column("aspsp_name")] public string? AspspName { get; init; }
         [Column("aspsp_country")] public string? AspspCountry { get; init; }
         [Column("psu_type")] public string? AspspPsuType { get; init; }
         [Column("consent_expires_at")] public DateTimeOffset? ConsentExpiresAt { get; init; }
+        [Column("status")] public BankStatus? Status { get; init; }
+    }
+
+    public enum BankStatus
+    {
+        ACTIVE,
+        EXPIRED,
+        REVOKED
     }
 }
