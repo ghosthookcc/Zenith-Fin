@@ -1,6 +1,8 @@
 import type { APIRoute } from "astro";
 import { Agent } from "undici";
 
+import { fetchWithTimeout } from "../../../utils/network.ts";
+
 const insecureDispatcher = new Agent({
     connect: {
         rejectUnauthorized: false,
@@ -9,7 +11,8 @@ const insecureDispatcher = new Agent({
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ cookies }) => {
+export const GET: APIRoute = async ({ cookies }) => 
+{
     try {
         const jwt = cookies.get("AuthToken")?.value;
 
@@ -28,7 +31,7 @@ export const GET: APIRoute = async ({ cookies }) => {
             );
         }
 
-        const response = await fetch(
+        const response = await fetchWithTimeout(
             "https://localhost:4446/api/v1/aspsp/accounts/balances",
             {
                 method: "GET",

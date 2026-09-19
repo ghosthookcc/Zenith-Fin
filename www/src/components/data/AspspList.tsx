@@ -70,7 +70,7 @@ export default component$(() => {
                         Accept: 'application/json',
                     },
                 },
-                10000,
+                300000,
             );
 
             const text = await response.text();

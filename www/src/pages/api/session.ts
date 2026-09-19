@@ -44,7 +44,12 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         if (!data.success)
         {
             cookies.delete("AuthToken", { path: "/" });
-            return redirect("/");
+            return new Response(JSON.stringify(data), {
+                status: 401,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });        
         }
 
         return new Response(

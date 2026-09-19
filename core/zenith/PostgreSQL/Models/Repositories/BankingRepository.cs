@@ -85,7 +85,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 pendingBankSession.AspspPsuType,
                 pendingBankSession.ConsentExpiresAt,
                 Status = pendingBankSession.Status.ToString()
-            }) > 0 ? true : false;
+            }) > 0;
         }
 
         public async Task<AspspBankConnectionDto[]?> AllBankSessionsAsync(long userId)

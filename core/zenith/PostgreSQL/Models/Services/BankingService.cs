@@ -1,4 +1,5 @@
-﻿using Auth0.AspNetCore.Authentication;
+﻿using System.Diagnostics;
+using Auth0.AspNetCore.Authentication;
 using System.Text.Json;
 using ZenithFin.Api.Auth;
 using ZenithFin.Api.Models.Dtos;
@@ -121,19 +122,13 @@ namespace ZenithFin.PostgreSQL.Models.Services
         {
             Guid activeSessionId = Guid.Parse(userSessionId);
 
-            PendingBankSession? authentication =
-                await _bankingRepository.SelectPendingBankAuthenticationAsync(
-                    activeSessionId,
-                    state);
+            PendingBankSession? authentication = await _bankingRepository.SelectPendingBankAuthenticationAsync(activeSessionId, state);
 
-            UserEssentials? essentials =
-                await _userRepository.GetUserIdBySessionId(activeSessionId);
+            UserEssentials? essentials = await _userRepository.GetUserIdBySessionId(activeSessionId);
 
-            if (authentication == null || essentials == null)
-                return;
+            if (authentication == null || essentials == null) return;
 
-            AspspBankConnectionDto[]? sessions =
-                await _bankingRepository.AllBankSessionsAsync(essentials.UserId);
+            AspspBankConnectionDto[]? sessions = await _bankingRepository.AllBankSessionsAsync(essentials.UserId);
 
             AspspBankingSessionEntity bankingSession = new()
             {
@@ -145,9 +140,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 ConsentExpiresAt = expiresAt,
                 Status = BankStatus.ACTIVE
             };
-
-            await _bankingRepository.DeletePendingBankSessionAsync(state);
-
+            
             bool existingConnection = false;
 
             if (sessions?.Length > 0)
@@ -169,22 +162,21 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 }
             }
 
+            Debug.WriteLine("HERE");
             if (!existingConnection)
             {
-                await _bankingRepository.InsertBankSessionAsActiveAsync(
-                    bankingSession);
+                bool test = await _bankingRepository.InsertBankSessionAsActiveAsync(bankingSession);
+                Debug.WriteLine("Testing?: " + test);
             }
 
-            long? bankConnectionId =
-                await _bankingRepository.GetBankConnectionIdAsync(
-                    bankingSession.AspspSessionId);
+            long? bankConnectionId = await _bankingRepository.GetBankConnectionIdAsync(bankingSession.AspspSessionId);
 
             if (bankConnectionId != null)
             {
-                await _bankingRepository.UpsertAccountsAsync(
-                    bankConnectionId.Value,
-                    accounts);
+                await _bankingRepository.UpsertAccountsAsync(bankConnectionId.Value, accounts);
             }
+            
+            await _bankingRepository.DeletePendingBankSessionAsync(state);
         }
         
         public async Task<AccountDto.Balance[]> GetAccountsBalancesAsync(string sessionId)
