@@ -1,5 +1,9 @@
 .env
 
+.idea/
+
+pnpm-*
+
 app.config
 config.json
 appsettings.Development.json

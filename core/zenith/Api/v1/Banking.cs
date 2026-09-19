@@ -83,7 +83,8 @@ namespace ZenithFin.Api.v1
             {
                 await _bankingService.StartAspspSessionAsync(attempt.sessionId, attempt.expiresAt.Value,
                                                              sessionId,
-                                                             request.State);
+                                                             request.State,
+                                                             attempt.accounts ?? Array.Empty<EnableBankingEntities.AccountData>());
             }
 
             return Ok(new
@@ -104,7 +105,22 @@ namespace ZenithFin.Api.v1
 
             return Ok(attempt);
         }
+        
+        [HttpGet]
+        [ResourceGuard]
+        [Route("accounts/balances")]
+        public async Task<IActionResult> GetAccountsBalances()
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
 
+            if (string.IsNullOrEmpty(sessionId)) 
+                return Unauthorized("No session ID found");
+
+            AccountDto.Balance[] balances = await _bankingService.GetAccountsBalancesAsync(sessionId);
+
+            return Ok(balances);
+        }
+        
         public Banking(EnableBankingWorkspace workspace,
                        UserService userService,
                        BankingService bankingService,

@@ -5,6 +5,7 @@ using ZenithFin.Api.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Dtos;
 using Microsoft.EntityFrameworkCore.Design;
+using ZenithFin.EnableBanking;
 
 namespace ZenithFin.PostgreSQL.Models.Repositories
 {
@@ -126,6 +127,84 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 NewStatus = newStatus.ToString(),
                 NewConsentExpiresAt = newConsentExpiresAt
             });
+        }
+        
+        public async Task<long?> GetBankConnectionIdAsync(string aspspSessionId)
+        {
+            const string sql = """
+                               SELECT id
+                               FROM "BankConnection"
+                               WHERE aspsp_session_id = @AspspSessionId
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.QueryFirstOrDefaultAsync<long?>(sql, new { AspspSessionId = aspspSessionId });
+        }
+        
+        public async Task UpsertAccountsAsync(long bankConnectionId,
+                                              IReadOnlyList<EnableBankingEntities.AccountData> accounts)
+        {
+            const string sql = """
+                               INSERT INTO "Account"
+                               (
+                                   enable_banking_uid,
+                                   iban,
+                                   name,
+                                   currency,
+                                   bank_connection_id
+                               )
+                               VALUES
+                               (
+                                   @EnableBankingUid,
+                                   @Iban,
+                                   @Name,
+                                   @Currency,
+                                   @BankConnectionId
+                               )
+                               ON CONFLICT (enable_banking_uid)
+                               DO UPDATE SET
+                                   iban = EXCLUDED.iban,
+                                   name = EXCLUDED.name,
+                                   currency = EXCLUDED.currency,
+                                   bank_connection_id = EXCLUDED.bank_connection_id;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            foreach (var account in accounts)
+            {
+                await connection.ExecuteAsync(sql, new
+                {
+                    EnableBankingUid = account.uid,
+                    Iban = account.accountId.iban,
+                    Name = account.name,
+                    Currency = account.currency,
+                    BankConnectionId = bankConnectionId
+                });
+            }
+        }
+        
+        public async Task<AccountDto.Account[]> GetAccountsForUserAsync(long userId)
+        {
+            const string sql = """
+                               SELECT
+                                   a.id AS Id,
+                                   a.enable_banking_uid AS EnableBankingUid,
+                                   a.iban AS Iban,
+                                   a.name AS Name,
+                                   a.currency AS Currency,
+                                   a.bank_connection_id AS BankConnectionId
+                               FROM "Account" a
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               WHERE bc.user_id = @UserId
+                                 AND bc.status = 'ACTIVE'::"BankStatus"
+                               ORDER BY a.id;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            IEnumerable<AccountDto.Account> accounts = await connection.QueryAsync<AccountDto.Account>(sql, new { UserId = userId });
+
+            return accounts.ToArray();
         }
     }
 }

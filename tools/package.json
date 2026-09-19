@@ -5,9 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-
     "erd:watch": "chokidar prisma -c \"npx prisma generate\"",
-
     "db:generate": "prisma generate --schema=./prisma/schema/",
     "db:push": "prisma db push --schema=./prisma/schema/",
     "db:pull": "prisma db pull --schema=./prisma/schema/",
@@ -21,7 +19,8 @@
   "devDependencies": {
     "chokidar-cli": "^3.0.0",
     "prisma": "^7.3.0",
-    "prisma-erd-generator": "^2.4.2"
+    "prisma-erd-generator": "^2.4.2",
+    "puppeteer": "^25.11.0"
   },
   "dependencies": {
     "@prisma/client": "^7.3.0"

@@ -24,6 +24,7 @@ namespace ZenithFin.EnableBanking
     {
         public string? sessionId;
         public DateTimeOffset? expiresAt;
+        public IReadOnlyList<AccountData>? accounts;
         public bool success;
     }
     internal class Authenticator
@@ -55,10 +56,43 @@ namespace ZenithFin.EnableBanking
             }
         }
 
+        public async Task<Response.AccountsBalances> FetchAccountBalance(Guid accountId)
+        {
+            GetToken();
+            
+            dynamic response = await Wrapper.GET
+                                            .AccountsBalancesById(client, accountId)
+                                            .SendAsync();
+
+            return response;
+        }
+
         public async Task<bool> FetchTransactions(string sessionId)
         {
             GetToken();
             return true;
+        }
+        
+        public async Task<Response.SessionData> FetchSession(Guid sessionId)
+        {
+            GetToken();
+            
+            dynamic response = await Wrapper.GET
+                                            .SessionById(client, sessionId)
+                                            .SendAsync();
+
+            return response;
+        }
+
+        public async Task<EnableBankingEntities.AccountData> FetchAccountDetails(Guid accountId)
+        {
+            GetToken();
+
+            dynamic response = await Wrapper.GET
+                                            .AccountDetailsById(client, accountId)
+                                            .SendAsync();
+            
+            return response;
         }
 
         public async Task<AspspAuthenticationAttempt> Authenticate(AuthenticationAspsp aspsp,
@@ -114,6 +148,7 @@ namespace ZenithFin.EnableBanking
             {
                 sessionId = response.sessionId,
                 expiresAt = response.access.validUntil,
+                accounts = response.accounts,
                 success = true
             };
         }

@@ -39,7 +39,7 @@ namespace ZenithFin.Api.v1
                     });
                 }
 
-                // Your registration logic here
+                // registration logic here
                 // e.g., check if user exists, hash password, save to database
 
                 // Example: User already exists

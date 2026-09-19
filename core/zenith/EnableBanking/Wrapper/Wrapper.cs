@@ -32,12 +32,22 @@
                                                               string ip = "127.0.0.1",
                                                               string agent = "ZenithFin/1.0")
             {
-                RequestBuilder request = new (client, HttpMethod.Get, Routing.AccountsBalances.ByIdentifier(id));
+                RequestBuilder request = new (client, HttpMethod.Get, Routing.Account.BalancesByIdentifier(id));
                 request.WithHeader("Psu-Ip-Address", ip);
                 request.WithHeader("Psu-User-Agent", agent);
                 return request;
             }
+            
+            public static RequestBuilder SessionById(Client client, Guid id)
+            {
+                return new(client, HttpMethod.Get, Routing.Authentication.SessionByIdentifier(id));
+            }
 
+            public static RequestBuilder AccountDetailsById(Client client, Guid id)
+            {
+                return new(client, HttpMethod.Get, Routing.Account.DetailsByIdentifier(id));
+            }
+            
             public static RequestBuilder Aspsps(Client client)
             {
                 return new (client, HttpMethod.Get, Routing.Authentication.Aspsps);
