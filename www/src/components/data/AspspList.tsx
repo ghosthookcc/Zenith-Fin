@@ -29,6 +29,7 @@ interface Balance {
 interface AccountBalance {
     id: number;
     enableBankingUid: string;
+    bankName?: string | null;
     iban?: string | null;
     name?: string | null;
     currency: string;
@@ -91,20 +92,7 @@ export default component$(() => {
                     `Failed to fetch balances (${response.status})`,
                 );
             }
-
-            /*
-             * Accept either:
-             *
-             * [
-             *   { ...account }
-             * ]
-             *
-             * or:
-             *
-             * {
-             *   accounts: [...]
-             * }
-             */
+            
             const rawAccounts = Array.isArray(data)
                 ? data
                 : Array.isArray(data?.accounts)
@@ -179,11 +167,10 @@ export default component$(() => {
         }
     });
 
-    useVisibleTask$(async () => {
-        /*
-         * Load inactive banks.
-         */
-        try {
+    useVisibleTask$(async () => 
+    {
+        try 
+        {
             const response = await fetch('/api/aspsps/inactive', {
                 method: 'GET',
                 headers: {
@@ -193,11 +180,7 @@ export default component$(() => {
 
             const data = await response.json();
 
-            if (!response.ok || !data.success) {
-                throw new Error(
-                    data.message || 'Could not load banks',
-                );
-            }
+            if (!response.ok || !data.success) throw new Error(data.message || 'Could not load banks',);
 
             const raw: Record<
                 string,
@@ -215,23 +198,21 @@ export default component$(() => {
                     psuType: details.psuType,
                 })),
             );
-        } catch (err) {
+        } 
+        catch (err) 
+        {
             console.error('ASPSP fetch error:', err);
 
             error.value =
                 err instanceof Error
                     ? err.message
                     : 'Unknown ASPSP error';
-        } finally {
+        } 
+        finally 
+        {
             loading.value = false;
         }
-
-        /*
-         * Load the currently connected accounts/balances.
-         *
-         * This is deliberately independent from the ASPSP request:
-         * if balances fail, the bank list still works.
-         */
+       
         await loadBalances();
     });
 
@@ -365,6 +346,13 @@ export default component$(() => {
                                     <h3>
                                         {account.name || 'Bank account'}
                                     </h3>
+
+                                    {account.bankName && (
+                                        <p>
+                                            <strong>BankName:</strong>{' '}
+                                            {account.bankName}
+                                        </p>
+                                    )}
 
                                     {account.iban && (
                                         <p>

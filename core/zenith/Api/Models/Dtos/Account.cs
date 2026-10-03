@@ -10,6 +10,7 @@ namespace ZenithFin.Api.Models.Dtos
         {
             public long Id { get; set; }
             public Guid EnableBankingUid { get; set; }
+            public string BankName { get; set; } = string.Empty;
             public string? Iban { get; set; }
             public string? Name { get; set; }
             public string Currency { get; set; } = string.Empty;
@@ -20,6 +21,7 @@ namespace ZenithFin.Api.Models.Dtos
         {
             public long Id { get; set; }
             public Guid EnableBankingUid { get; set; }
+            public string BankName { get; set; } = string.Empty;
             public string? Iban { get; set; }
             public string? Name { get; set; }
             public string Currency { get; set; } = string.Empty;

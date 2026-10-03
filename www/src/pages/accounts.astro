@@ -7,9 +7,9 @@ import SideMenu from "../components/SideMenu";
 export const prerender = false;
 ---
 <Layout title="Dashboard">
-  <SideMenu currentPath={Astro.url.pathname} />
-  
-  <main id="app">
-    <p>Dashboard</p>
-  </main>
+    <SideMenu currentPath={Astro.url.pathname} />
+    <main id="app">
+        <p>Accounts</p>
+        <AspspList client:load />
+    </main>
 </Layout>

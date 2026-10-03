@@ -115,8 +115,11 @@ namespace ZenithFin.Api.v1
 
             if (string.IsNullOrEmpty(sessionId)) 
                 return Unauthorized("No session ID found");
+            
+            
 
             AccountDto.Balance[] balances = await _bankingService.GetAccountsBalancesAsync(sessionId);
+            
 
             return Ok(balances);
         }

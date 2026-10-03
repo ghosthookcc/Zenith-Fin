@@ -1,8 +1,4 @@
-﻿using System.Diagnostics;
-using Auth0.AspNetCore.Authentication;
-using System.Text.Json;
-using ZenithFin.Api.Auth;
-using ZenithFin.Api.Models.Dtos;
+﻿using ZenithFin.Api.Models.Dtos;
 using ZenithFin.EnableBanking;
 using ZenithFin.PostgreSQL.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Entities;
@@ -31,11 +27,9 @@ namespace ZenithFin.PostgreSQL.Models.Services
         {
             Guid activeSessionId = Guid.Parse(userSessionId);
 
-            UserEssentials? essentials =
-                await _userRepository.GetUserIdBySessionId(activeSessionId);
+            UserEssentials? essentials = await _userRepository.GetUserIdBySessionId(activeSessionId);
 
-            if (essentials == null)
-                return;
+            if (essentials == null) return;
 
             AspspBankConnectionDto[]? sessions = await _bankingRepository.AllBankSessionsAsync(essentials.UserId);
 
@@ -162,13 +156,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 }
             }
 
-            Debug.WriteLine("HERE");
-            if (!existingConnection)
-            {
-                bool test = await _bankingRepository.InsertBankSessionAsActiveAsync(bankingSession);
-                Debug.WriteLine("Testing?: " + test);
-            }
-
+            if (!existingConnection) await _bankingRepository.InsertBankSessionAsActiveAsync(bankingSession);
             long? bankConnectionId = await _bankingRepository.GetBankConnectionIdAsync(bankingSession.AspspSessionId);
 
             if (bankConnectionId != null)
@@ -181,30 +169,84 @@ namespace ZenithFin.PostgreSQL.Models.Services
         
         public async Task<AccountDto.Balance[]> GetAccountsBalancesAsync(string sessionId)
         {
-            Guid activeSessionId = Guid.Parse(sessionId);
+            if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return Array.Empty<AccountDto.Balance>();
 
             UserEssentials? essentials = await _userRepository.GetUserIdBySessionId(activeSessionId);
 
             if (essentials == null) return Array.Empty<AccountDto.Balance>();
             
-            await SyncAccountsFromExistingSessionsAsync(sessionId);
             AccountDto.Account[] accounts = await _bankingRepository.GetAccountsForUserAsync(essentials.UserId);
 
-            List<AccountDto.Balance> result = new();
-            foreach (AccountDto.Account account in accounts)
+            List<AccountDto.Balance> result = new List<AccountDto.Balance>();
+
+            foreach (var account in accounts)
             {
-                Response.AccountsBalances balances = await _workspace.Authenticator.FetchAccountBalance(account.EnableBankingUid);                
-                result.Add(new AccountDto.Balance
+                int lockIndex = (int)((ulong)account.Id % (ulong)BalanceRefreshLocks.Length);
+
+                SemaphoreSlim refreshLock = BalanceRefreshLocks[lockIndex];
+
+                await refreshLock.WaitAsync();
+
+                try
                 {
-                    Id = account.Id,
-                    EnableBankingUid = account.EnableBankingUid,
-                    Iban = account.Iban,
-                    Name = account.Name,
-                    Currency = account.Currency,
-                    Balances = balances.balances
-                });
+                    CachedAccountBalances? cached = await _bankingRepository.GetCachedBalancesAsync(essentials.UserId, 
+                                                                                                    account.Id);
+
+                    DateTime now = DateTime.UtcNow;
+
+                    bool cacheIsFresh = cached != null &&
+                                        cached.FetchedAt <= now &&
+                                        now - cached.FetchedAt < BalanceCacheDuration;
+                    
+                    Console.WriteLine($"Balance cache: account={account.Id}, " +
+                                      $"found={cached != null}, " +
+                                      $"fetchedAt={cached?.FetchedAt:O}, " +
+                                      $"now={now:O}, " +
+                                      $"fresh={cacheIsFresh}");
+
+                    IReadOnlyList<EnableBankingEntities.Balance> balances;
+
+                    if (cacheIsFresh)
+                    {
+                        balances = cached!.Balances;
+                    }
+                    else
+                    {
+                        Response.AccountsBalances response = await _workspace.Authenticator.FetchAccountBalance(account.EnableBankingUid);
+                
+                        if (response.balances == null) throw new InvalidOperationException("The bank returned no balance collection.");
+
+                        balances = response.balances.ToArray();
+
+                        await _bankingRepository.SaveBalancesAsync(essentials.UserId, 
+                            account.Id,
+                            balances,
+                            DateTime.UtcNow);
+                    }
+
+                    result.Add(new AccountDto.Balance
+                    {
+                        Id = account.Id,
+                        EnableBankingUid = account.EnableBankingUid,
+                        BankName = account.BankName,
+                        Iban = account.Iban,
+                        Name = account.Name,
+                        Currency = account.Currency,
+                        Balances = balances
+                    });
+                }
+                finally
+                {
+                    refreshLock.Release();
+                }
             }
+
             return result.ToArray();
         }
+        
+        private static readonly TimeSpan BalanceCacheDuration = TimeSpan.FromMinutes(5);
+        private static readonly SemaphoreSlim[] BalanceRefreshLocks = Enumerable.Range(0, 64)
+                                                                                .Select(_ => new SemaphoreSlim(1, 1))
+                                                                                .ToArray();
     }
 }
