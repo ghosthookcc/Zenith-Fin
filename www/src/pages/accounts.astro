@@ -1,15 +1,13 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import AspspList from "../components/data/AspspList";
 
 import SideMenu from "../components/SideMenu";
+import { AccountOverview } from "../components/AccountOverview";
 
 export const prerender = false;
 ---
+
 <Layout title="Dashboard">
     <SideMenu currentPath={Astro.url.pathname} />
-    <main id="app">
-        <p>Accounts</p>
-        <AspspList client:load />
-    </main>
+    <AccountOverview />
 </Layout>

@@ -3,6 +3,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using ZenithFin.Api.Auth;
 using ZenithFin.Api.Models.Dtos;
+using ZenithFin.Api.Models.Entities;
 using ZenithFin.EnableBanking;
 using ZenithFin.PostgreSQL.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Services;
@@ -113,15 +114,25 @@ namespace ZenithFin.Api.v1
         {
             string? sessionId = HttpContext.Items["SessionId"] as string;
 
-            if (string.IsNullOrEmpty(sessionId)) 
-                return Unauthorized("No session ID found");
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
             
-            
-
             AccountDto.Balance[] balances = await _bankingService.GetAccountsBalancesAsync(sessionId);
             
-
             return Ok(balances);
+        }
+        
+        [HttpGet]
+        [ResourceGuard]
+        [Route("accounts/balances/expanded")]
+        public async Task<IActionResult> GetAccountsBalancesExpanded()
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+            
+            AccountDto.Balance[] balancesExpanded = await _bankingService.GetAccountsBalancesAsync(sessionId);
+            
+            return Ok(balancesExpanded);
         }
         
         public Banking(EnableBankingWorkspace workspace,

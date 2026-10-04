@@ -1,0 +1,6 @@
+model AccountAlias {
+  account_id      BigInt  @id
+  bank_name_alias String?
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+}
