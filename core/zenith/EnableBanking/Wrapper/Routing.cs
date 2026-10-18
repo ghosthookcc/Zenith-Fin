@@ -22,6 +22,7 @@
         {
             public static Route DetailsByIdentifier(Guid id) => new($"/accounts/{id}/details", typeof(EnableBankingEntities.AccountData));
             public static Route BalancesByIdentifier(Guid id) => new ($"/accounts/{id.ToString()}/balances", typeof(Response.AccountsBalances));
+            public static Route TransactionsByIdentifier(Guid id) => new ($"/accounts/{id}/transactions", typeof(Response.Transactions));
         }
     }
 }

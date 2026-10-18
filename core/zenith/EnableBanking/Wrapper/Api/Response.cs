@@ -1,4 +1,6 @@
-﻿using static ZenithFin.EnableBanking.EnableBankingEntities;
+﻿using System.Text.Json;
+
+using static ZenithFin.EnableBanking.EnableBankingEntities;
 
 namespace ZenithFin.EnableBanking
 {
@@ -11,7 +13,10 @@ namespace ZenithFin.EnableBanking
             Access access) : Base;
         
         public sealed record AccountsBalances(IReadOnlyList<Balance> balances) : Base;
-        
+
+        public sealed record Transactions(IReadOnlyList<JsonElement>? transactions,
+                                          string? continuationKey) : Base;
+
         public sealed record SessionData(string status, 
                                          IReadOnlyList<Guid> accounts,
                                          IReadOnlyList<SessionAccount> accountsData,

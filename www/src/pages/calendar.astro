@@ -1,0 +1,15 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+import SideMenu from "../components/SideMenu";
+import { TransactionCalendar } from "../components/TransactionCalendar";
+
+import "../styles/calendar.css";
+
+export const prerender = false;
+---
+
+<Layout title="Calendar">
+    <SideMenu currentPath={Astro.url.pathname} />
+    <TransactionCalendar />
+</Layout>

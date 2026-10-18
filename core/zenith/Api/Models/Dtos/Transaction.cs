@@ -1,0 +1,74 @@
+namespace ZenithFin.Api.Models.Dtos
+{
+    public static class TransactionDto
+    {
+        public sealed class Transaction
+        {
+            public long Id { get; set; }
+            public long AccountId { get; set; }
+
+            public string Date { get; set; } = string.Empty;
+            public string? BookingDate { get; set; }
+            public string? ValueDate { get; set; }
+            public string? TransactionDate { get; set; }
+
+            public decimal Amount { get; set; }
+            public string Currency { get; set; } = string.Empty;
+            public decimal? OriginalAmount { get; set; }
+            public string? OriginalCurrency { get; set; }
+
+            public string Status { get; set; } = string.Empty;
+            public string CreditDebitIndicator { get; set; } = string.Empty;
+
+            public string? Description { get; set; }
+            public string? CounterpartyName { get; set; }
+            public string? CounterpartyAccount { get; set; }
+            public string[] RemittanceInformation { get; set; } = Array.Empty<string>();
+            public string? MerchantCategoryCode { get; set; }
+            public string? BankTransactionCode { get; set; }
+            public string? ReferenceNumber { get; set; }
+            public string? Note { get; set; }
+        }
+
+        public sealed class Account
+        {
+            public long Id { get; set; }
+            public string? Name { get; set; }
+            public string BankName { get; set; } = string.Empty;
+            public string? Iban { get; set; }
+            public string Currency { get; set; } = string.Empty;
+            public bool IsActive { get; set; }
+            public DateTime? TransactionsSyncedAt { get; set; }
+            public bool IsStale { get; set; }
+        }
+
+        public sealed class TransactionsResponse
+        {
+            public DateOnly From { get; set; }
+            public DateOnly To { get; set; }
+            public IReadOnlyList<Account> Accounts { get; set; } = Array.Empty<Account>();
+            public IReadOnlyList<Transaction> Transactions { get; set; } = Array.Empty<Transaction>();
+        }
+
+        public static class SyncStatus
+        {
+            public const string Synced = "synced";
+            public const string Skipped = "skipped";
+            public const string Failed = "failed";
+        }
+
+        public sealed class SyncResult
+        {
+            public long AccountId { get; set; }
+            public string Status { get; set; } = string.Empty;
+            public int Fetched { get; set; }
+            public string? Error { get; set; }
+            public DateTime? SyncedAt { get; set; }
+        }
+
+        public sealed class SyncResponse
+        {
+            public IReadOnlyList<SyncResult> Accounts { get; set; } = Array.Empty<SyncResult>();
+        }
+    }
+}

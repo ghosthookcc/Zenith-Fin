@@ -14,6 +14,7 @@ interface SideMenuProps {
 const defaultItems: MenuItem[] = [
     { label: 'Overview', href: '/' },
     { label: 'Accounts', href: '/accounts' },
+    { label: 'Calendar', href: '/calendar' },
     { label: 'Journal', href: '/journal' },
     { label: 'About', href: '/about' },
     { label: 'Contact', href: '/contact' },

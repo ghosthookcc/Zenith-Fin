@@ -37,7 +37,18 @@
                 request.WithHeader("Psu-User-Agent", agent);
                 return request;
             }
-            
+
+            public static RequestBuilder AccountTransactionsById(Client client,
+                                                                 Guid id,
+                                                                 string ip = "127.0.0.1",
+                                                                 string agent = "ZenithFin/1.0")
+            {
+                RequestBuilder request = new (client, HttpMethod.Get, Routing.Account.TransactionsByIdentifier(id));
+                request.WithHeader("Psu-Ip-Address", ip);
+                request.WithHeader("Psu-User-Agent", agent);
+                return request;
+            }
+
             public static RequestBuilder SessionById(Client client, Guid id)
             {
                 return new(client, HttpMethod.Get, Routing.Authentication.SessionByIdentifier(id));

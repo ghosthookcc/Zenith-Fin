@@ -1,4 +1,5 @@
 ﻿using Microsoft.IdentityModel.Tokens;
+using System.Globalization;
 using System.IdentityModel.Tokens.Jwt;
 using System.Net.Http.Headers;
 using System.Security.Claims;
@@ -11,10 +12,8 @@ using static ZenithFin.EnableBanking.EnableBankingEntities;
 
 namespace ZenithFin.EnableBanking
 {
-    struct TransactionFetchAttempt
-    {
-        public bool success;
-    }
+    internal sealed record FetchedTransaction(Transaction transaction,
+                                              string raw);
     struct AspspAuthenticationAttempt
     {
         public string? url;
@@ -45,6 +44,8 @@ namespace ZenithFin.EnableBanking
 
         private static readonly TimeSpan RefreshSkew = TimeSpan.FromSeconds(90);
 
+        private const int MaxTransactionPages = 500;
+
         public string? GetToken()
         {
             lock (_lock)
@@ -67,10 +68,50 @@ namespace ZenithFin.EnableBanking
             return response;
         }
 
-        public async Task<bool> FetchTransactions(string sessionId)
+        public async Task<IReadOnlyList<FetchedTransaction>> FetchAccountTransactions(Guid accountId,
+                                                                                    DateOnly dateFrom,
+                                                                                    string? strategy = null)
         {
             GetToken();
-            return true;
+
+            List<FetchedTransaction> transactions = new();
+            HashSet<string> seenContinuationKeys = new();
+            string? continuationKey = null;
+
+            for (int page = 1; page <= MaxTransactionPages; page++)
+            {
+                RequestBuilder request = Wrapper.GET
+                                                .AccountTransactionsById(client, accountId)
+                                                .WithQuery("date_from", dateFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+                if (strategy != null) request.WithQuery("strategy", strategy);
+                if (continuationKey != null) request.WithQuery("continuation_key", continuationKey);
+
+                using HttpResponseMessage response = await request.SendAsyncRaw();
+                string json = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode) throw EnableBankingException.FromResponse((int)response.StatusCode, json);
+
+                Response.Transactions? body = JsonSerializer.Deserialize<Response.Transactions>(json, EnableBankingJson.Options);
+                IReadOnlyList<JsonElement> elements = body?.transactions ?? Array.Empty<JsonElement>();
+
+                foreach (JsonElement element in elements)
+                {
+                    Transaction? transaction = element.Deserialize<Transaction>(EnableBankingJson.Options);
+
+                    if (transaction != null) transactions.Add(new FetchedTransaction(transaction, element.GetRawText()));
+                }
+
+                Console.WriteLine($"Fetched transactions page {page} for account {accountId}: {elements.Count} transactions");
+
+                continuationKey = body?.continuationKey;
+
+                if (string.IsNullOrEmpty(continuationKey)) return transactions;
+                if (!seenContinuationKeys.Add(continuationKey))
+                    throw new InvalidOperationException($"Enable Banking repeated a continuation key for account {accountId}.");
+            }
+
+            throw new InvalidOperationException($"Stopped fetching transactions for account {accountId} after {MaxTransactionPages} pages.");
         }
         
         public async Task<Response.SessionData> FetchSession(Guid sessionId)

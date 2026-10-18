@@ -1,6 +1,7 @@
 import { component$, $, useSignal, useVisibleTask$ } from '@builder.io/qwik';
 
 import { Icon } from './Icon';
+import { accountColors as colors } from '../utils/accounts';
 
 interface BalanceAmount {
     currency: string;
@@ -38,17 +39,6 @@ interface DisplayAccount {
     purpose: string;
     icon: 'plane' | 'home' | 'heart' | 'wallet' | 'shield' | 'layers';
 }
-
-const colors = [
-    '#d482c4',
-    '#96cba0',
-    '#b8a0e7',
-    '#83a9eb',
-    '#dfc17d',
-    '#7a829b',
-    '#cf8e73',
-    '#68a7a3',
-];
 
 const icons: DisplayAccount['icon'][] = [
     'wallet',

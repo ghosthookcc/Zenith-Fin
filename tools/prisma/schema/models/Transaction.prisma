@@ -1,7 +1,38 @@
 model Transaction {
-    id               BigInt   @id @default(autoincrement())
-    transaction_date DateTime @default(now())
+  id         BigInt @id @default(autoincrement())
+  account_id BigInt
 
-    account    Account? @relation(fields: [account_id], references: [id])
-    account_id BigInt?
+  external_id     String
+  entry_reference String?
+
+  status                 String
+  credit_debit_indicator String
+
+  amount            Decimal  @db.Decimal(24, 8)
+  currency          String   @db.VarChar(3)
+  original_amount   Decimal? @db.Decimal(24, 8)
+  original_currency String?  @db.VarChar(3)
+
+  booking_date     DateTime? @db.Date
+  value_date       DateTime? @db.Date
+  transaction_date DateTime? @db.Date
+  occurred_on      DateTime  @db.Date
+
+  counterparty_name      String?
+  counterparty_account   String?
+  remittance_information String[] @default([])
+  merchant_category_code String?
+  bank_transaction_code  String?
+  reference_number       String?
+  note                   String?
+
+  raw Json
+
+  first_seen_at DateTime @default(now()) @db.Timestamptz(3)
+  updated_at    DateTime @default(now()) @db.Timestamptz(3)
+
+  account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@unique([account_id, external_id])
+  @@index([account_id, occurred_on])
 }

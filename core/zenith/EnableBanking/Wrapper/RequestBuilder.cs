@@ -13,11 +13,7 @@ internal sealed class RequestBuilder
     private Dictionary<string, string>? _query;
     private Dictionary<string, string>? _headers;
 
-    private readonly JsonSerializerOptions _options = new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = new SnakeCaseNamingPolicy(),
-        PropertyNameCaseInsensitive = true,
-    };
+    private readonly JsonSerializerOptions _options = EnableBankingJson.Options;
 
     public RequestBuilder WithBody(object body)
     {

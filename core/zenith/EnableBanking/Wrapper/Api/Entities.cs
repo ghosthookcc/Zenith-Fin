@@ -59,6 +59,40 @@
         public sealed record BalanceAmount(string currency,
                                            string amount);
 
+        public sealed record AmountType(string currency,
+                                        string amount);
+        public sealed record PartyIdentification(string? name);
+        public sealed record AccountIdentification(string? iban,
+                                                   OtherAccountId? other);
+        public sealed record BankTransactionCode(string? description,
+                                                 string? code,
+                                                 string? subCode);
+        public sealed record ExchangeRate(string? unitCurrency,
+                                          string? exchangeRate,
+                                          string? rateType,
+                                          string? contractIdentification,
+                                          AmountType? instructedAmount);
+
+        public sealed record Transaction(string? entryReference,
+                                         string? merchantCategoryCode,
+                                         AmountType? transactionAmount,
+                                         PartyIdentification? creditor,
+                                         AccountIdentification? creditorAccount,
+                                         PartyIdentification? debtor,
+                                         AccountIdentification? debtorAccount,
+                                         BankTransactionCode? bankTransactionCode,
+                                         string? creditDebitIndicator,
+                                         string? status,
+                                         string? bookingDate,
+                                         string? valueDate,
+                                         string? transactionDate,
+                                         AmountType? balanceAfterTransaction,
+                                         string? referenceNumber,
+                                         IReadOnlyList<string?>? remittanceInformation,
+                                         ExchangeRate? exchangeRate,
+                                         string? note,
+                                         string? transactionId);
+
         public sealed record Credential(string Description,
                                         string Name,
                                         bool Required,

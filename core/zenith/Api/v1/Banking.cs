@@ -20,8 +20,11 @@ namespace ZenithFin.Api.v1
 
         private readonly UserService _userService;
         private readonly BankingService _bankingService;
+        private readonly TransactionService _transactionService;
 
         private readonly JwtAuthenticator _jwtAuthenticator;
+
+        private const int MaxTransactionRangeDays = 400;
 
         [HttpGet]
         [ResourceGuard]
@@ -96,17 +99,47 @@ namespace ZenithFin.Api.v1
 
         [HttpGet]
         [ResourceGuard]
-        [Route("accounts/process")]
-        public async Task<IActionResult> ProcessAccounts()
+        [Route("accounts/transactions")]
+        public async Task<IActionResult> GetTransactions([FromQuery] DateOnly? from,
+                                                         [FromQuery] DateOnly? to)
         {
             string? sessionId = HttpContext.Items["SessionId"] as string;
-            if (string.IsNullOrEmpty(sessionId))
-                return Unauthorized("No session ID found");
-            bool attempt = await _workspace.Authenticator.FetchTransactions(sessionId);
 
-            return Ok(attempt);
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+            DateOnly fromDate = from ?? new DateOnly(today.Year, today.Month, 1);
+            DateOnly toDate = to ?? fromDate.AddMonths(1).AddDays(-1);
+
+            if (toDate < fromDate)
+                return BadRequest(new { message = "'to' must not be before 'from'", success = false });
+
+            if (toDate.DayNumber - fromDate.DayNumber > MaxTransactionRangeDays)
+                return BadRequest(new { message = $"The date range can span at most {MaxTransactionRangeDays} days", success = false });
+
+            TransactionDto.TransactionsResponse? transactions = await _transactionService.GetTransactionsAsync(sessionId, fromDate, toDate);
+
+            if (transactions == null) return Unauthorized("No user found for session");
+
+            return Ok(transactions);
         }
-        
+
+        [HttpPost]
+        [ResourceGuard]
+        [Route("accounts/transactions/sync")]
+        public async Task<IActionResult> SyncTransactions([FromQuery] bool force = false)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            TransactionDto.SyncResponse? result = await _transactionService.SyncTransactionsAsync(sessionId, force);
+
+            if (result == null) return Unauthorized("No user found for session");
+
+            return Ok(result);
+        }
+
         [HttpGet]
         [ResourceGuard]
         [Route("accounts/balances")]
@@ -138,11 +171,13 @@ namespace ZenithFin.Api.v1
         public Banking(EnableBankingWorkspace workspace,
                        UserService userService,
                        BankingService bankingService,
+                       TransactionService transactionService,
                        JwtAuthenticator jwtAuthenticator)
         {
             _workspace = workspace;
             _userService = userService;
             _bankingService = bankingService;
+            _transactionService = transactionService;
             _jwtAuthenticator = jwtAuthenticator;
         }
     }

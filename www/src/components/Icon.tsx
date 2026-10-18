@@ -12,6 +12,11 @@ const paths: Record<string, string> = {
     lock: 'M6 10V7a6 6 0 0 1 12 0v3M5 10h14v11H5V10Zm7 5v2',
     info: 'M12 11v6m0-10v.01M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0Z',
     bank: 'm3 9 9-6 9 6H3Zm2 4v6m7-6v6m7-6v6M3 22h18',
+    calendar: 'M8 2v4m8-4v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z',
+    chevronLeft: 'm15 18-6-6 6-6',
+    chevronRight: 'm9 18 6-6-6-6',
+    chevronDown: 'm6 9 6 6 6-6',
+    refresh: 'M21 12a9 9 0 1 1-2.6-6.4L21 8m0-5v5h-5',
 };
 
 export const Icon = component$<{ name: string; class?: string }>(({ name, class: className }) => (
