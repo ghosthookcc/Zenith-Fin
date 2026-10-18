@@ -34,6 +34,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<CreditAccountRepository>();
             builder.Services.AddSingleton<CreditAccountService>();
 
+            builder.Services.AddSingleton<ExpectedSalaryRepository>();
+            builder.Services.AddSingleton<ExpectedSalaryService>();
+
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CorrectionRepository>();
             builder.Services.AddSingleton<CategorizationService>();

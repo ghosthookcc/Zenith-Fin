@@ -12,6 +12,7 @@ model User {
   tags             Tag[]
   tag_corrections  TagCorrection[]
   credit_accounts  CreditAccount[]
+  expected_salaries ExpectedSalary[]
 
   @@index([email])
 }

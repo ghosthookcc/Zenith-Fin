@@ -211,6 +211,7 @@
 }
 
 .cal-busy .cal-summary,
+.cal-busy .cal-salary,
 .cal-busy .cal-grid,
 .cal-busy .cal-detail-list {
     opacity: 0.6;
@@ -267,6 +268,64 @@
 .cal-count {
     align-self: center;
     margin-left: auto;
+}
+
+.cal-salary {
+    display: flex;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    gap: 14px 44px;
+    padding: 18px 31px;
+    border-bottom: 1px solid var(--cal-line);
+    transition: opacity 0.2s;
+}
+
+.cal-salary-value {
+    font-size: 1.25rem;
+}
+
+.cal-salary-detail {
+    font-size: 0.75rem;
+    color: var(--cal-muted);
+}
+
+.cal-salary-expected {
+    align-self: center;
+    margin-left: auto;
+}
+
+.cal-salary-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.cal-salary-form label {
+    font-size: 0.8125rem;
+    color: var(--cal-ink-2);
+}
+
+.cal-salary-input {
+    width: 140px;
+    padding: 7px 11px;
+    border: 1px solid #363e4b;
+    border-radius: 9px;
+    background: #1c222b;
+    color: var(--cal-ink);
+    font: inherit;
+    font-size: 0.875rem;
+}
+
+.cal-salary-input:focus-visible {
+    outline: 2px solid var(--cal-mint);
+    outline-offset: 2px;
+}
+
+.cal-salary-error {
+    flex-basis: 100%;
+    font-size: 0.75rem;
+    color: #f3c1bd;
 }
 
 .cal-note {
@@ -1005,6 +1064,10 @@
         padding: 10px 21px 0;
     }
 
+    .cal-salary {
+        padding: 16px 21px;
+    }
+
     .cal-detail-head {
         padding: 20px 21px 12px;
     }
@@ -1056,6 +1119,28 @@
     .cal-count {
         justify-self: start;
         margin-left: 0;
+    }
+
+    .cal-salary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .cal-salary-expected {
+        margin-left: 0;
+    }
+
+    .cal-salary .cal-stat {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: baseline;
+        gap: 2px 12px;
+    }
+
+    .cal-salary-detail {
+        grid-column: 1 / -1;
     }
 
     .cal-grid-area {

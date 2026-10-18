@@ -18,6 +18,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly UserRepository _userRepository;
         private readonly TagRepository _tagRepository;
         private readonly CreditAccountRepository _creditAccountRepository;
+        private readonly ExpectedSalaryRepository _expectedSalaryRepository;
 
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
@@ -28,6 +29,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   UserRepository userRepository,
                                   TagRepository tagRepository,
                                   CreditAccountRepository creditAccountRepository,
+                                  ExpectedSalaryRepository expectedSalaryRepository,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
                                   EnableBankingWorkspace workspace)
@@ -36,6 +38,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _userRepository = userRepository;
             _tagRepository = tagRepository;
             _creditAccountRepository = creditAccountRepository;
+            _expectedSalaryRepository = expectedSalaryRepository;
 
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
@@ -79,6 +82,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 }).ToArray(),
                 Tags = tags,
                 CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),
+                ExpectedSalaries = await _expectedSalaryRepository.GetExpectedSalariesForUserAsync(userId.Value),
                 Transactions = transactions
             };
         }

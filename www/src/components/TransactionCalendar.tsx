@@ -42,12 +42,18 @@ interface CalendarTag {
     isSystem: boolean;
 }
 
+interface ExpectedSalary {
+    month: string;
+    amount: number;
+}
+
 interface TransactionsResponse {
     from: string;
     to: string;
     accounts: CalendarAccount[];
     tags: CalendarTag[];
     creditAccounts?: CreditAccountRule[];
+    expectedSalaries?: ExpectedSalary[];
     transactions: CalendarTransaction[];
 }
 
@@ -79,6 +85,13 @@ interface Picker {
 interface Notice {
     id: number;
     text: string;
+}
+
+interface SalaryEditor {
+    open: boolean;
+    amount: string;
+    saving: boolean;
+    error: string | null;
 }
 
 interface SyncProblem {
@@ -547,6 +560,12 @@ export const TransactionCalendar = component$(() => {
         error: null,
     });
     const notice = useSignal<Notice | null>(null);
+    const salaryEditor = useStore<SalaryEditor>({
+        open: false,
+        amount: '',
+        saving: false,
+        error: null,
+    });
 
     const load = $(async () => {
         const request = latestRequest.value + 1;
@@ -655,6 +674,7 @@ export const TransactionCalendar = component$(() => {
         selectedDate.value = select;
         picker.id = null;
         notice.value = null;
+        salaryEditor.open = false;
 
         await load();
     });
@@ -680,6 +700,103 @@ export const TransactionCalendar = component$(() => {
 
     const selectCategory = $((id: number) => {
         categoryFilter.value = categoryFilter.value === String(id) ? 'all' : String(id);
+    });
+
+    const openSalaryEditor = $((current: number | null) => {
+        salaryEditor.open = true;
+        salaryEditor.amount = current === null ? '' : String(current);
+        salaryEditor.error = null;
+    });
+
+    const updateSalaries = $((month: string, saved: ExpectedSalary | null) => {
+        if (!data.value) {
+            return;
+        }
+
+        const kept = (data.value.expectedSalaries ?? []).filter((entry) => entry.month !== month);
+
+        data.value = {
+            ...data.value,
+            expectedSalaries: (saved ? [...kept, saved] : kept).sort((a, b) => a.month.localeCompare(b.month)),
+        };
+    });
+
+    const saveSalary = $(async (month: string) => {
+        if (salaryEditor.saving) {
+            return;
+        }
+
+        const text = salaryEditor.amount.trim().replace(/\s+/g, '').replace(',', '.');
+        const amount = Number(text);
+
+        if (text === '' || !Number.isFinite(amount) || amount < 0) {
+            salaryEditor.error = 'Enter the expected salary in kronor';
+            return;
+        }
+
+        salaryEditor.saving = true;
+        salaryEditor.error = null;
+
+        try {
+            const response = await fetch(`/api/expected-salaries/${month}`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ amount }),
+            });
+
+            const payload = await readJson(response);
+
+            if (!response.ok) {
+                throw new Error(
+                    messageFrom(payload) ?? `Could not save the expected salary (${response.status})`,
+                );
+            }
+
+            await updateSalaries(month, payload as ExpectedSalary);
+            salaryEditor.open = false;
+        } catch (err) {
+            salaryEditor.error = err instanceof Error ? err.message : 'Could not save the expected salary.';
+        } finally {
+            salaryEditor.saving = false;
+        }
+    });
+
+    const removeSalary = $(async (month: string) => {
+        if (salaryEditor.saving) {
+            return;
+        }
+
+        salaryEditor.saving = true;
+        salaryEditor.error = null;
+
+        try {
+            const response = await fetch(`/api/expected-salaries/${month}`, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            const payload = await readJson(response);
+
+            if (!response.ok) {
+                throw new Error(
+                    messageFrom(payload) ?? `Could not remove the expected salary (${response.status})`,
+                );
+            }
+
+            await updateSalaries(month, null);
+            salaryEditor.open = false;
+        } catch (err) {
+            salaryEditor.error = err instanceof Error ? err.message : 'Could not remove the expected salary.';
+        } finally {
+            salaryEditor.saving = false;
+        }
     });
 
     const openPicker = $((id: number) => {
@@ -946,6 +1063,27 @@ export const TransactionCalendar = component$(() => {
 
     const cap = heatCap(dailyExpenses);
 
+    const salaryVisible = accountFilter.value === 'all' && categoryFilter.value === 'all';
+    const expectedEntry = (data.value?.expectedSalaries ?? [])
+        .filter((entry) => entry.month <= monthPrefix)
+        .at(-1);
+    const expectedSalary = expectedEntry ? Math.round(expectedEntry.amount * 100) : null;
+    const incomeTagIds = tags.filter((tag) => tag.kind === 'INCOME').map((tag) => tag.id);
+    const salaryIn = monthTransactions.reduce((sum, transaction) => {
+        if (
+            transaction.currency !== currency ||
+            uncountedStatuses.includes(transaction.status) ||
+            !incomeTagIds.includes(transaction.tagId ?? uncategorized.id)
+        ) {
+            return sum;
+        }
+
+        const amount = flowAmount(transaction, transferTagIds, creditByAccount);
+
+        return amount !== null && amount > 0 ? sum + Math.round(amount * 100) : sum;
+    }, 0);
+    const salaryDifference = expectedSalary === null ? null : salaryIn - expectedSalary;
+
     const money = (minor: number, signed = false) =>
         hidden.value ? maskedAmount : formatMoney(minor / 100, currency, signed);
 
@@ -1188,6 +1326,94 @@ export const TransactionCalendar = component$(() => {
                         {monthTransactions.length === 1 ? 'transaction' : 'transactions'}
                     </span>
                 </div>
+
+                {salaryVisible && covered && (
+                    <div class="cal-salary">
+                        <div class="cal-stat">
+                            <span class="cal-stat-label">Income this month</span>
+                            <strong class="cal-stat-value cal-salary-value">{money(salaryIn)}</strong>
+                            <span class="cal-salary-detail">
+                                {salaryDifference === null || expectedSalary === null
+                                    ? 'No expected salary set'
+                                    : salaryDifference === 0
+                                      ? `Exactly the expected ${money(expectedSalary)}`
+                                      : `${money(Math.abs(salaryDifference))} ${
+                                            salaryDifference > 0 ? 'more' : 'less'
+                                        } than the expected ${money(expectedSalary)}`}
+                            </span>
+                        </div>
+
+                        <div class="cal-stat">
+                            <span class="cal-stat-label">Left after money out</span>
+                            <strong class="cal-stat-value cal-salary-value">
+                                {money(salaryIn - expenses, true)}
+                            </strong>
+                            <span class="cal-salary-detail">Income minus this month's money out</span>
+                        </div>
+
+                        <div class="cal-salary-expected">
+                            {salaryEditor.open ? (
+                                <form
+                                    class="cal-salary-form"
+                                    preventdefault:submit
+                                    onSubmit$={() => saveSalary(monthPrefix)}
+                                >
+                                    <label for="cal-salary-input">Expected salary from {monthName}</label>
+                                    <input
+                                        id="cal-salary-input"
+                                        class="cal-salary-input"
+                                        type="text"
+                                        inputMode="decimal"
+                                        placeholder="For example 32 000"
+                                        value={salaryEditor.amount}
+                                        onInput$={(_, element) => {
+                                            salaryEditor.amount = element.value;
+                                        }}
+                                    />
+                                    <button type="submit" class="cal-chip" disabled={salaryEditor.saving}>
+                                        {salaryEditor.saving ? 'Saving…' : 'Save'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="cal-chip"
+                                        onClick$={() => {
+                                            salaryEditor.open = false;
+                                        }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    {expectedEntry?.month === monthPrefix && (
+                                        <button
+                                            type="button"
+                                            class="cal-chip"
+                                            disabled={salaryEditor.saving}
+                                            onClick$={() => removeSalary(monthPrefix)}
+                                        >
+                                            Remove
+                                        </button>
+                                    )}
+                                    {salaryEditor.error && (
+                                        <p class="cal-salary-error" role="alert">
+                                            {salaryEditor.error}
+                                        </p>
+                                    )}
+                                </form>
+                            ) : (
+                                <button
+                                    type="button"
+                                    class="cal-chip"
+                                    onClick$={() =>
+                                        openSalaryEditor(expectedEntry ? expectedEntry.amount : null)
+                                    }
+                                >
+                                    {expectedSalary === null
+                                        ? 'Set expected salary'
+                                        : `Expected salary ${money(expectedSalary)} · Edit`}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {showingNeutral && (
                     <p class="cal-note">
