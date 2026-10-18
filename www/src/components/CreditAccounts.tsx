@@ -23,6 +23,11 @@ interface MonthTransaction {
     status: string;
 }
 
+interface MonthResponse {
+    accounts?: { isActive: boolean; isStale: boolean }[];
+    transactions?: MonthTransaction[];
+}
+
 interface Editor {
     open: boolean;
     id: number | null;
@@ -109,6 +114,7 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
     const loading = useSignal(true);
     const error = useSignal<string | null>(null);
     const usageError = useSignal(false);
+    const syncing = useSignal(false);
     const confirmingDelete = useSignal<number | null>(null);
     const deleting = useSignal<number | null>(null);
 
@@ -129,7 +135,7 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
         const month = currentMonth();
         const query = new URLSearchParams({ from: month.from, to: month.to });
 
-        try {
+        const fetchMonth = async (): Promise<MonthResponse> => {
             const response = await fetch(`/api/transactions?${query}`, {
                 method: 'GET',
                 headers: {
@@ -139,15 +145,42 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
                 cache: 'no-store',
             });
 
-            const payload = (await readJson(response)) as { transactions?: MonthTransaction[] } | null;
+            const payload = (await readJson(response)) as MonthResponse | null;
 
-            if (!response.ok || !Array.isArray(payload?.transactions)) {
+            if (!response.ok || !payload || !Array.isArray(payload.transactions)) {
                 throw new Error('Could not load transactions');
             }
 
-            monthTransactions.value = payload.transactions;
+            return payload;
+        };
+
+        try {
+            const payload = await fetchMonth();
+
+            monthTransactions.value = payload.transactions ?? [];
+
+            if (!payload.accounts?.some((account) => account.isActive && account.isStale)) {
+                return;
+            }
+
+            syncing.value = true;
+
+            try {
+                await fetch('/api/transactions/sync?force=false', {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+
+                monthTransactions.value = (await fetchMonth()).transactions ?? [];
+            } finally {
+                syncing.value = false;
+            }
         } catch {
-            usageError.value = true;
+            usageError.value = monthTransactions.value === null;
         }
     });
 
@@ -312,6 +345,9 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
                         Credit accounts <span>{String(creditAccounts.length).padStart(2, '0')}</span>
                     </h2>
                     <p>Link one of your accounts. Everything on it counts toward the credit account.</p>
+                    <p class="credit-sync" aria-live="polite">
+                        {syncing.value ? 'Checking your banks for new transactions…' : ''}
+                    </p>
                 </div>
 
                 {!editor.open && (
