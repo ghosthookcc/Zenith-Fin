@@ -63,7 +63,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     accounts.Add(account);
                 }
 
-                if (accounts.Count > 0) await _bankingRepository.UpsertAccountsAsync(bankConnectionId.Value, accounts);
+                if (accounts.Count > 0) await _bankingRepository.LinkConsentAccountsAsync(bankConnectionId.Value, accounts);
             }
         }
 
@@ -161,12 +161,24 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (bankConnectionId != null)
             {
-                await _bankingRepository.UpsertAccountsAsync(bankConnectionId.Value, accounts);
+                ConsentLinkResult linked = await _bankingRepository.LinkConsentAccountsAsync(bankConnectionId.Value, accounts);
+
+                Console.WriteLine($"Bank consent linked: connection={bankConnectionId}, " +
+                                  $"kept={linked.Kept}, added={linked.Added}, released={linked.Released}");
             }
             
             await _bankingRepository.DeletePendingBankSessionAsync(state);
         }
         
+        public async Task<AspspDto.BankConnection[]?> GetConnectionsAsync(string sessionId)
+        {
+            if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return null;
+
+            UserEssentials? essentials = await _userRepository.GetUserIdBySessionId(activeSessionId);
+
+            return essentials == null ? null : await _bankingRepository.GetConnectionsForUserAsync(essentials.UserId);
+        }
+
         public async Task<AccountDto.Balance[]> GetAccountsBalancesAsync(string sessionId)
         {
             if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return Array.Empty<AccountDto.Balance>();
@@ -195,8 +207,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     DateTime now = DateTime.UtcNow;
 
                     bool cacheIsFresh = cached != null &&
-                                        cached.FetchedAt <= now &&
-                                        now - cached.FetchedAt < BalanceCacheDuration;
+                                        (!account.InConsent ||
+                                         (cached.FetchedAt <= now && now - cached.FetchedAt < BalanceCacheDuration));
                     
                     Console.WriteLine($"Balance cache: account={account.Id}, " +
                                       $"found={cached != null}, " +
@@ -209,6 +221,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     if (cacheIsFresh)
                     {
                         balances = cached!.Balances;
+                    }
+                    else if (!account.InConsent)
+                    {
+                        balances = Array.Empty<EnableBankingEntities.Balance>();
                     }
                     else
                     {
@@ -234,6 +250,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                         OriginalName = account.OriginalName,
                         Alias = account.Alias,
                         Currency = account.Currency,
+                        InConsent = account.InConsent,
                         Balances = balances
                     });
                 }

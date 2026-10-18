@@ -160,6 +160,22 @@ namespace ZenithFin.Api.v1
             return Ok(result.Response);
         }
 
+        [HttpGet]
+        [ResourceGuard]
+        [Route("connections")]
+        public async Task<IActionResult> GetConnections()
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            AspspDto.BankConnection[]? connections = await _bankingService.GetConnectionsAsync(sessionId);
+
+            if (connections == null) return Unauthorized("No user found for session");
+
+            return Ok(connections);
+        }
+
         [HttpPut]
         [ResourceGuard]
         [Route("accounts/{id:long}/alias")]

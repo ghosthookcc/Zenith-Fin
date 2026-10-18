@@ -9,7 +9,7 @@ const insecureDispatcher = new Agent({
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ request, cookies }) => {
+export const GET: APIRoute = async ({ request, cookies, redirect }) => {
     console.log('🟢 SERVER: GET handler called');
     try
     {
@@ -51,25 +51,12 @@ export const GET: APIRoute = async ({ request, cookies }) => {
         const data = await response.json();
         console.log('🟢 SERVER: Received response as json:', data);
 
-        return new Response(JSON.stringify(
-                            {
-                                message: "Callback received",
-                                success: true
-                            }),
-                            { status: data.code });
+        return redirect(response.ok && data?.expiresAt ? "/accounts?bank=connected" : "/accounts?bank=failed", 303);
   }
   catch (errno)
   {
       console.error('🟢 SERVER: Fetch failed:', errno);
 
-      return new Response(
-          JSON.stringify(
-          {
-              message: 'Could not connect to authentication server',
-              success: false,
-              error: errno instanceof Error ? errno.message : 'Unknown error'
-          }),
-          { status: 503 }
-      );
+      return redirect("/accounts?bank=failed", 303);
   }
 };

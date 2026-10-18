@@ -41,6 +41,17 @@ namespace ZenithFin.Api.Models.Dtos
             [JsonPropertyName("psuType")] public string PsuType { get; set; } = null!;
         }
 
+        public sealed class BankConnection
+        {
+            public long Id { get; set; }
+            public string Bank { get; set; } = string.Empty;
+            public string Country { get; set; } = string.Empty;
+            public string PsuType { get; set; } = string.Empty;
+            public string Status { get; set; } = string.Empty;
+            public DateTime ConsentExpiresAt { get; set; }
+            public int Accounts { get; set; }
+        }
+
         public class AspspAuthenticationCallbackRequest()
         {
             [JsonPropertyName("state")] public string State { get; set; } = null!;

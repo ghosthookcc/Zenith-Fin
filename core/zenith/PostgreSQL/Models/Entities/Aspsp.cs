@@ -33,6 +33,18 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         [Column("status")] public BankStatus? Status { get; init; }
     }
 
+    public sealed class ConsentAccountRow
+    {
+        public long Id { get; set; }
+        public Guid EnableBankingUid { get; set; }
+        public string? Iban { get; set; }
+        public string? IdentificationHash { get; set; }
+    }
+
+    public sealed record ConsentLinkResult(int Kept,
+                                           int Added,
+                                           int Released);
+
     public enum BankStatus
     {
         ACTIVE,

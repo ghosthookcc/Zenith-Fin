@@ -29,7 +29,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    a.currency AS "Currency",
                                    a.bank_connection_id AS "BankConnectionId",
                                    bc.aspsp_name AS "BankName",
-                                   bc.status = 'ACTIVE'::"BankStatus" AS "IsActive",
+                                   (bc.status = 'ACTIVE'::"BankStatus" AND a.in_consent) AS "IsActive",
                                    a.transactions_synced_at AS "TransactionsSyncedAt"
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc

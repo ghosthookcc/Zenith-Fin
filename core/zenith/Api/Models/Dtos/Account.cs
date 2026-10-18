@@ -17,6 +17,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string? Alias { get; set; }
             public string Currency { get; set; } = string.Empty;
             public long BankConnectionId { get; set; }
+            public bool InConsent { get; set; }
         }
         
         public sealed class Balance
@@ -29,6 +30,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string? OriginalName { get; set; }
             public string? Alias { get; set; }
             public string Currency { get; set; } = string.Empty;
+            public bool InConsent { get; set; }
             public IReadOnlyList<EnableBankingEntities.Balance> Balances { get; set; } = Array.Empty<EnableBankingEntities.Balance>();
         }
 

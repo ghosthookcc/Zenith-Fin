@@ -1,5 +1,6 @@
 import { component$, $, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 
+import { BankConnectionsSection, ReconnectMenu, type BankConnection } from './BankConnections';
 import { CreditAccounts } from './CreditAccounts';
 import { Icon } from './Icon';
 import { accountColors as colors } from '../utils/accounts';
@@ -148,6 +149,75 @@ export const AccountOverview = component$(() => {
     const hidden = useSignal(false);
     const selected = useSignal<string | null>(null);
 
+    const connections = useSignal<BankConnection[] | null>(null);
+    const reconnectingId = useSignal<number | null>(null);
+    const bankError = useSignal<string | null>(null);
+    const bankNotice = useSignal<string | null>(null);
+
+    const loadConnections = $(async () => {
+        try {
+            const response = await fetch('/api/aspsps/connections', {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            if (!response.ok) {
+                throw new Error(`Could not load your banks (${response.status})`);
+            }
+
+            connections.value = (await response.json()) as BankConnection[];
+        } catch (err) {
+            connections.value = [];
+            bankError.value = err instanceof Error ? err.message : 'Could not load your banks.';
+        }
+    });
+
+    const reconnect = $(async (connection: BankConnection) => {
+        if (reconnectingId.value !== null) {
+            return;
+        }
+
+        reconnectingId.value = connection.id;
+        bankError.value = null;
+
+        try {
+            const response = await fetch('/api/aspsps', {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify([
+                    {
+                        bank: connection.bank,
+                        country: connection.country,
+                        psuType: connection.psuType,
+                    },
+                ]),
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+                message?: string;
+                urls?: { url?: string }[];
+            } | null;
+            const url = payload?.urls?.[0]?.url;
+
+            if (!response.ok || typeof url !== 'string') {
+                throw new Error(payload?.message || `Could not start reconnecting ${connection.bank}`);
+            }
+
+            window.location.assign(url);
+        } catch (err) {
+            bankError.value = err instanceof Error ? err.message : `Could not start reconnecting ${connection.bank}.`;
+            reconnectingId.value = null;
+        }
+    });
+
     const rename = useStore<Rename>({
         id: null,
         value: '',
@@ -285,7 +355,20 @@ export const AccountOverview = component$(() => {
 
     useVisibleTask$(
         () => {
+            const status = new URLSearchParams(window.location.search).get('bank');
+
+            if (status === 'connected') {
+                bankNotice.value = 'Your bank is reconnected. Any new accounts you shared now show up here.';
+            } else if (status === 'failed') {
+                bankError.value = "The bank connection didn't go through. Try reconnecting again.";
+            }
+
+            if (status) {
+                window.history.replaceState(null, '', window.location.pathname);
+            }
+
             void loadAccounts();
+            void loadConnections();
         },
         {
             strategy: 'document-ready',
@@ -335,27 +418,44 @@ export const AccountOverview = component$(() => {
                         </h1>
                     </div>
 
-                    <button
-                        class="visibility-button"
-                        type="button"
-                        onClick$={() => {
-                            hidden.value = !hidden.value;
-                        }}
-                        aria-pressed={hidden.value}
-                    >
-                        <Icon
-                            name={
-                                hidden.value
-                                    ? 'eyeoff'
-                                    : 'eye'
-                            }
+                    <div class="page-actions">
+                        <ReconnectMenu
+                            connections={connections.value}
+                            reconnectingId={reconnectingId.value}
+                            onReconnect$={reconnect}
                         />
 
-                        {hidden.value
-                            ? 'Show balances'
-                            : 'Hide balances'}
-                    </button>
+                        <button
+                            class="visibility-button"
+                            type="button"
+                            onClick$={() => {
+                                hidden.value = !hidden.value;
+                            }}
+                            aria-pressed={hidden.value}
+                        >
+                            <Icon
+                                name={
+                                    hidden.value
+                                        ? 'eyeoff'
+                                        : 'eye'
+                                }
+                            />
+
+                            {hidden.value
+                                ? 'Show balances'
+                                : 'Hide balances'}
+                        </button>
+                    </div>
                 </section>
+
+                {bankNotice.value && (
+                    <div class="cal-alert bank-notice" role="status">
+                        <Icon name="check" />
+                        <div>
+                            <strong>{bankNotice.value}</strong>
+                        </div>
+                    </div>
+                )}
 
                 {loading.value && (
                     <section class="overview-panel">
@@ -926,6 +1026,13 @@ export const AccountOverview = component$(() => {
                             />
                         </>
                     )}
+
+                <BankConnectionsSection
+                    connections={connections.value}
+                    reconnectingId={reconnectingId.value}
+                    error={bankError.value}
+                    onReconnect$={reconnect}
+                />
             </main>
         </>
     );

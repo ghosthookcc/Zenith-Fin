@@ -143,48 +143,157 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             return await connection.QueryFirstOrDefaultAsync<long?>(sql, new { AspspSessionId = aspspSessionId });
         }
         
-        public async Task UpsertAccountsAsync(long bankConnectionId,
-            IReadOnlyList<EnableBankingEntities.AccountData> accounts)
+        public async Task<ConsentLinkResult> LinkConsentAccountsAsync(long bankConnectionId,
+                                                                      IReadOnlyList<EnableBankingEntities.AccountData> accounts)
+        {
+            using var connection = _connectionFactory.Create();
+
+            if (connection.State != ConnectionState.Open) connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+
+            const string existingSql = """
+                                       SELECT
+                                           id AS "Id",
+                                           enable_banking_uid AS "EnableBankingUid",
+                                           iban AS "Iban",
+                                           identification_hash AS "IdentificationHash"
+                                       FROM "Account"
+                                       WHERE bank_connection_id = @BankConnectionId
+                                       ORDER BY id
+                                       FOR UPDATE;
+                                       """;
+
+            ConsentAccountRow[] existing = (await connection.QueryAsync<ConsentAccountRow>(existingSql,
+                                                                                         new { BankConnectionId = bankConnectionId },
+                                                                                         transaction)).ToArray();
+
+            const string updateSql = """
+                                     UPDATE "Account"
+                                     SET enable_banking_uid = @EnableBankingUid,
+                                         iban = @Iban,
+                                         name = @Name,
+                                         currency = @Currency,
+                                         identification_hash = @IdentificationHash,
+                                         in_consent = true
+                                     WHERE id = @Id;
+                                     """;
+
+            const string insertSql = """
+                                     INSERT INTO "Account"
+                                     (
+                                         enable_banking_uid,
+                                         iban,
+                                         name,
+                                         currency,
+                                         bank_connection_id,
+                                         identification_hash,
+                                         in_consent
+                                     )
+                                     VALUES
+                                     (
+                                         @EnableBankingUid,
+                                         @Iban,
+                                         @Name,
+                                         @Currency,
+                                         @BankConnectionId,
+                                         @IdentificationHash,
+                                         true
+                                     )
+                                     ON CONFLICT (enable_banking_uid)
+                                     DO UPDATE SET
+                                         iban = EXCLUDED.iban,
+                                         name = EXCLUDED.name,
+                                         currency = EXCLUDED.currency,
+                                         bank_connection_id = EXCLUDED.bank_connection_id,
+                                         identification_hash = EXCLUDED.identification_hash,
+                                         in_consent = true
+                                     RETURNING id;
+                                     """;
+
+            HashSet<long> linked = new();
+            int added = 0;
+
+            foreach (EnableBankingEntities.AccountData account in accounts)
+            {
+                string? iban = NormalizeIban(account.accountId?.iban);
+                string? hash = string.IsNullOrWhiteSpace(account.identificationHash) ? null : account.identificationHash;
+
+                ConsentAccountRow? match = existing.FirstOrDefault(row => !linked.Contains(row.Id) && row.EnableBankingUid == account.uid) ??
+                                           existing.FirstOrDefault(row => !linked.Contains(row.Id) && hash != null && row.IdentificationHash == hash) ??
+                                           existing.FirstOrDefault(row => !linked.Contains(row.Id) && iban != null && NormalizeIban(row.Iban) == iban);
+
+                var values = new
+                {
+                    Id = match?.Id ?? 0,
+                    EnableBankingUid = account.uid,
+                    Iban = account.accountId?.iban,
+                    Name = account.name,
+                    Currency = account.currency,
+                    BankConnectionId = bankConnectionId,
+                    IdentificationHash = hash
+                };
+
+                if (match != null)
+                {
+                    await connection.ExecuteAsync(updateSql, values, transaction);
+                    linked.Add(match.Id);
+                }
+                else
+                {
+                    linked.Add(await connection.QuerySingleAsync<long>(insertSql, values, transaction));
+                    added++;
+                }
+            }
+
+            long[] released = existing.Where(row => !linked.Contains(row.Id)).Select(row => row.Id).ToArray();
+
+            const string releaseSql = """
+                                      UPDATE "Account"
+                                      SET in_consent = false
+                                      WHERE id = ANY(@AccountIds);
+                                      """;
+
+            if (released.Length > 0)
+                await connection.ExecuteAsync(releaseSql, new { AccountIds = released }, transaction);
+
+            transaction.Commit();
+
+            return new ConsentLinkResult(linked.Count - added, added, released.Length);
+        }
+
+        public async Task<AspspDto.BankConnection[]> GetConnectionsForUserAsync(long userId)
         {
             const string sql = """
-                               INSERT INTO "Account"
-                               (
-                                   enable_banking_uid,
-                                   iban,
-                                   name,
-                                   currency,
-                                   bank_connection_id
-                               )
-                               VALUES
-                               (
-                                   @EnableBankingUid,
-                                   @Iban,
-                                   @Name,
-                                   @Currency,
-                                   @BankConnectionId
-                               )
-                               ON CONFLICT (enable_banking_uid)
-                               DO UPDATE SET
-                                   iban = EXCLUDED.iban,
-                                   name = EXCLUDED.name,
-                                   currency = EXCLUDED.currency,
-                                   bank_connection_id = EXCLUDED.bank_connection_id;
+                               SELECT
+                                   bc.id AS "Id",
+                                   bc.aspsp_name AS "Bank",
+                                   bc.aspsp_country AS "Country",
+                                   bc.psu_type AS "PsuType",
+                                   bc.status::text AS "Status",
+                                   bc.consent_expires_at AS "ConsentExpiresAt",
+                                   (count(a.id) FILTER (WHERE a.in_consent))::int AS "Accounts"
+                               FROM "BankConnection" bc
+                               LEFT JOIN "Account" a
+                                   ON a.bank_connection_id = bc.id
+                               WHERE bc.user_id = @UserId
+                               GROUP BY bc.id
+                               ORDER BY bc.aspsp_name, bc.id;
                                """;
 
             using var connection = _connectionFactory.Create();
-            foreach (var account in accounts)
-            {
-                await connection.ExecuteAsync(sql, new
-                {
-                    EnableBankingUid = account.uid,
-                    Iban = account.accountId.iban,
-                    Name = account.name,
-                    Currency = account.currency,
-                    BankConnectionId = bankConnectionId
-                });
-            }
+            IEnumerable<AspspDto.BankConnection> connections = await connection.QueryAsync<AspspDto.BankConnection>(sql, new { UserId = userId });
+
+            return connections.ToArray();
         }
-        
+
+        private static string? NormalizeIban(string? iban)
+        {
+            string normalized = new string((iban ?? "").Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+
+            return normalized.Length == 0 ? null : normalized;
+        }
+
         public async Task<AccountDto.Account[]> GetAccountsForUserAsync(long userId)
         {
             const string sql = """
@@ -197,6 +306,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    aa.bank_name_alias AS Alias,
                                    a.currency AS Currency,
                                    a.bank_connection_id AS BankConnectionId,
+                                   a.in_consent AS InConsent,
                                    bc.aspsp_name AS BankName
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc
