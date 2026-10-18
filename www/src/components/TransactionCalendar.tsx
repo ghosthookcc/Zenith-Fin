@@ -3,7 +3,7 @@ import { $, component$, sync$, useSignal, useStore, useVisibleTask$ } from '@bui
 import { CategoryBreakdown, type CategoryBreakdownRow } from './CategoryBreakdown';
 import { Icon } from './Icon';
 import { accountColors } from '../utils/accounts';
-import { countedAmount, type CreditAccountRule, uncountedStatuses } from '../utils/credit';
+import { countedAmount, countingLabel, type CreditAccountRule, uncountedStatuses } from '../utils/credit';
 
 interface CalendarAccount {
     id: number;
@@ -815,26 +815,45 @@ export const TransactionCalendar = component$(() => {
         tags.map((tag) => [tag.id, tag]),
     );
     const transferTagIds = tags.filter((tag) => tag.kind === 'TRANSFER').map((tag) => tag.id);
+    const creditAccounts = data.value?.creditAccounts ?? [];
     const creditByAccount: Record<number, CreditAccountRule> = Object.fromEntries(
-        (data.value?.creditAccounts ?? []).map((creditAccount) => [creditAccount.accountId, creditAccount]),
+        creditAccounts.map((creditAccount) => [creditAccount.accountId, creditAccount]),
     );
 
-    const filteredAccount = accountFilter.value === 'all' ? null : Number(accountFilter.value);
+    const filteredCredit = accountFilter.value.startsWith('credit:')
+        ? (creditAccounts.find((creditAccount) => `credit:${creditAccount.id}` === accountFilter.value) ?? null)
+        : null;
+    const filteredAccount = filteredCredit
+        ? filteredCredit.accountId
+        : accountFilter.value === 'all' || accountFilter.value.startsWith('credit:')
+          ? null
+          : Number(accountFilter.value);
     const direction =
-        categoryFilter.value === 'in' || categoryFilter.value === 'out' ? categoryFilter.value : null;
+        categoryFilter.value === 'in' || categoryFilter.value === 'out' || categoryFilter.value === 'neutral'
+            ? categoryFilter.value
+            : null;
+    const showingNeutral = direction === 'neutral';
     const filteredTag =
         direction !== null || categoryFilter.value === 'all' ? null : Number(categoryFilter.value);
     const showingTransfers = filteredTag !== null && transferTagIds.includes(filteredTag);
     const excludedTagIds = showingTransfers ? [] : transferTagIds;
+    const countedTagIds = showingNeutral ? [] : excludedTagIds;
+    const countedCredit: Record<number, CreditAccountRule> = showingNeutral ? {} : creditByAccount;
 
     const isTransfer = (transaction: CalendarTransaction) =>
         transferTagIds.includes(transaction.tagId ?? uncategorized.id);
     const inDirection = (transaction: CalendarTransaction) =>
-        direction === null || (direction === 'in' ? transaction.amount > 0 : transaction.amount < 0);
+        direction === null ||
+        direction === 'neutral' ||
+        (direction === 'in' ? transaction.amount > 0 : transaction.amount < 0);
     const creditOf = (transaction: CalendarTransaction): CreditAccountRule | undefined =>
         creditByAccount[transaction.accountId];
     const inFlowDirection = (transaction: CalendarTransaction) => {
         const amount = flowAmount(transaction, transferTagIds, creditByAccount);
+
+        if (showingNeutral) {
+            return amount === null;
+        }
 
         return amount !== null && (direction === 'in' ? amount > 0 : amount < 0);
     };
@@ -857,9 +876,9 @@ export const TransactionCalendar = component$(() => {
             accounts[0]?.currency ??
             'SEK',
     );
-    const days = summarizeDays(visible, currency, excludedTagIds, creditByAccount);
+    const days = summarizeDays(visible, currency, countedTagIds, countedCredit);
     const excludedTransfers =
-        filteredTag !== null
+        filteredTag !== null || showingNeutral
             ? 0
             : accountTransactions.filter(
                   (transaction) =>
@@ -870,6 +889,7 @@ export const TransactionCalendar = component$(() => {
               ).length;
     const excludedCredit = accountTransactions.filter(
         (transaction) =>
+            !showingNeutral &&
             transaction.date.startsWith(monthPrefix) &&
             creditOf(transaction)?.counting === 'NEUTRAL' &&
             inDirection(transaction) &&
@@ -878,7 +898,7 @@ export const TransactionCalendar = component$(() => {
     const recountedCredit = monthTransactions.filter((transaction) => {
         const creditAccount = creditOf(transaction);
 
-        if (!creditAccount || creditAccount.counting === 'NEUTRAL') {
+        if (showingNeutral || !creditAccount || creditAccount.counting === 'NEUTRAL') {
             return false;
         }
 
@@ -1075,6 +1095,19 @@ export const TransactionCalendar = component$(() => {
                                 }`}
                             </option>
                         ))}
+                        {creditAccounts.length > 0 && (
+                            <optgroup label="Credit accounts">
+                                {creditAccounts.map((creditAccount) => (
+                                    <option
+                                        key={`credit-${creditAccount.id}`}
+                                        value={`credit:${creditAccount.id}`}
+                                        selected={accountFilter.value === `credit:${creditAccount.id}`}
+                                    >
+                                        {`${creditAccount.name} · ${countingLabel(creditAccount.counting)}`}
+                                    </option>
+                                ))}
+                            </optgroup>
+                        )}
                     </select>
                     <Icon name="chevronDown" class="cal-select-icon" />
                 </label>
@@ -1095,6 +1128,9 @@ export const TransactionCalendar = component$(() => {
                         </option>
                         <option value="out" selected={categoryFilter.value === 'out'}>
                             Money out
+                        </option>
+                        <option value="neutral" selected={categoryFilter.value === 'neutral'}>
+                            Neutral
                         </option>
                         <optgroup label="Categories">
                             {tags.map((tag) => (
@@ -1152,6 +1188,13 @@ export const TransactionCalendar = component$(() => {
                         {monthTransactions.length === 1 ? 'transaction' : 'transactions'}
                     </span>
                 </div>
+
+                {showingNeutral && (
+                    <p class="cal-note">
+                        Neutral transactions are not part of your monthly totals. The figures above only
+                        show what moved.
+                    </p>
+                )}
 
                 {excludedTransfers > 0 && (
                     <p class="cal-note">
@@ -1481,8 +1524,8 @@ export const TransactionCalendar = component$(() => {
                                                                         'cal-tx-income': transaction.amount > 0,
                                                                         'cal-tx-uncounted': !isCounted(
                                                                             transaction,
-                                                                            excludedTagIds,
-                                                                            creditByAccount,
+                                                                            countedTagIds,
+                                                                            countedCredit,
                                                                         ),
                                                                         'cal-tx-void':
                                                                             transaction.status === 'CNCL' ||
