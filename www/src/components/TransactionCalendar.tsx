@@ -599,17 +599,26 @@ export const TransactionCalendar = component$(() => {
     const transferTagIds = tags.filter((tag) => tag.kind === 'TRANSFER').map((tag) => tag.id);
 
     const filteredAccount = accountFilter.value === 'all' ? null : Number(accountFilter.value);
-    const filteredTag = categoryFilter.value === 'all' ? null : Number(categoryFilter.value);
+    const direction =
+        categoryFilter.value === 'in' || categoryFilter.value === 'out' ? categoryFilter.value : null;
+    const filteredTag =
+        direction !== null || categoryFilter.value === 'all' ? null : Number(categoryFilter.value);
     const showingTransfers = filteredTag !== null && transferTagIds.includes(filteredTag);
     const excludedTagIds = showingTransfers ? [] : transferTagIds;
+
+    const isTransfer = (transaction: CalendarTransaction) =>
+        transferTagIds.includes(transaction.tagId ?? uncategorized.id);
+    const inDirection = (transaction: CalendarTransaction) =>
+        direction === null || (direction === 'in' ? transaction.amount > 0 : transaction.amount < 0);
 
     const accountTransactions = (covered ? data.value!.transactions : []).filter(
         (transaction) => filteredAccount === null || transaction.accountId === filteredAccount,
     );
     const hasUncategorized = accountTransactions.some((transaction) => !transaction.tagId);
-    const visible = accountTransactions.filter(
-        (transaction) =>
-            filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag,
+    const visible = accountTransactions.filter((transaction) =>
+        direction !== null
+            ? inDirection(transaction) && !isTransfer(transaction)
+            : filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag,
     );
     const monthTransactions = visible.filter((transaction) =>
         transaction.date.startsWith(monthPrefix),
@@ -621,11 +630,15 @@ export const TransactionCalendar = component$(() => {
             'SEK',
     );
     const days = summarizeDays(visible, currency, excludedTagIds);
-    const excludedTransfers = showingTransfers
-        ? 0
-        : monthTransactions.filter((transaction) =>
-              transferTagIds.includes(transaction.tagId ?? uncategorized.id),
-          ).length;
+    const excludedTransfers =
+        filteredTag !== null
+            ? 0
+            : accountTransactions.filter(
+                  (transaction) =>
+                      transaction.date.startsWith(monthPrefix) &&
+                      isTransfer(transaction) &&
+                      inDirection(transaction),
+              ).length;
 
     const categorySpending = spendingByCategory(
         accountTransactions.filter((transaction) => transaction.date.startsWith(monthPrefix)),
@@ -828,23 +841,31 @@ export const TransactionCalendar = component$(() => {
                         <option value="all" selected={categoryFilter.value === 'all'}>
                             All categories
                         </option>
-                        {tags.map((tag) => (
-                            <option
-                                key={tag.id}
-                                value={String(tag.id)}
-                                selected={categoryFilter.value === String(tag.id)}
-                            >
-                                {tag.name}
-                            </option>
-                        ))}
-                        {hasUncategorized && (
-                            <option
-                                value={String(uncategorized.id)}
-                                selected={categoryFilter.value === String(uncategorized.id)}
-                            >
-                                {uncategorized.name}
-                            </option>
-                        )}
+                        <option value="in" selected={categoryFilter.value === 'in'}>
+                            Money in
+                        </option>
+                        <option value="out" selected={categoryFilter.value === 'out'}>
+                            Money out
+                        </option>
+                        <optgroup label="Categories">
+                            {tags.map((tag) => (
+                                <option
+                                    key={tag.id}
+                                    value={String(tag.id)}
+                                    selected={categoryFilter.value === String(tag.id)}
+                                >
+                                    {tag.name}
+                                </option>
+                            ))}
+                            {hasUncategorized && (
+                                <option
+                                    value={String(uncategorized.id)}
+                                    selected={categoryFilter.value === String(uncategorized.id)}
+                                >
+                                    {uncategorized.name}
+                                </option>
+                            )}
+                        </optgroup>
                     </select>
                     <Icon name="chevronDown" class="cal-select-icon" />
                 </label>
