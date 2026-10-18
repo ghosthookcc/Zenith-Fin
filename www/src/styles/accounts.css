@@ -1,0 +1,86 @@
+.account-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.account-name-row h3 {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-rename-button {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    color: #8a95a8;
+    cursor: pointer;
+}
+
+.account-rename-button svg {
+    width: 15px;
+    height: 15px;
+}
+
+.account-rename-button:hover {
+    border-color: #3a4352;
+    background: #232a37;
+    color: #f1f2f5;
+}
+
+.account-rename-button:focus-visible,
+.account-rename-input:focus-visible {
+    outline: 2px solid var(--mint);
+    outline-offset: 2px;
+}
+
+.account-original {
+    margin-top: 2px;
+    overflow: hidden;
+    font-size: 0.75rem;
+    color: #8a95a8;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.account-rename {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.account-rename-label {
+    font-size: 0.75rem;
+    color: #a3adbc;
+}
+
+.account-rename-input {
+    width: 100%;
+    padding: 8px 11px;
+    border: 1px solid #363e4b;
+    border-radius: 9px;
+    background: #1c222b;
+    color: #f1f2f5;
+    font: inherit;
+    font-size: 0.9375rem;
+}
+
+.account-rename-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.account-rename-error {
+    font-size: 0.75rem;
+    color: #f3c1bd;
+}

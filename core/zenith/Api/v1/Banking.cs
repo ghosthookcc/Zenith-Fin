@@ -22,6 +22,7 @@ namespace ZenithFin.Api.v1
         private readonly BankingService _bankingService;
         private readonly TransactionService _transactionService;
         private readonly CorrectionService _correctionService;
+        private readonly AccountAliasService _accountAliasService;
 
         private readonly JwtAuthenticator _jwtAuthenticator;
 
@@ -159,6 +160,24 @@ namespace ZenithFin.Api.v1
             return Ok(result.Response);
         }
 
+        [HttpPut]
+        [ResourceGuard]
+        [Route("accounts/{id:long}/alias")]
+        public async Task<IActionResult> RenameAccount(long id,
+                                                       [FromBody] AccountDto.RenameAccountRequest request)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            AccountAliasResult result = await _accountAliasService.RenameAsync(sessionId, id, request);
+
+            if (result.StatusCode != StatusCodes.Status200OK)
+                return StatusCode(result.StatusCode, new { message = result.Message, success = false });
+
+            return Ok(result.AccountAlias);
+        }
+
         [HttpGet]
         [ResourceGuard]
         [Route("accounts/balances")]
@@ -192,6 +211,7 @@ namespace ZenithFin.Api.v1
                        BankingService bankingService,
                        TransactionService transactionService,
                        CorrectionService correctionService,
+                       AccountAliasService accountAliasService,
                        JwtAuthenticator jwtAuthenticator)
         {
             _workspace = workspace;
@@ -199,6 +219,7 @@ namespace ZenithFin.Api.v1
             _bankingService = bankingService;
             _transactionService = transactionService;
             _correctionService = correctionService;
+            _accountAliasService = accountAliasService;
             _jwtAuthenticator = jwtAuthenticator;
         }
     }

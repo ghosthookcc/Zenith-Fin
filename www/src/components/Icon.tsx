@@ -38,6 +38,7 @@ const paths: Record<string, string> = {
     book: 'M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20',
     close: 'M6 6l12 12M18 6 6 18',
     check: 'm5 12.5 4.5 4.5L19 7',
+    pencil: 'M4 20h4L18.5 9.5a2.8 2.8 0 0 0-4-4L4 16v4Zm9-13 4 4',
 };
 
 export const Icon = component$<{ name: string; class?: string }>(({ name, class: className }) => (

@@ -1,4 +1,4 @@
-import { component$, $, useSignal, useVisibleTask$ } from '@builder.io/qwik';
+import { component$, $, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 
 import { CreditAccounts } from './CreditAccounts';
 import { Icon } from './Icon';
@@ -24,14 +24,25 @@ interface BackendAccount {
     bankName: string;
     iban?: string | null;
     name?: string | null;
+    originalName?: string | null;
+    alias?: string | null;
     currency: string;
     balances: Balance[];
+}
+
+interface Rename {
+    id: number | null;
+    value: string;
+    saving: boolean;
+    error: string | null;
 }
 
 interface DisplayAccount {
     id: string;
     backendId: number;
     name: string;
+    originalName: string | null;
+    alias: string | null;
     bank: string;
     iban?: string | null;
     currency: string;
@@ -114,6 +125,8 @@ function makeDisplayAccount(
         id: account.enableBankingUid || String(account.id),
         backendId: account.id,
         name: account.name || 'Bank account',
+        originalName: account.originalName ?? null,
+        alias: account.alias ?? null,
         bank: account.bankName || 'Unknown bank',
         iban: account.iban,
         currency: account.currency,
@@ -134,6 +147,64 @@ export const AccountOverview = component$(() => {
 
     const hidden = useSignal(false);
     const selected = useSignal<string | null>(null);
+
+    const rename = useStore<Rename>({
+        id: null,
+        value: '',
+        saving: false,
+        error: null,
+    });
+
+    const saveName = $(async (id: number, useBankName: boolean) => {
+        if (rename.saving) {
+            return;
+        }
+
+        rename.saving = true;
+        rename.error = null;
+
+        try {
+            const response = await fetch(`/api/accounts/${id}/alias`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ alias: useBankName ? null : rename.value }),
+            });
+
+            const text = await response.text();
+            let payload: unknown = null;
+
+            try {
+                payload = text ? JSON.parse(text) : null;
+            } catch {
+                payload = null;
+            }
+
+            if (!response.ok) {
+                const message = (payload as { message?: unknown } | null)?.message;
+
+                throw new Error(
+                    typeof message === 'string' ? message : `Could not rename the account (${response.status})`,
+                );
+            }
+
+            const alias = (payload as { alias?: string | null } | null)?.alias ?? null;
+
+            backendAccounts.value = backendAccounts.value.map((account) =>
+                account.id === id
+                    ? { ...account, alias, name: alias ?? account.originalName ?? account.name }
+                    : account,
+            );
+            rename.id = null;
+        } catch (err) {
+            rename.error = err instanceof Error ? err.message : 'Could not rename the account.';
+        } finally {
+            rename.saving = false;
+        }
+    });
 
     const loadAccounts = $(async () => {
         loading.value = true;
@@ -719,9 +790,85 @@ export const AccountOverview = component$(() => {
                                                     </span>
                                                 </div>
 
-                                                <h3>
-                                                    {account.name}
-                                                </h3>
+                                                {rename.id === account.backendId ? (
+                                                    <form
+                                                        class="account-rename cal-shell"
+                                                        preventdefault:submit
+                                                        onSubmit$={() => saveName(account.backendId, false)}
+                                                    >
+                                                        <label
+                                                            class="account-rename-label"
+                                                            for={`account-name-${account.backendId}`}
+                                                        >
+                                                            Name in Zenith
+                                                        </label>
+                                                        <input
+                                                            id={`account-name-${account.backendId}`}
+                                                            class="account-rename-input"
+                                                            type="text"
+                                                            maxLength={40}
+                                                            placeholder={account.originalName ?? 'Bank account'}
+                                                            value={rename.value}
+                                                            onInput$={(_, element) => {
+                                                                rename.value = element.value;
+                                                            }}
+                                                        />
+                                                        <div class="account-rename-actions">
+                                                            <button type="submit" class="cal-chip" disabled={rename.saving}>
+                                                                {rename.saving ? 'Saving…' : 'Save'}
+                                                            </button>
+                                                            <button
+                                                                type="button"
+                                                                class="cal-chip"
+                                                                onClick$={() => {
+                                                                    rename.id = null;
+                                                                }}
+                                                            >
+                                                                Cancel
+                                                            </button>
+                                                            {account.alias && (
+                                                                <button
+                                                                    type="button"
+                                                                    class="cal-chip"
+                                                                    disabled={rename.saving}
+                                                                    onClick$={() => saveName(account.backendId, true)}
+                                                                >
+                                                                    Use the bank's name
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        {rename.error && (
+                                                            <p class="account-rename-error" role="alert">
+                                                                {rename.error}
+                                                            </p>
+                                                        )}
+                                                    </form>
+                                                ) : (
+                                                    <div class="account-name-row">
+                                                        <h3>
+                                                            {account.name}
+                                                        </h3>
+                                                        <button
+                                                            type="button"
+                                                            class="account-rename-button"
+                                                            title="Rename"
+                                                            aria-label={`Rename ${account.name}`}
+                                                            onClick$={() => {
+                                                                rename.id = account.backendId;
+                                                                rename.value = account.alias ?? '';
+                                                                rename.error = null;
+                                                            }}
+                                                        >
+                                                            <Icon name="pencil" />
+                                                        </button>
+                                                    </div>
+                                                )}
+
+                                                {account.alias && account.originalName && rename.id !== account.backendId && (
+                                                    <p class="account-original">
+                                                        {`At the bank: ${account.originalName}`}
+                                                    </p>
+                                                )}
 
                                                 <p class="account-purpose">
                                                     {

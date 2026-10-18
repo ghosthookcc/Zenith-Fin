@@ -192,13 +192,17 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    a.id AS Id,
                                    a.enable_banking_uid AS EnableBankingUid,
                                    a.iban AS Iban,
-                                   a.name AS Name,
+                                   COALESCE(aa.bank_name_alias, a.name) AS Name,
+                                   a.name AS OriginalName,
+                                   aa.bank_name_alias AS Alias,
                                    a.currency AS Currency,
                                    a.bank_connection_id AS BankConnectionId,
                                    bc.aspsp_name AS BankName
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc
                                    ON bc.id = a.bank_connection_id
+                               LEFT JOIN "AccountAlias" aa
+                                   ON aa.account_id = a.id
                                WHERE bc.user_id = @UserId
                                  AND bc.status = 'ACTIVE'::"BankStatus"
                                ORDER BY a.id;

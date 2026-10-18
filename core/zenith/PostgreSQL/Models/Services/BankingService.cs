@@ -231,6 +231,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                         BankName = account.BankName,
                         Iban = account.Iban,
                         Name = account.Name,
+                        OriginalName = account.OriginalName,
+                        Alias = account.Alias,
                         Currency = account.Currency,
                         Balances = balances
                     });

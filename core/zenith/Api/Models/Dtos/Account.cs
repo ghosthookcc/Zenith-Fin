@@ -13,6 +13,8 @@ namespace ZenithFin.Api.Models.Dtos
             public string BankName { get; set; } = string.Empty;
             public string? Iban { get; set; }
             public string? Name { get; set; }
+            public string? OriginalName { get; set; }
+            public string? Alias { get; set; }
             public string Currency { get; set; } = string.Empty;
             public long BankConnectionId { get; set; }
         }
@@ -24,8 +26,21 @@ namespace ZenithFin.Api.Models.Dtos
             public string BankName { get; set; } = string.Empty;
             public string? Iban { get; set; }
             public string? Name { get; set; }
+            public string? OriginalName { get; set; }
+            public string? Alias { get; set; }
             public string Currency { get; set; } = string.Empty;
             public IReadOnlyList<EnableBankingEntities.Balance> Balances { get; set; } = Array.Empty<EnableBankingEntities.Balance>();
+        }
+
+        public sealed class RenameAccountRequest
+        {
+            public string? Alias { get; set; }
+        }
+
+        public sealed class AccountAlias
+        {
+            public long AccountId { get; set; }
+            public string? Alias { get; set; }
         }
     }
 }

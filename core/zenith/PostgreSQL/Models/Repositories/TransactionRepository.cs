@@ -24,7 +24,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                SELECT
                                    a.id AS "Id",
                                    a.enable_banking_uid AS "EnableBankingUid",
-                                   a.name AS "Name",
+                                   COALESCE(aa.bank_name_alias, a.name) AS "Name",
                                    a.iban AS "Iban",
                                    a.currency AS "Currency",
                                    a.bank_connection_id AS "BankConnectionId",
@@ -34,6 +34,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc
                                    ON bc.id = a.bank_connection_id
+                               LEFT JOIN "AccountAlias" aa
+                                   ON aa.account_id = a.id
                                WHERE bc.user_id = @UserId
                                ORDER BY a.id;
                                """;
