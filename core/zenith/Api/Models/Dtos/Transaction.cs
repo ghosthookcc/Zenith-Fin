@@ -71,6 +71,7 @@ namespace ZenithFin.Api.Models.Dtos
             public DateOnly To { get; set; }
             public IReadOnlyList<Account> Accounts { get; set; } = Array.Empty<Account>();
             public IReadOnlyList<TagDto.Tag> Tags { get; set; } = Array.Empty<TagDto.Tag>();
+            public IReadOnlyList<CreditAccountDto.CreditAccount> CreditAccounts { get; set; } = Array.Empty<CreditAccountDto.CreditAccount>();
             public IReadOnlyList<Transaction> Transactions { get; set; } = Array.Empty<Transaction>();
         }
 

@@ -11,6 +11,7 @@ model User {
   bank_connections BankConnection[]
   tags             Tag[]
   tag_corrections  TagCorrection[]
+  credit_accounts  CreditAccount[]
 
   @@index([email])
 }

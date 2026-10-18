@@ -1,5 +1,6 @@
 import { component$, $, useSignal, useVisibleTask$ } from '@builder.io/qwik';
 
+import { CreditAccounts } from './CreditAccounts';
 import { Icon } from './Icon';
 import { accountColors as colors } from '../utils/accounts';
 
@@ -764,6 +765,16 @@ export const AccountOverview = component$(() => {
                                     )}
                                 </div>
                             </section>
+
+                            <CreditAccounts
+                                accounts={accounts.map((account) => ({
+                                    id: account.backendId,
+                                    name: account.name,
+                                    bank: account.bank,
+                                    iban: account.iban,
+                                    color: account.color,
+                                }))}
+                            />
                         </>
                     )}
             </main>

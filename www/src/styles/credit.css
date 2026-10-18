@@ -1,0 +1,46 @@
+.credit-section .section-heading {
+    gap: 16px;
+}
+
+.credit-new {
+    white-space: nowrap;
+}
+
+.credit-section .cat-editor {
+    margin-bottom: 22px;
+}
+
+.credit-empty {
+    padding: 0;
+}
+
+.credit-counting {
+    margin-left: auto;
+    padding: 3px 9px;
+    border: 1px solid #3a4352;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    white-space: nowrap;
+    color: var(--cal-ink-2);
+}
+
+.credit-card .account-purpose {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.credit-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 22px;
+}
+
+@media (max-width: 760px) {
+    .credit-section .section-heading {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}

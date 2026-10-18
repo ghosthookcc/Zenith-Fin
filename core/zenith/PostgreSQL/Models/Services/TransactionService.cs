@@ -17,6 +17,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly TransactionRepository _transactionRepository;
         private readonly UserRepository _userRepository;
         private readonly TagRepository _tagRepository;
+        private readonly CreditAccountRepository _creditAccountRepository;
 
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
@@ -26,6 +27,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         public TransactionService(TransactionRepository transactionRepository,
                                   UserRepository userRepository,
                                   TagRepository tagRepository,
+                                  CreditAccountRepository creditAccountRepository,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
                                   EnableBankingWorkspace workspace)
@@ -33,6 +35,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _transactionRepository = transactionRepository;
             _userRepository = userRepository;
             _tagRepository = tagRepository;
+            _creditAccountRepository = creditAccountRepository;
 
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
@@ -75,6 +78,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     IsStale = account.IsActive && IsDue(account.TransactionsSyncedAt, now, SyncInterval)
                 }).ToArray(),
                 Tags = tags,
+                CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),
                 Transactions = transactions
             };
         }
