@@ -21,14 +21,7 @@ namespace ZenithFin.Categorization
                                                OwnerProfile owner,
                                                IReadOnlyList<UserTagRule> userRules)
         {
-            List<string> text = new();
-
-            foreach (string? field in new[] { input.CounterpartyName }.Concat(input.RemittanceInformation))
-            {
-                text.Add(FieldSeparator);
-                text.AddRange(TextTokens.Tokenize(field));
-            }
-
+            List<string> text = Text(input);
             string[] code = TextTokens.Tokenize(input.BankTransactionCode);
 
             List<string> textAndCode = new(text) { FieldSeparator };
@@ -53,16 +46,42 @@ namespace ZenithFin.Categorization
             return new CategoryMatch(null, CategorizeBuiltIn(input, owner, text, code, textAndCode));
         }
 
+        public static bool IsOwnTransfer(CategorizationInput input,
+                                         OwnerProfile owner)
+        {
+            return IsOwnTransfer(input, owner, Text(input), TextTokens.Tokenize(input.BankTransactionCode));
+        }
+
+        private static List<string> Text(CategorizationInput input)
+        {
+            List<string> text = new();
+
+            foreach (string? field in new[] { input.CounterpartyName }.Concat(input.RemittanceInformation))
+            {
+                text.Add(FieldSeparator);
+                text.AddRange(TextTokens.Tokenize(field));
+            }
+
+            return text;
+        }
+
+        private static bool IsOwnTransfer(CategorizationInput input,
+                                          OwnerProfile owner,
+                                          IReadOnlyList<string> text,
+                                          IReadOnlyList<string> code)
+        {
+            return CategoryRules.OwnTransferCodes.Any(pattern => pattern.Matches(code)) ||
+                   owner.IsOwnAccount(input.CounterpartyAccount) ||
+                   owner.IsOwnName(text);
+        }
+
         private static string CategorizeBuiltIn(CategorizationInput input,
                                                 OwnerProfile owner,
                                                 IReadOnlyList<string> text,
                                                 IReadOnlyList<string> code,
                                                 IReadOnlyList<string> textAndCode)
         {
-            if (CategoryRules.OwnTransferCodes.Any(pattern => pattern.Matches(code)) ||
-                owner.IsOwnAccount(input.CounterpartyAccount) ||
-                owner.IsOwnName(text))
-                return CategoryRules.Transfers;
+            if (IsOwnTransfer(input, owner, text, code)) return CategoryRules.Transfers;
 
             if (input.CreditDebitIndicator == "CRDT" &&
                 CategoryRules.IncomeKeywords.Any(pattern => pattern.Matches(textAndCode)))

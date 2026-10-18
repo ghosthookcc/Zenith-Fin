@@ -10,25 +10,30 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly TransactionRepository _transactionRepository;
         private readonly TagRepository _tagRepository;
         private readonly UserRepository _userRepository;
+        private readonly CorrectionRepository _correctionRepository;
 
-        private const string RuleSource = "RULE";
-        private const string AiSource = "AI";
+        public const string RuleSource = "RULE";
+        public const string AiSource = "AI";
+        public const string UserSource = "USER";
+        public const string LearnedSource = "LEARNED";
 
         public CategorizationService(TransactionRepository transactionRepository,
                                      TagRepository tagRepository,
-                                     UserRepository userRepository)
+                                     UserRepository userRepository,
+                                     CorrectionRepository correctionRepository)
         {
             _transactionRepository = transactionRepository;
             _tagRepository = tagRepository;
             _userRepository = userRepository;
+            _correctionRepository = correctionRepository;
         }
 
-        public async Task<int> CategorizeAsync(long userId,
-                                               bool reviewRuleTags)
+        public async Task<IReadOnlyList<TagChange>> CategorizeAsync(long userId,
+                                                                    bool reviewRuleTags)
         {
             CategorizationCandidate[] candidates = await _transactionRepository.GetCategorizationCandidatesAsync(userId, reviewRuleTags);
 
-            if (candidates.Length == 0) return 0;
+            if (candidates.Length == 0) return Array.Empty<TagChange>();
 
             TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId);
 
@@ -43,37 +48,67 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                           .Where(rule => rule.Patterns.Count > 0)
                                           .ToArray();
 
-            TransactionAccountRow[] accounts = await _transactionRepository.GetAccountsForUserAsync(userId);
-            OwnerProfile owner = new(await _userRepository.GetFullNameAsync(userId),
-                                     accounts.Select(account => account.Iban));
+            OwnerProfile owner = await GetOwnerAsync(userId);
 
-            List<(long TransactionId, long TagId)> changes = new();
+            Dictionary<CorrectionKey, long> learned = new();
+
+            foreach (TagCorrectionRow correction in await _correctionRepository.GetCorrectionsAsync(userId))
+                learned.TryAdd(correction.Key, correction.TagId);
+
+            List<TagChange> changes = new();
 
             foreach (CategorizationCandidate candidate in candidates)
             {
-                CategoryMatch match = RuleCategorizer.Categorize(new CategorizationInput(candidate.CounterpartyName,
-                                                                                         candidate.RemittanceInformation,
-                                                                                         candidate.BankTransactionCode,
-                                                                                         candidate.CounterpartyAccount,
-                                                                                         candidate.CreditDebitIndicator,
-                                                                                         candidate.OriginalCurrency),
-                                                                 owner,
-                                                                 userRules);
+                CategorizationInput input = ToInput(candidate);
 
                 long tagId;
+                string source;
 
-                if (match.UserTagId != null) tagId = match.UserTagId.Value;
-                else if (candidate.TagSource == AiSource) continue;
-                else if (match.Key == null || !systemTagIds.TryGetValue(match.Key, out tagId)) continue;
+                if (learned.Count > 0 &&
+                    CorrectionKey.From(input, owner) is CorrectionKey key &&
+                    learned.TryGetValue(key, out tagId))
+                {
+                    source = LearnedSource;
+                }
+                else
+                {
+                    CategoryMatch match = RuleCategorizer.Categorize(input, owner, userRules);
 
-                if (candidate.TagSource == RuleSource && candidate.TagId == tagId) continue;
+                    source = RuleSource;
 
-                changes.Add((candidate.Id, tagId));
+                    if (match.UserTagId != null) tagId = match.UserTagId.Value;
+                    else if (candidate.TagSource == AiSource) continue;
+                    else if (match.Key == null || !systemTagIds.TryGetValue(match.Key, out tagId)) continue;
+                }
+
+                if (candidate.TagSource == source && candidate.TagId == tagId) continue;
+
+                changes.Add(new TagChange(candidate.Id, tagId, source, candidate.TagId, candidate.TagSource));
             }
 
-            if (changes.Count > 0) await _transactionRepository.ApplyRuleTagsAsync(userId, changes, DateTime.UtcNow);
+            if (changes.Count == 0) return changes;
 
-            return changes.Count;
+            HashSet<long> updated = await _transactionRepository.ApplyTagsAsync(userId, changes, DateTime.UtcNow);
+
+            return changes.Where(change => updated.Contains(change.TransactionId)).ToArray();
+        }
+
+        public async Task<OwnerProfile> GetOwnerAsync(long userId)
+        {
+            TransactionAccountRow[] accounts = await _transactionRepository.GetAccountsForUserAsync(userId);
+
+            return new OwnerProfile(await _userRepository.GetFullNameAsync(userId),
+                                    accounts.Select(account => account.Iban));
+        }
+
+        public static CategorizationInput ToInput(CategorizationCandidate candidate)
+        {
+            return new CategorizationInput(candidate.CounterpartyName,
+                                           candidate.RemittanceInformation,
+                                           candidate.BankTransactionCode,
+                                           candidate.CounterpartyAccount,
+                                           candidate.CreditDebitIndicator,
+                                           candidate.OriginalCurrency);
         }
     }
 }

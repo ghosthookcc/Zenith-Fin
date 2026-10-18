@@ -13,6 +13,17 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public DateTime? TransactionsSyncedAt { get; set; }
     }
 
+    public sealed class ReleasedTransactionRow
+    {
+        public long TagId { get; set; }
+        public string CreditDebitIndicator { get; set; } = "";
+        public decimal Amount { get; set; }
+        public string Currency { get; set; } = "";
+        public string? CounterpartyName { get; set; }
+        public string[] RemittanceInformation { get; set; } = Array.Empty<string>();
+        public string OccurredOn { get; set; } = "";
+    }
+
     public sealed record TransactionEntity
     {
         public string ExternalId { get; init; } = "";

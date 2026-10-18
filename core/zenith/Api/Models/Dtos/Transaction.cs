@@ -33,6 +33,26 @@ namespace ZenithFin.Api.Models.Dtos
             public string? TagSource { get; set; }
         }
 
+        public sealed class CorrectTagRequest
+        {
+            public long? TagId { get; set; }
+            public bool Remember { get; set; }
+        }
+
+        public sealed class TransactionTag
+        {
+            public long Id { get; set; }
+            public long? TagId { get; set; }
+            public string? TagSource { get; set; }
+        }
+
+        public sealed class CorrectTagResponse
+        {
+            public IReadOnlyList<TransactionTag> Transactions { get; set; } = Array.Empty<TransactionTag>();
+            public bool Remembered { get; set; }
+            public int Moved { get; set; }
+        }
+
         public sealed class Account
         {
             public long Id { get; set; }

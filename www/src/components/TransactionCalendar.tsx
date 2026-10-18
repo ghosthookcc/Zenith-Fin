@@ -1,4 +1,4 @@
-import { $, component$, sync$, useSignal, useVisibleTask$ } from '@builder.io/qwik';
+import { $, component$, sync$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 
 import { CategoryBreakdown, type CategoryBreakdownRow } from './CategoryBreakdown';
 import { Icon } from './Icon';
@@ -53,6 +53,30 @@ interface SyncResult {
     accountId: number;
     status: string;
     error?: string | null;
+}
+
+interface TagUpdate {
+    id: number;
+    tagId?: number | null;
+    tagSource?: string | null;
+}
+
+interface CorrectionResponse {
+    transactions: TagUpdate[];
+    remembered: boolean;
+    moved: number;
+}
+
+interface Picker {
+    id: number | null;
+    remember: boolean;
+    saving: boolean;
+    error: string | null;
+}
+
+interface Notice {
+    id: number;
+    text: string;
 }
 
 interface SyncProblem {
@@ -402,6 +426,31 @@ function messageFrom(payload: unknown): string | null {
     return null;
 }
 
+function isCorrectionResponse(value: unknown): value is CorrectionResponse {
+    return (
+        !!value &&
+        typeof value === 'object' &&
+        Array.isArray((value as CorrectionResponse).transactions) &&
+        typeof (value as CorrectionResponse).moved === 'number'
+    );
+}
+
+function correctionNotice(tag: CalendarTag, changed: boolean, response: CorrectionResponse): string {
+    const lead = changed ? `Moved to ${tag.name}` : `Kept in ${tag.name}`;
+
+    if (!response.remembered) {
+        return `${lead}.`;
+    }
+
+    if (response.moved > 0) {
+        return `${lead}, along with ${response.moved} similar ${
+            response.moved === 1 ? 'transaction' : 'transactions'
+        }. New ones will follow.`;
+    }
+
+    return `${lead}. Similar transactions will follow from now on.`;
+}
+
 function isTransactionsResponse(value: unknown): value is TransactionsResponse {
     return (
         !!value &&
@@ -432,6 +481,14 @@ export const TransactionCalendar = component$(() => {
     const syncProblems = useSignal<SyncProblem[]>([]);
     const loadedAt = useSignal(Date.now());
     const latestRequest = useSignal(0);
+
+    const picker = useStore<Picker>({
+        id: null,
+        remember: true,
+        saving: false,
+        error: null,
+    });
+    const notice = useSignal<Notice | null>(null);
 
     const load = $(async () => {
         const request = latestRequest.value + 1;
@@ -538,6 +595,8 @@ export const TransactionCalendar = component$(() => {
         viewYear.value = year;
         viewMonth.value = monthIndex;
         selectedDate.value = select;
+        picker.id = null;
+        notice.value = null;
 
         await load();
     });
@@ -557,10 +616,99 @@ export const TransactionCalendar = component$(() => {
         }
 
         selectedDate.value = selectedDate.value === cell.date ? null : cell.date;
+        picker.id = null;
+        notice.value = null;
     });
 
     const selectCategory = $((id: number) => {
         categoryFilter.value = categoryFilter.value === String(id) ? 'all' : String(id);
+    });
+
+    const openPicker = $((id: number) => {
+        if (picker.saving) {
+            return;
+        }
+
+        picker.id = picker.id === id ? null : id;
+        picker.remember = true;
+        picker.error = null;
+        notice.value = null;
+    });
+
+    const closePicker = $((id: number) => {
+        if (picker.saving) {
+            return;
+        }
+
+        picker.id = null;
+        picker.error = null;
+
+        document.querySelector<HTMLButtonElement>(`[data-tag-button="${id}"]`)?.focus();
+    });
+
+    const changeTag = $(async (transaction: CalendarTransaction, tag: CalendarTag) => {
+        if (picker.saving) {
+            return;
+        }
+
+        picker.saving = true;
+        picker.error = null;
+
+        try {
+            const response = await fetch(`/api/transactions/${transaction.id}/tag`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    tagId: tag.id,
+                    remember: picker.remember && !!transaction.description,
+                }),
+            });
+
+            const payload = await readJson(response);
+
+            if (!response.ok) {
+                throw new Error(
+                    messageFrom(payload) ?? `Could not change the category (${response.status})`,
+                );
+            }
+
+            if (!isCorrectionResponse(payload)) {
+                throw new Error('Unexpected response from the transaction API.');
+            }
+
+            const updates = new Map(payload.transactions.map((update) => [update.id, update]));
+
+            if (data.value) {
+                data.value = {
+                    ...data.value,
+                    transactions: data.value.transactions.map((item) => {
+                        const update = updates.get(item.id);
+
+                        return update
+                            ? { ...item, tagId: update.tagId ?? null, tagSource: update.tagSource ?? null }
+                            : item;
+                    }),
+                };
+            }
+
+            notice.value = {
+                id: transaction.id,
+                text: correctionNotice(tag, transaction.tagId !== tag.id, payload),
+            };
+            picker.id = null;
+
+            document
+                .querySelector<HTMLButtonElement>(`[data-tag-button="${transaction.id}"]`)
+                ?.focus();
+        } catch (err) {
+            picker.error = err instanceof Error ? err.message : 'Could not change the category.';
+        } finally {
+            picker.saving = false;
+        }
     });
 
     useVisibleTask$(
@@ -575,6 +723,17 @@ export const TransactionCalendar = component$(() => {
             strategy: 'document-ready',
         },
     );
+
+    useVisibleTask$(({ track }) => {
+        const id = track(() => picker.id);
+
+        if (id !== null) {
+            document
+                .querySelector(`[data-tag-button="${id}"]`)
+                ?.closest('li')
+                ?.scrollIntoView({ block: 'nearest' });
+        }
+    });
 
     const cells = buildMonthGrid(viewYear.value, viewMonth.value);
     const monthPrefix = `${viewYear.value}-${String(viewMonth.value + 1).padStart(2, '0')}`;
@@ -1064,6 +1223,10 @@ export const TransactionCalendar = component$(() => {
                             )}
                         </div>
 
+                        <p class="cal-visually-hidden" aria-live="polite">
+                            {notice.value?.text ?? ''}
+                        </p>
+
                         {error.value ? (
                             <div class="cal-empty" role="alert">
                                 <p>Could not load transactions: {error.value}</p>
@@ -1120,16 +1283,39 @@ export const TransactionCalendar = component$(() => {
                                                     const tag =
                                                         tagsById[transaction.tagId ?? uncategorized.id] ??
                                                         uncategorized;
+                                                    const pickerOpen = picker.id === transaction.id;
+                                                    const rowNotice =
+                                                        notice.value?.id === transaction.id
+                                                            ? notice.value.text
+                                                            : null;
 
                                                     return (
-                                                        <li key={transaction.id} class="cal-tx">
-                                                            <span
-                                                                class="cal-tag-tile"
+                                                        <li
+                                                            key={transaction.id}
+                                                            class={{ 'cal-tx': true, 'cal-tx-open': pickerOpen }}
+                                                            onKeyDown$={(event) => {
+                                                                if (event.key === 'Escape' && pickerOpen) {
+                                                                    closePicker(transaction.id);
+                                                                }
+                                                            }}
+                                                        >
+                                                            <button
+                                                                type="button"
+                                                                class="cal-tag-tile cal-tag-button"
                                                                 style={{ '--tag-color': tag.color }}
-                                                                aria-hidden="true"
+                                                                data-tag-button={transaction.id}
+                                                                title="Change category"
+                                                                aria-label={`${tag.name}. Change category`}
+                                                                aria-expanded={pickerOpen}
+                                                                aria-controls={
+                                                                    pickerOpen
+                                                                        ? `cal-picker-${transaction.id}`
+                                                                        : undefined
+                                                                }
+                                                                onClick$={() => openPicker(transaction.id)}
                                                             >
-                                                                <Icon name={tag.icon} />
-                                                            </span>
+                                                                <Icon key={tag.icon} name={tag.icon} />
+                                                            </button>
 
                                                             <span class="cal-tx-main">
                                                                 <span class="cal-tx-title" title={title}>
@@ -1143,6 +1329,14 @@ export const TransactionCalendar = component$(() => {
                                                                             title="Sorted by AI"
                                                                         >
                                                                             AI
+                                                                        </span>
+                                                                    )}
+                                                                    {transaction.tagSource === 'LEARNED' && (
+                                                                        <span
+                                                                            class="cal-ai-badge cal-learned-badge"
+                                                                            title="Sorted like a transaction you changed"
+                                                                        >
+                                                                            Learned
                                                                         </span>
                                                                     )}
                                                                     {' · '}
@@ -1204,6 +1398,85 @@ export const TransactionCalendar = component$(() => {
                                                                     )
                                                                 )}
                                                             </span>
+
+                                                            {pickerOpen && (
+                                                                <div
+                                                                    id={`cal-picker-${transaction.id}`}
+                                                                    class="cal-picker"
+                                                                    role="group"
+                                                                    aria-label={`Change category for ${title}`}
+                                                                >
+                                                                    <div class="cal-picker-head">
+                                                                        <span class="cal-picker-title">
+                                                                            Change category
+                                                                        </span>
+                                                                        <button
+                                                                            type="button"
+                                                                            class="cal-icon-button cal-picker-close"
+                                                                            aria-label="Close"
+                                                                            onClick$={() => closePicker(transaction.id)}
+                                                                        >
+                                                                            <Icon name="close" />
+                                                                        </button>
+                                                                    </div>
+
+                                                                    {transaction.description && (
+                                                                        <label class="cal-picker-remember">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={picker.remember}
+                                                                                onChange$={(_, element) => {
+                                                                                    picker.remember = element.checked;
+                                                                                }}
+                                                                            />
+                                                                            <span>
+                                                                                {`Remember for “${title}”`}
+                                                                                <small>
+                                                                                    Similar transactions move too, now
+                                                                                    and later, and the AI learns from it.
+                                                                                </small>
+                                                                            </span>
+                                                                        </label>
+                                                                    )}
+
+                                                                    <div class="cal-picker-options">
+                                                                        {tags.map((option) => (
+                                                                            <button
+                                                                                key={option.id}
+                                                                                type="button"
+                                                                                class="cal-picker-option"
+                                                                                aria-pressed={option.id === transaction.tagId}
+                                                                                disabled={picker.saving}
+                                                                                onClick$={() => changeTag(transaction, option)}
+                                                                            >
+                                                                                <span
+                                                                                    class="cal-picker-swatch"
+                                                                                    style={{ '--tag-color': option.color }}
+                                                                                    aria-hidden="true"
+                                                                                >
+                                                                                    <Icon name={option.icon} />
+                                                                                </span>
+                                                                                <span class="cal-picker-name">
+                                                                                    {option.name}
+                                                                                </span>
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+
+                                                                    {picker.error && (
+                                                                        <p class="cal-picker-error" role="alert">
+                                                                            {picker.error}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
+                                                            )}
+
+                                                            {rowNotice && (
+                                                                <p class="cal-tx-notice">
+                                                                    <Icon name="check" />
+                                                                    {rowNotice}
+                                                                </p>
+                                                            )}
                                                         </li>
                                                     );
                                                 })}

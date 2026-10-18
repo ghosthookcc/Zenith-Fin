@@ -33,11 +33,24 @@ namespace ZenithFin.Api.Models.Dtos
             public string? LastError { get; set; }
         }
 
+        public sealed class Correction
+        {
+            public long Id { get; set; }
+            public string Description { get; set; } = string.Empty;
+            public string CreditDebitIndicator { get; set; } = string.Empty;
+            public bool OwnTransfer { get; set; }
+            public long TagId { get; set; }
+            public long? ReplacedTagId { get; set; }
+            public int Matches { get; set; }
+            public DateTime UpdatedAt { get; set; }
+        }
+
         public sealed class TagsResponse
         {
             public IReadOnlyList<Tag> Tags { get; set; } = Array.Empty<Tag>();
             public IReadOnlyDictionary<long, int> Usage { get; set; } = new Dictionary<long, int>();
             public AiStatus Ai { get; set; } = new();
+            public IReadOnlyList<Correction> Corrections { get; set; } = Array.Empty<Correction>();
         }
     }
 }

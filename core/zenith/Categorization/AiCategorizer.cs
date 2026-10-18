@@ -25,6 +25,10 @@ namespace ZenithFin.Categorization
     public sealed record AiItem(string Text,
                                 IReadOnlyList<long> TransactionIds);
 
+    public sealed record AiExample(string Text,
+                                   string Category,
+                                   string? Replaced);
+
     public sealed record AiPrompt(string Instructions,
                                   string Input,
                                   JsonObject Schema);
@@ -68,7 +72,8 @@ namespace ZenithFin.Categorization
         }
 
         public static AiPrompt BuildPrompt(IReadOnlyList<AiItem> items,
-                                           IReadOnlyList<AiCategory> categories)
+                                           IReadOnlyList<AiCategory> categories,
+                                           IReadOnlyList<AiExample> examples)
         {
             StringBuilder instructions = new();
 
@@ -81,6 +86,17 @@ namespace ZenithFin.Categorization
 
             foreach (AiCategory category in categories)
                 instructions.AppendLine($"- {category.Name}: {DescribeCategory(category)}");
+
+            if (examples.Count > 0)
+            {
+                instructions.AppendLine();
+                instructions.AppendLine("The person sorted these transactions themselves. Sort similar ones the same way:");
+
+                foreach (AiExample example in examples)
+                    instructions.AppendLine(example.Replaced == null || example.Replaced == example.Category
+                        ? $"- {example.Text} → {example.Category}"
+                        : $"- {example.Text} → {example.Category}, not {example.Replaced}");
+            }
 
             StringBuilder input = new();
 
@@ -144,12 +160,15 @@ namespace ZenithFin.Categorization
             return choices;
         }
 
-        private static string Describe(AiTransaction transaction)
+        public static string Describe(string creditDebitIndicator,
+                                      string? bankTransactionCode,
+                                      string? counterpartyName,
+                                      IReadOnlyList<string> remittanceInformation)
         {
-            List<string> parts = new() { transaction.CreditDebitIndicator == "CRDT" ? "money in" : "money out" };
+            List<string> parts = new() { creditDebitIndicator == "CRDT" ? "money in" : "money out" };
 
-            IEnumerable<string?> fields = new[] { transaction.BankTransactionCode, transaction.CounterpartyName }
-                                          .Concat(transaction.RemittanceInformation);
+            IEnumerable<string?> fields = new[] { bankTransactionCode, counterpartyName }
+                                          .Concat(remittanceInformation);
 
             foreach (string? field in fields)
             {
@@ -163,6 +182,14 @@ namespace ZenithFin.Categorization
             }
 
             return string.Join(" | ", parts);
+        }
+
+        private static string Describe(AiTransaction transaction)
+        {
+            return Describe(transaction.CreditDebitIndicator,
+                            transaction.BankTransactionCode,
+                            transaction.CounterpartyName,
+                            transaction.RemittanceInformation);
         }
 
         private static string DescribeCategory(AiCategory category)

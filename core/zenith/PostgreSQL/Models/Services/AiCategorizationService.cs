@@ -12,6 +12,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
     {
         private readonly TransactionRepository _transactionRepository;
         private readonly TagRepository _tagRepository;
+        private readonly CorrectionRepository _correctionRepository;
 
         private readonly AiClient _ai;
 
@@ -23,10 +24,12 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         public AiCategorizationService(TransactionRepository transactionRepository,
                                        TagRepository tagRepository,
+                                       CorrectionRepository correctionRepository,
                                        AiClient ai)
         {
             _transactionRepository = transactionRepository;
             _tagRepository = tagRepository;
+            _correctionRepository = correctionRepository;
 
             _ai = ai;
         }
@@ -110,6 +113,18 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                                                       category => category.TagId,
                                                                       StringComparer.OrdinalIgnoreCase);
 
+            Dictionary<long, string> tagNames = categories.ToDictionary(category => category.TagId, category => category.Name);
+
+            AiExample[] examples = (await _correctionRepository.GetCorrectionsAsync(userId))
+                                   .Where(correction => tagNames.ContainsKey(correction.TagId))
+                                   .Take(MaxExamples)
+                                   .Select(correction => new AiExample(correction.Example,
+                                                                       tagNames[correction.TagId],
+                                                                       correction.ReplacedTagId is long replaced
+                                                                           ? tagNames.GetValueOrDefault(replaced)
+                                                                           : null))
+                                   .ToArray();
+
             IReadOnlyList<AiItem> items = AiCategorizer.Group(candidates.Select(candidate => new AiTransaction(candidate.Id,
                                                                                                              candidate.CounterpartyName,
                                                                                                              candidate.RemittanceInformation,
@@ -124,7 +139,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             foreach (AiItem[] batch in items.Take(batchSize * Math.Max(1, _ai.Options.MaxBatchesPerRun)).Chunk(batchSize))
             {
-                AiPrompt prompt = AiCategorizer.BuildPrompt(batch, categories);
+                AiPrompt prompt = AiCategorizer.BuildPrompt(batch, categories, examples);
                 string json;
 
                 try
@@ -182,5 +197,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         }
 
         private static readonly TimeSpan MaxRateLimitWaitPerRun = TimeSpan.FromSeconds(60);
+
+        private const int MaxExamples = 30;
     }
 }

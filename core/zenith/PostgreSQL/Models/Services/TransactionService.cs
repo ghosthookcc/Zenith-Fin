@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 
 using ZenithFin.Api.Models.Dtos;
+using ZenithFin.Categorization;
 using ZenithFin.EnableBanking;
 using ZenithFin.PostgreSQL.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Entities;
@@ -147,7 +148,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 IReadOnlyList<FetchedTransaction> fetched = await FetchTransactionsAsync(account, syncedAt, today);
                 TransactionEntity[] transactions = MapTransactions(fetched, account.Currency, today);
 
-                await _transactionRepository.ReplaceTransactionsAsync(userId, account.Id, transactions, now);
+                ReleasedTransactionRow[] released = await _transactionRepository.ReplaceTransactionsAsync(userId, account.Id, transactions, now);
+                (string ExternalId, long TagId)[] restored = FindSuccessors(released, transactions);
+
+                if (restored.Length > 0) await _transactionRepository.RestoreUserTagsAsync(userId, account.Id, restored, now);
 
                 Console.WriteLine($"Transaction sync: account={account.Id}, " +
                                   $"fetched={fetched.Count}, " +
@@ -319,6 +323,32 @@ namespace ZenithFin.PostgreSQL.Models.Services
             };
         }
 
+        private static (string ExternalId, long TagId)[] FindSuccessors(IReadOnlyList<ReleasedTransactionRow> released,
+                                                                        IReadOnlyList<TransactionEntity> transactions)
+        {
+            List<(string ExternalId, long TagId)> restored = new();
+
+            foreach (ReleasedTransactionRow row in released)
+            {
+                string? signature = CorrectionKey.SignatureOf(TransactionText.Describe(row.CounterpartyName, row.RemittanceInformation));
+                DateOnly releasedOn = DateOnly.ParseExact(row.OccurredOn, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+                TransactionEntity? successor = transactions.Where(item => item.Status == BookedStatus &&
+                                                                          item.CreditDebitIndicator == row.CreditDebitIndicator &&
+                                                                          item.Amount == row.Amount &&
+                                                                          item.Currency == row.Currency &&
+                                                                          Math.Abs(item.OccurredOn.DayNumber - releasedOn.DayNumber) <= SuccessorMaxDays &&
+                                                                          restored.All(entry => entry.ExternalId != item.ExternalId) &&
+                                                                          CorrectionKey.SignatureOf(TransactionText.Describe(item.CounterpartyName,
+                                                                                                                             item.RemittanceInformation)) == signature)
+                                                           .MinBy(item => Math.Abs(item.OccurredOn.DayNumber - releasedOn.DayNumber));
+
+                if (successor != null) restored.Add((successor.ExternalId, row.TagId));
+            }
+
+            return restored.ToArray();
+        }
+
         private static string HashContent(TransactionEntity entity)
         {
             string content = string.Join('\u001f',
@@ -342,7 +372,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         {
             try
             {
-                int tagged = await _categorizationService.CategorizeAsync(userId, reviewRuleTags);
+                int tagged = (await _categorizationService.CategorizeAsync(userId, reviewRuleTags)).Count;
 
                 if (tagged > 0) Console.WriteLine($"Categorization: user={userId}, tagged={tagged}");
             }
@@ -426,6 +456,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private const int InitialHistoryDays = 365;
         private const int FallbackHistoryDays = 89;
         private const int SyncOverlapDays = 14;
+        private const int SuccessorMaxDays = 7;
 
         private static readonly TimeSpan SyncInterval = TimeSpan.FromMinutes(15);
         private static readonly TimeSpan ForcedSyncInterval = TimeSpan.FromMinutes(1);

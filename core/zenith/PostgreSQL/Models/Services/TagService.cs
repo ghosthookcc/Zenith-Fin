@@ -21,6 +21,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
+        private readonly CorrectionService _correctionService;
 
         private sealed record ValidTag(string Name,
                                        string Icon,
@@ -42,13 +43,15 @@ namespace ZenithFin.PostgreSQL.Models.Services
         public TagService(TagRepository tagRepository,
                           UserRepository userRepository,
                           CategorizationService categorizationService,
-                          AiCategorizationService aiCategorizationService)
+                          AiCategorizationService aiCategorizationService,
+                          CorrectionService correctionService)
         {
             _tagRepository = tagRepository;
             _userRepository = userRepository;
 
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
+            _correctionService = correctionService;
         }
 
         public async Task<TagDto.TagsResponse?> GetTagsAsync(string sessionId)
@@ -61,7 +64,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
             {
                 Tags = await _tagRepository.GetTagsForUserAsync(userId.Value),
                 Usage = await _tagRepository.GetTagUsageAsync(userId.Value),
-                Ai = _aiCategorizationService.GetStatus(userId.Value)
+                Ai = _aiCategorizationService.GetStatus(userId.Value),
+                Corrections = await _correctionService.GetCorrectionsAsync(userId.Value)
             };
         }
 

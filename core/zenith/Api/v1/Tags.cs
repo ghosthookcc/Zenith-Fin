@@ -12,6 +12,7 @@ namespace ZenithFin.Api.v1
     public class Tags : ControllerBase
     {
         private readonly TagService _tagService;
+        private readonly CorrectionService _correctionService;
 
         [HttpGet]
         [ResourceGuard]
@@ -64,6 +65,18 @@ namespace ZenithFin.Api.v1
             return ToResponse(await _tagService.DeleteTagAsync(sessionId, id));
         }
 
+        [HttpDelete]
+        [ResourceGuard]
+        [Route("corrections/{id:long}")]
+        public async Task<IActionResult> ForgetCorrection(long id)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            return ToResponse(await _correctionService.ForgetAsync(sessionId, id));
+        }
+
         private IActionResult ToResponse(TagOperationResult result)
         {
             if (result.StatusCode != StatusCodes.Status200OK)
@@ -72,9 +85,11 @@ namespace ZenithFin.Api.v1
             return result.Tag == null ? Ok(new { success = true }) : Ok(result.Tag);
         }
 
-        public Tags(TagService tagService)
+        public Tags(TagService tagService,
+                    CorrectionService correctionService)
         {
             _tagService = tagService;
+            _correctionService = correctionService;
         }
     }
 }

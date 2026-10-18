@@ -21,6 +21,7 @@ namespace ZenithFin.Api.v1
         private readonly UserService _userService;
         private readonly BankingService _bankingService;
         private readonly TransactionService _transactionService;
+        private readonly CorrectionService _correctionService;
 
         private readonly JwtAuthenticator _jwtAuthenticator;
 
@@ -140,6 +141,24 @@ namespace ZenithFin.Api.v1
             return Ok(result);
         }
 
+        [HttpPut]
+        [ResourceGuard]
+        [Route("accounts/transactions/{id:long}/tag")]
+        public async Task<IActionResult> CorrectTransactionTag(long id,
+                                                               [FromBody] TransactionDto.CorrectTagRequest request)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            CorrectionResult result = await _correctionService.CorrectAsync(sessionId, id, request);
+
+            if (result.StatusCode != StatusCodes.Status200OK)
+                return StatusCode(result.StatusCode, new { message = result.Message, success = false });
+
+            return Ok(result.Response);
+        }
+
         [HttpGet]
         [ResourceGuard]
         [Route("accounts/balances")]
@@ -172,12 +191,14 @@ namespace ZenithFin.Api.v1
                        UserService userService,
                        BankingService bankingService,
                        TransactionService transactionService,
+                       CorrectionService correctionService,
                        JwtAuthenticator jwtAuthenticator)
         {
             _workspace = workspace;
             _userService = userService;
             _bankingService = bankingService;
             _transactionService = transactionService;
+            _correctionService = correctionService;
             _jwtAuthenticator = jwtAuthenticator;
         }
     }

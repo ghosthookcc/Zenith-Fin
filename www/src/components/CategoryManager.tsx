@@ -22,10 +22,22 @@ interface AiStatus {
     lastError?: string | null;
 }
 
+interface Correction {
+    id: number;
+    description: string;
+    creditDebitIndicator: string;
+    ownTransfer: boolean;
+    tagId: number;
+    replacedTagId?: number | null;
+    matches: number;
+    updatedAt: string;
+}
+
 interface CategoriesResponse {
     tags: Category[];
     usage: Record<string, number>;
     ai?: AiStatus | null;
+    corrections?: Correction[] | null;
 }
 
 interface Editor {
@@ -113,6 +125,16 @@ function usageLabel(count: number): string {
     return `${count} ${count === 1 ? 'transaction' : 'transactions'}`;
 }
 
+function directionLabel(correction: Correction): string {
+    const incoming = correction.creditDebitIndicator === 'CRDT';
+
+    if (correction.ownTransfer) {
+        return incoming ? 'Transfer in' : 'Transfer out';
+    }
+
+    return incoming ? 'Money in' : 'Money out';
+}
+
 function formatTime(iso: string): string {
     return new Intl.DateTimeFormat('en-GB', {
         day: 'numeric',
@@ -167,6 +189,7 @@ export const CategoryManager = component$(() => {
     const error = useSignal<string | null>(null);
     const confirmingDelete = useSignal<number | null>(null);
     const deleting = useSignal<number | null>(null);
+    const forgetting = useSignal<number | null>(null);
 
     const editor = useStore<Editor>({
         open: false,
@@ -303,6 +326,33 @@ export const CategoryManager = component$(() => {
         }
     });
 
+    const forget = $(async (id: number) => {
+        forgetting.value = id;
+        error.value = null;
+
+        try {
+            const response = await fetch(`/api/tags/corrections/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            const payload = await readJson(response);
+
+            if (!response.ok) {
+                throw new Error(messageFrom(payload) ?? `Could not forget the change (${response.status})`);
+            }
+
+            await load();
+        } catch (err) {
+            error.value = err instanceof Error ? err.message : 'Could not forget the change.';
+        } finally {
+            forgetting.value = null;
+        }
+    });
+
     useVisibleTask$(
         () => {
             void load();
@@ -316,6 +366,10 @@ export const CategoryManager = component$(() => {
     const usage = data.value?.usage ?? {};
     const ownCategories = categories.filter((category) => !category.isSystem);
     const predefinedCategories = categories.filter((category) => category.isSystem);
+    const categoriesById: Record<number, Category> = Object.fromEntries(
+        categories.map((category) => [category.id, category]),
+    );
+    const corrections = data.value?.corrections ?? [];
     const previewKeywords = parseKeywords(editor.keywords);
     const selectedKind = kindChoices.find((choice) => choice.value === editor.kind);
 
@@ -635,8 +689,9 @@ export const CategoryManager = component$(() => {
 
                     <div class="cat-ai-body">
                         <p>
-                            Your match words and the built-in rules go first. The AI sorts what they
-                            leave in Other the next time your banks sync.
+                            Your remembered changes, match words and the built-in rules go first. The
+                            AI sorts what they leave in Other the next time your banks sync, and uses
+                            your changes as examples.
                         </p>
 
                         {data.value.ai.enabled ? (
@@ -664,6 +719,71 @@ export const CategoryManager = component$(() => {
                     </div>
                 </section>
             )}
+
+            <section class="overview-panel cat-panel" aria-labelledby="cat-learned-title">
+                <div class="cat-panel-head">
+                    <h2 id="cat-learned-title">
+                        <span class="tiny-mark" />
+                        Learned from your changes
+                    </h2>
+                    {corrections.length > 0 && (
+                        <span class="cat-panel-note">
+                            Forget one to let the rules and the AI decide again
+                        </span>
+                    )}
+                </div>
+
+                {loading.value && !data.value ? (
+                    <p class="cal-empty">Loading…</p>
+                ) : corrections.length === 0 ? (
+                    <p class="cal-empty">
+                        Nothing learned yet. Click a category icon in the calendar to change it and keep
+                        Remember ticked. Similar transactions then follow, and the AI uses your changes
+                        as examples.
+                    </p>
+                ) : (
+                    <ul class="cat-list">
+                        {corrections.map((correction) => {
+                            const category = categoriesById[correction.tagId];
+                            const replaced =
+                                correction.replacedTagId != null
+                                    ? categoriesById[correction.replacedTagId]
+                                    : undefined;
+
+                            return (
+                                <li key={correction.id} class="cat-row">
+                                    <span
+                                        class="cal-tag-tile"
+                                        style={{ '--tag-color': category?.color ?? '#7b8496' }}
+                                        aria-hidden="true"
+                                    >
+                                        <Icon key={category?.icon ?? 'tag'} name={category?.icon ?? 'tag'} />
+                                    </span>
+                                    <span class="cat-row-main">
+                                        <span class="cat-row-name">{correction.description}</span>
+                                        <span class="cat-row-meta">
+                                            {`${directionLabel(correction)} · ${category?.name ?? 'Unknown'}${
+                                                replaced ? ` instead of ${replaced.name}` : ''
+                                            } · ${usageLabel(correction.matches)}`}
+                                        </span>
+                                    </span>
+                                    <span class="cat-row-actions">
+                                        <button
+                                            type="button"
+                                            class="cal-chip"
+                                            disabled={forgetting.value === correction.id}
+                                            aria-label={`Forget ${correction.description}`}
+                                            onClick$={() => forget(correction.id)}
+                                        >
+                                            {forgetting.value === correction.id ? 'Forgetting…' : 'Forget'}
+                                        </button>
+                                    </span>
+                                </li>
+                            );
+                        })}
+                    </ul>
+                )}
+            </section>
 
             <section class="overview-panel cat-panel" aria-labelledby="cat-system-title">
                 <div class="cat-panel-head">

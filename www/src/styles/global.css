@@ -162,7 +162,7 @@ h1, h2, h3, p {
     border: 1px solid #353b49;
     border-radius: 7px;
     color: #bdc5d2;
-    letter-spacing: .7px
+    letter-spacing: 1px
 }
 
 .page-shell {
@@ -182,7 +182,7 @@ h1, h2, h3, p {
 .eyebrow {
     color: var(--mint);
     font-size: 0.75rem;
-    letter-spacing: 2.2px;
+    letter-spacing: 2px;
     font-weight: 600;
     margin-bottom: 12px
 }
@@ -334,7 +334,7 @@ h1 > span {
 .chart-currency {
     font-size: 0.75rem;
     font-weight: 600;
-    letter-spacing: .9px;
+    letter-spacing: 1px;
     color: #b6becc
 }
 
@@ -632,7 +632,7 @@ h1 > span {
     font-size: 0.75rem;
     font-family: 'Manrope', sans-serif;
     color: #657085;
-    letter-spacing: .4px
+    letter-spacing: 1px
 }
 
 .account-card h3 {

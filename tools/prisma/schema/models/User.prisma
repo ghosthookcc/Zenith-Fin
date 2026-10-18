@@ -10,6 +10,7 @@ model User {
   status           UserStatus?
   bank_connections BankConnection[]
   tags             Tag[]
+  tag_corrections  TagCorrection[]
 
   @@index([email])
 }

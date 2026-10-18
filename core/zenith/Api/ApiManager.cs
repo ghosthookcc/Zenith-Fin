@@ -32,7 +32,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<TransactionService>();
 
             builder.Services.AddSingleton<TagRepository>();
+            builder.Services.AddSingleton<CorrectionRepository>();
             builder.Services.AddSingleton<CategorizationService>();
+            builder.Services.AddSingleton<CorrectionService>();
             builder.Services.AddSingleton<TagService>();
 
             builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("AI"));
