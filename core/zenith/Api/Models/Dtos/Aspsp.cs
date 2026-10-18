@@ -50,6 +50,15 @@ namespace ZenithFin.Api.Models.Dtos
             public string Status { get; set; } = string.Empty;
             public DateTime ConsentExpiresAt { get; set; }
             public int Accounts { get; set; }
+            public int Transactions { get; set; }
+        }
+
+        public sealed class RemovedBankConnection
+        {
+            public string Bank { get; set; } = string.Empty;
+            public int Accounts { get; set; }
+            public int Transactions { get; set; }
+            public bool Revoked { get; set; }
         }
 
         public class AspspAuthenticationCallbackRequest()

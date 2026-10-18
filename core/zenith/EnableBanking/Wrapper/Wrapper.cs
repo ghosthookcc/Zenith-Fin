@@ -20,6 +20,14 @@
                 return new(client, HttpMethod.Post, Routing.Authentication.AuthorizedAspspsByIdentifer(identifier));
             }
         }
+        public static class DELETE
+        {
+            public static RequestBuilder SessionById(Client client, Guid id)
+            {
+                return new(client, HttpMethod.Delete, Routing.Authentication.SessionByIdentifier(id));
+            }
+        }
+
         public static class GET
         {
             public static RequestBuilder Application(Client client)

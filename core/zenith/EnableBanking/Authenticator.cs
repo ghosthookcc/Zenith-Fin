@@ -114,6 +114,17 @@ namespace ZenithFin.EnableBanking
             throw new InvalidOperationException($"Stopped fetching transactions for account {accountId} after {MaxTransactionPages} pages.");
         }
         
+        public async Task<bool> RevokeSession(Guid sessionId)
+        {
+            GetToken();
+
+            using HttpResponseMessage response = await Wrapper.DELETE
+                                                             .SessionById(client, sessionId)
+                                                             .SendAsyncRaw();
+
+            return response.IsSuccessStatusCode || response.StatusCode == System.Net.HttpStatusCode.NotFound;
+        }
+
         public async Task<Response.SessionData> FetchSession(Guid sessionId)
         {
             GetToken();

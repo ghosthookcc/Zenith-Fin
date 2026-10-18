@@ -10,6 +10,7 @@ export interface BankConnection {
     status: string;
     consentExpiresAt: string;
     accounts: number;
+    transactions: number;
 }
 
 function consentActive(connection: BankConnection, now: number): boolean {
@@ -29,11 +30,18 @@ function accessLabel(connection: BankConnection, now: number): string {
 interface SectionProps {
     connections: BankConnection[] | null;
     reconnectingId: number | null;
+    removingId: number | null;
     error: string | null;
     onReconnect$: QRL<(connection: BankConnection) => void>;
+    onRemove$: QRL<(connection: BankConnection) => void>;
+}
+
+function count(value: number, singular: string, plural: string): string {
+    return `${value} ${value === 1 ? singular : plural}`;
 }
 
 export const BankConnectionsSection = component$<SectionProps>((props) => {
+    const confirming = useSignal<number | null>(null);
     const now = Date.now();
     const connections = props.connections ?? [];
 
@@ -44,7 +52,10 @@ export const BankConnectionsSection = component$<SectionProps>((props) => {
                     <h2 id="banks-title">
                         Connected banks <span>{String(connections.length).padStart(2, '0')}</span>
                     </h2>
-                    <p>Reconnect a bank to renew Zenith's access or to share accounts you opened since.</p>
+                    <p>
+                        Reconnect a bank to renew Zenith's access or to share accounts you opened since,
+                        or remove one to delete its data from Zenith.
+                    </p>
                 </div>
             </div>
 
@@ -67,6 +78,8 @@ export const BankConnectionsSection = component$<SectionProps>((props) => {
                         {connections.map((connection) => {
                             const active = consentActive(connection, now);
 
+                            const busy = props.reconnectingId !== null || props.removingId !== null;
+
                             return (
                                 <li key={connection.id} class="bank-row">
                                     <span class="bank-monogram" aria-hidden="true">
@@ -75,22 +88,72 @@ export const BankConnectionsSection = component$<SectionProps>((props) => {
                                     <span class="bank-row-main">
                                         <strong>{connection.bank}</strong>
                                         <small>
-                                            {`${connection.accounts} ${
-                                                connection.accounts === 1 ? 'account' : 'accounts'
-                                            } shared · ${accessLabel(connection, now)}`}
+                                            {`${count(connection.accounts, 'account', 'accounts')} shared · ${accessLabel(
+                                                connection,
+                                                now,
+                                            )}`}
                                         </small>
                                     </span>
                                     <span class={{ 'bank-state': true, 'bank-state-off': !active }}>
                                         {active ? 'Connected' : 'Needs reconnecting'}
                                     </span>
-                                    <button
-                                        type="button"
-                                        class="cal-chip"
-                                        disabled={props.reconnectingId !== null}
-                                        onClick$={() => props.onReconnect$(connection)}
-                                    >
-                                        {props.reconnectingId === connection.id ? 'Opening the bank…' : 'Reconnect'}
-                                    </button>
+                                    <span class="bank-actions">
+                                        <button
+                                            type="button"
+                                            class="cal-chip"
+                                            disabled={busy}
+                                            onClick$={() => props.onReconnect$(connection)}
+                                        >
+                                            {props.reconnectingId === connection.id ? 'Opening the bank…' : 'Reconnect'}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="cal-chip"
+                                            disabled={busy}
+                                            aria-expanded={confirming.value === connection.id}
+                                            onClick$={() => {
+                                                confirming.value =
+                                                    confirming.value === connection.id ? null : connection.id;
+                                            }}
+                                        >
+                                            Remove
+                                        </button>
+                                    </span>
+
+                                    {confirming.value === connection.id && (
+                                        <div class="bank-confirm" role="group" aria-label={`Remove ${connection.bank}`}>
+                                            <p>
+                                                {`Remove ${connection.bank}? Zenith ends its access at the bank and deletes ${count(
+                                                    connection.accounts,
+                                                    'account',
+                                                    'accounts',
+                                                )} and ${count(
+                                                    connection.transactions,
+                                                    'transaction',
+                                                    'transactions',
+                                                )} from Zenith. You can connect it again later.`}
+                                            </p>
+                                            <span class="bank-actions">
+                                                <button
+                                                    type="button"
+                                                    class="cal-chip"
+                                                    onClick$={() => {
+                                                        confirming.value = null;
+                                                    }}
+                                                >
+                                                    Keep
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    class="cat-danger"
+                                                    disabled={props.removingId !== null}
+                                                    onClick$={() => props.onRemove$(connection)}
+                                                >
+                                                    {props.removingId === connection.id ? 'Removing…' : `Remove ${connection.bank}`}
+                                                </button>
+                                            </span>
+                                        </div>
+                                    )}
                                 </li>
                             );
                         })}

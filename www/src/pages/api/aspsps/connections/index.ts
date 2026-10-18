@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 
-import { forwardToBackend } from "../../../utils/backend.ts";
+import { forwardToBackend } from "../../../../utils/backend.ts";
 
 export const prerender = false;
 

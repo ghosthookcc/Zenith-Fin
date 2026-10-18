@@ -179,6 +179,49 @@ namespace ZenithFin.PostgreSQL.Models.Services
             return essentials == null ? null : await _bankingRepository.GetConnectionsForUserAsync(essentials.UserId);
         }
 
+        public async Task<(int StatusCode, string? Message, AspspDto.RemovedBankConnection? Removed)> RemoveConnectionAsync(string sessionId,
+                                                                                                                         long connectionId)
+        {
+            if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return (StatusCodes.Status401Unauthorized, "No user found for session", null);
+
+            UserEssentials? essentials = await _userRepository.GetUserIdBySessionId(activeSessionId);
+
+            if (essentials == null) return (StatusCodes.Status401Unauthorized, "No user found for session", null);
+
+            OwnedBankConnection? owned = await _bankingRepository.GetOwnedConnectionAsync(essentials.UserId, connectionId);
+
+            if (owned == null) return (StatusCodes.Status404NotFound, "Bank connection not found", null);
+
+            bool revoked = false;
+
+            if (Guid.TryParse(owned.AspspSessionId, out Guid bankingSessionId))
+            {
+                try
+                {
+                    revoked = await _workspace.Authenticator.RevokeSession(bankingSessionId);
+                }
+                catch (Exception errno)
+                {
+                    Console.WriteLine($"Ending the Enable Banking session for connection {connectionId} failed: {errno.Message}");
+                }
+            }
+
+            RemovedBankConnection? removed = await _bankingRepository.DeleteConnectionAsync(essentials.UserId, connectionId);
+
+            if (removed == null) return (StatusCodes.Status404NotFound, "Bank connection not found", null);
+
+            Console.WriteLine($"Bank connection removed: connection={connectionId}, accounts={removed.Accounts}, " +
+                              $"transactions={removed.Transactions}, revoked={revoked}");
+
+            return (StatusCodes.Status200OK, null, new AspspDto.RemovedBankConnection
+            {
+                Bank = owned.Bank,
+                Accounts = removed.Accounts,
+                Transactions = removed.Transactions,
+                Revoked = revoked
+            });
+        }
+
         public async Task<AccountDto.Balance[]> GetAccountsBalancesAsync(string sessionId)
         {
             if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return Array.Empty<AccountDto.Balance>();

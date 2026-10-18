@@ -180,6 +180,34 @@
     border-top: 1px solid var(--cal-line);
 }
 
+.bank-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.bank-confirm {
+    grid-column: 2 / -1;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px 16px;
+    padding: 12px 14px;
+    border: 1px solid #6b3434;
+    border-radius: 10px;
+    background: #2c1d20;
+}
+
+.bank-confirm p {
+    flex: 1 1 260px;
+    font-size: 0.8125rem;
+    line-height: 1.5;
+    color: #f3c1bd;
+}
+
 .bank-row-main {
     display: flex;
     flex-direction: column;
@@ -235,8 +263,8 @@
         justify-self: start;
     }
 
-    .bank-row .cal-chip {
+    .bank-row > .bank-actions {
         grid-column: 2;
-        justify-self: start;
+        justify-content: flex-start;
     }
 }

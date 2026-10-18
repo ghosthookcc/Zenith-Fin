@@ -45,6 +45,18 @@ namespace ZenithFin.PostgreSQL.Models.Entities
                                            int Added,
                                            int Released);
 
+    public sealed class OwnedBankConnection
+    {
+        public string AspspSessionId { get; set; } = "";
+        public string Bank { get; set; } = "";
+    }
+
+    public sealed class RemovedBankConnection
+    {
+        public int Accounts { get; set; }
+        public int Transactions { get; set; }
+    }
+
     public enum BankStatus
     {
         ACTIVE,

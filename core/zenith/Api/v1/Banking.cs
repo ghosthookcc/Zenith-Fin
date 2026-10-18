@@ -176,6 +176,23 @@ namespace ZenithFin.Api.v1
             return Ok(connections);
         }
 
+        [HttpDelete]
+        [ResourceGuard]
+        [Route("connections/{id:long}")]
+        public async Task<IActionResult> RemoveConnection(long id)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            (int statusCode, string? message, AspspDto.RemovedBankConnection? removed) = await _bankingService.RemoveConnectionAsync(sessionId, id);
+
+            if (statusCode != StatusCodes.Status200OK)
+                return StatusCode(statusCode, new { message, success = false });
+
+            return Ok(removed);
+        }
+
         [HttpPut]
         [ResourceGuard]
         [Route("accounts/{id:long}/alias")]

@@ -272,7 +272,14 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    bc.psu_type AS "PsuType",
                                    bc.status::text AS "Status",
                                    bc.consent_expires_at AS "ConsentExpiresAt",
-                                   (count(a.id) FILTER (WHERE a.in_consent))::int AS "Accounts"
+                                   (count(a.id) FILTER (WHERE a.in_consent))::int AS "Accounts",
+                                   (
+                                       SELECT count(*)::int
+                                       FROM "Transaction" t
+                                       INNER JOIN "Account" ta
+                                           ON ta.id = t.account_id
+                                       WHERE ta.bank_connection_id = bc.id
+                                   ) AS "Transactions"
                                FROM "BankConnection" bc
                                LEFT JOIN "Account" a
                                    ON a.bank_connection_id = bc.id
@@ -285,6 +292,80 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             IEnumerable<AspspDto.BankConnection> connections = await connection.QueryAsync<AspspDto.BankConnection>(sql, new { UserId = userId });
 
             return connections.ToArray();
+        }
+
+        public async Task<OwnedBankConnection?> GetOwnedConnectionAsync(long userId,
+                                                                        long connectionId)
+        {
+            const string sql = """
+                               SELECT
+                                   aspsp_session_id AS "AspspSessionId",
+                                   aspsp_name AS "Bank"
+                               FROM "BankConnection"
+                               WHERE id = @ConnectionId
+                                 AND user_id = @UserId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.QuerySingleOrDefaultAsync<OwnedBankConnection>(sql, new { UserId = userId, ConnectionId = connectionId });
+        }
+
+        public async Task<RemovedBankConnection?> DeleteConnectionAsync(long userId,
+                                                                        long connectionId)
+        {
+            using var connection = _connectionFactory.Create();
+
+            if (connection.State != ConnectionState.Open) connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+
+            const string lockSql = """
+                                   SELECT id
+                                   FROM "BankConnection"
+                                   WHERE id = @ConnectionId
+                                     AND user_id = @UserId
+                                   FOR UPDATE;
+                                   """;
+
+            long? owned = await connection.QuerySingleOrDefaultAsync<long?>(lockSql,
+                                                                           new { UserId = userId, ConnectionId = connectionId },
+                                                                           transaction);
+
+            if (owned == null) return null;
+
+            const string countSql = """
+                                    SELECT
+                                        (SELECT count(*)::int FROM "Account" WHERE bank_connection_id = @ConnectionId) AS "Accounts",
+                                        (
+                                            SELECT count(*)::int
+                                            FROM "Transaction" t
+                                            INNER JOIN "Account" a
+                                                ON a.id = t.account_id
+                                            WHERE a.bank_connection_id = @ConnectionId
+                                        ) AS "Transactions";
+                                    """;
+
+            RemovedBankConnection removed = await connection.QuerySingleAsync<RemovedBankConnection>(countSql,
+                                                                                                   new { ConnectionId = connectionId },
+                                                                                                   transaction);
+
+            const string deleteSql = """
+                                     DELETE FROM "Balance"
+                                     WHERE account_id IN (SELECT id FROM "Account" WHERE bank_connection_id = @ConnectionId);
+
+                                     DELETE FROM "Account"
+                                     WHERE bank_connection_id = @ConnectionId;
+
+                                     DELETE FROM "BankConnection"
+                                     WHERE id = @ConnectionId
+                                       AND user_id = @UserId;
+                                     """;
+
+            await connection.ExecuteAsync(deleteSql, new { UserId = userId, ConnectionId = connectionId }, transaction);
+
+            transaction.Commit();
+
+            return removed;
         }
 
         private static string? NormalizeIban(string? iban)

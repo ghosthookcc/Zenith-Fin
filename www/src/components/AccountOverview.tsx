@@ -151,6 +151,7 @@ export const AccountOverview = component$(() => {
 
     const connections = useSignal<BankConnection[] | null>(null);
     const reconnectingId = useSignal<number | null>(null);
+    const removingId = useSignal<number | null>(null);
     const bankError = useSignal<string | null>(null);
     const bankNotice = useSignal<string | null>(null);
 
@@ -215,6 +216,51 @@ export const AccountOverview = component$(() => {
         } catch (err) {
             bankError.value = err instanceof Error ? err.message : `Could not start reconnecting ${connection.bank}.`;
             reconnectingId.value = null;
+        }
+    });
+
+    const removeBank = $(async (connection: BankConnection) => {
+        if (removingId.value !== null) {
+            return;
+        }
+
+        removingId.value = connection.id;
+        bankError.value = null;
+        bankNotice.value = null;
+
+        try {
+            const response = await fetch(`/api/aspsps/connections/${connection.id}`, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+                message?: string;
+                bank?: string;
+                accounts?: number;
+                transactions?: number;
+                revoked?: boolean;
+            } | null;
+
+            if (!response.ok || !payload) {
+                throw new Error(payload?.message || `Could not remove ${connection.bank}`);
+            }
+
+            bankNotice.value = `${connection.bank} is removed from Zenith, along with ${payload.accounts ?? 0} accounts and ${
+                payload.transactions ?? 0
+            } transactions.${
+                payload.revoked ? '' : " Zenith couldn't end its access at the bank, so it ends when the consent runs out."
+            }`;
+
+            await loadConnections();
+            await loadAccounts();
+        } catch (err) {
+            bankError.value = err instanceof Error ? err.message : `Could not remove ${connection.bank}.`;
+        } finally {
+            removingId.value = null;
         }
     });
 
@@ -1030,8 +1076,10 @@ export const AccountOverview = component$(() => {
                 <BankConnectionsSection
                     connections={connections.value}
                     reconnectingId={reconnectingId.value}
+                    removingId={removingId.value}
                     error={bankError.value}
                     onReconnect$={reconnect}
+                    onRemove$={removeBank}
                 />
             </main>
         </>
