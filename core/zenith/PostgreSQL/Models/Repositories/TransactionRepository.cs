@@ -115,6 +115,11 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             const string sql = """
                                SELECT
                                    t.id AS "Id",
+                                   t.account_id AS "AccountId",
+                                   to_char(t.occurred_on, 'YYYY-MM-DD') AS "OccurredOn",
+                                   t.amount AS "Amount",
+                                   t.currency AS "Currency",
+                                   t.status AS "Status",
                                    t.tag_id AS "TagId",
                                    t.tag_source::text AS "TagSource",
                                    t.counterparty_name AS "CounterpartyName",
@@ -151,6 +156,11 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             const string sql = """
                                SELECT
                                    t.id AS "Id",
+                                   t.account_id AS "AccountId",
+                                   to_char(t.occurred_on, 'YYYY-MM-DD') AS "OccurredOn",
+                                   t.amount AS "Amount",
+                                   t.currency AS "Currency",
+                                   t.status AS "Status",
                                    t.tag_id AS "TagId",
                                    t.tag_source::text AS "TagSource",
                                    t.counterparty_name AS "CounterpartyName",

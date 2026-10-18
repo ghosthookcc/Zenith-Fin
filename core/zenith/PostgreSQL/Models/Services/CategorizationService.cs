@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using ZenithFin.Api.Models.Dtos;
 using ZenithFin.Categorization;
 using ZenithFin.PostgreSQL.Models.Entities;
@@ -16,6 +18,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
         public const string AiSource = "AI";
         public const string UserSource = "USER";
         public const string LearnedSource = "LEARNED";
+
+        private const string TransferKind = "TRANSFER";
 
         public CategorizationService(TransactionRepository transactionRepository,
                                      TagRepository tagRepository,
@@ -50,6 +54,15 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             OwnerProfile owner = await GetOwnerAsync(userId);
 
+            long? transfersTagId = systemTagIds.TryGetValue(CategoryRules.Transfers, out long systemTransfersId) ? systemTransfersId : null;
+            HashSet<long> transferTagIds = tags.Where(tag => tag.Kind == TransferKind).Select(tag => tag.Id).ToHashSet();
+
+            HashSet<long> paired = TransferPairs.Find((await _transactionRepository.GetCategorizationCandidatesAsync(userId,
+                                                                                                                   includeRuleTagged: true,
+                                                                                                                   includeUserTagged: true))
+                                                      .Select(transaction => ToTransferLeg(transaction, owner))
+                                                      .ToArray());
+
             Dictionary<CorrectionKey, long> learned = new();
 
             foreach (TagCorrectionRow correction in await _correctionRepository.GetCorrectionsAsync(userId))
@@ -73,12 +86,19 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 else
                 {
                     CategoryMatch match = RuleCategorizer.Categorize(input, owner, userRules);
+                    long? ruleTagId = match.UserTagId ??
+                                      (match.Key != null && systemTagIds.TryGetValue(match.Key, out long systemTagId) ? systemTagId : null);
 
                     source = RuleSource;
 
-                    if (match.UserTagId != null) tagId = match.UserTagId.Value;
-                    else if (candidate.TagSource == AiSource) continue;
-                    else if (match.Key == null || !systemTagIds.TryGetValue(match.Key, out tagId)) continue;
+                    if (paired.Contains(candidate.Id) && transfersTagId != null && (ruleTagId == null || !transferTagIds.Contains(ruleTagId.Value)))
+                        ruleTagId = transfersTagId;
+                    else if (match.UserTagId == null && match.Key == CategoryRules.Other && candidate.TagSource == AiSource)
+                        continue;
+
+                    if (ruleTagId == null) continue;
+
+                    tagId = ruleTagId.Value;
                 }
 
                 if (candidate.TagSource == source && candidate.TagId == tagId) continue;
@@ -99,6 +119,20 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             return new OwnerProfile(await _userRepository.GetFullNameAsync(userId),
                                     accounts.Select(account => account.Iban));
+        }
+
+        private static TransferLeg ToTransferLeg(CategorizationCandidate transaction,
+                                                 OwnerProfile owner)
+        {
+            return new TransferLeg(transaction.Id,
+                                   transaction.AccountId,
+                                   DateOnly.ParseExact(transaction.OccurredOn, "yyyy-MM-dd", CultureInfo.InvariantCulture),
+                                   transaction.Amount,
+                                   transaction.Currency,
+                                   transaction.CreditDebitIndicator,
+                                   transaction.BankTransactionCode,
+                                   transaction.Status,
+                                   RuleCategorizer.IsOwnTransfer(ToInput(transaction), owner));
         }
 
         public static CategorizationInput ToInput(CategorizationCandidate candidate)

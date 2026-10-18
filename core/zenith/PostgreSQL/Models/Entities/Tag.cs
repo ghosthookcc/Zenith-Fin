@@ -5,6 +5,11 @@ namespace ZenithFin.PostgreSQL.Models.Entities
     public sealed class CategorizationCandidate
     {
         public long Id { get; set; }
+        public long AccountId { get; set; }
+        public string OccurredOn { get; set; } = "";
+        public decimal Amount { get; set; }
+        public string Currency { get; set; } = "";
+        public string Status { get; set; } = "";
         public long? TagId { get; set; }
         public string? TagSource { get; set; }
         public string? CounterpartyName { get; set; }
