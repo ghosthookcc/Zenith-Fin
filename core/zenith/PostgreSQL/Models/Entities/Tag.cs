@@ -41,6 +41,16 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public CorrectionKey Key => new(CreditDebitIndicator, OwnTransfer, Signature);
     }
 
+    public sealed class RecurringRuleRow
+    {
+        public string CreditDebitIndicator { get; set; } = "";
+        public bool OwnTransfer { get; set; }
+        public string Signature { get; set; } = "";
+        public bool Recurring { get; set; }
+
+        public CorrectionKey Key => new(CreditDebitIndicator, OwnTransfer, Signature);
+    }
+
     public sealed class AiCandidateRow
     {
         public long Id { get; set; }

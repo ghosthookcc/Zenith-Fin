@@ -22,6 +22,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
+        private readonly RecurringService _recurringService;
 
         private readonly EnableBankingWorkspace _workspace;
 
@@ -32,6 +33,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   ExpectedSalaryRepository expectedSalaryRepository,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
+                                  RecurringService recurringService,
                                   EnableBankingWorkspace workspace)
         {
             _transactionRepository = transactionRepository;
@@ -42,6 +44,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
+            _recurringService = recurringService;
 
             _workspace = workspace;
         }
@@ -60,8 +63,35 @@ namespace ZenithFin.PostgreSQL.Models.Services
             TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId.Value);
             TransactionDto.Transaction[] transactions = await _transactionRepository.GetTransactionsForUserAsync(userId.Value, from, to);
 
+            OwnerProfile owner = await _categorizationService.GetOwnerAsync(userId.Value);
+            Dictionary<CorrectionKey, RecurringSeries> recurring = await _recurringService.DetectAsync(userId.Value, owner);
+
             foreach (TransactionDto.Transaction transaction in transactions)
+            {
                 transaction.Description = TransactionText.Describe(transaction.CounterpartyName, transaction.RemittanceInformation);
+
+                if (recurring.Count == 0 || transaction.Status is "CNCL" or "RJCT") continue;
+
+                CorrectionKey? key = CorrectionKey.From(new CategorizationInput(transaction.CounterpartyName,
+                                                                                transaction.RemittanceInformation,
+                                                                                transaction.BankTransactionCode,
+                                                                                transaction.CounterpartyAccount,
+                                                                                transaction.CreditDebitIndicator,
+                                                                                transaction.OriginalCurrency),
+                                                        owner);
+
+                if (key != null && recurring.TryGetValue(key.Value, out RecurringSeries? series))
+                {
+                    transaction.Recurring = new TransactionDto.RecurringInfo
+                    {
+                        Frequency = series.Frequency,
+                        Label = series.Label,
+                        Occurrences = series.Occurrences,
+                        Next = series.Next.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+                        Manual = series.Manual
+                    };
+                }
+            }
 
             DateTime now = DateTime.UtcNow;
 

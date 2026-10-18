@@ -13,6 +13,7 @@ model User {
   tag_corrections  TagCorrection[]
   credit_accounts  CreditAccount[]
   expected_salaries ExpectedSalary[]
+  recurring_rules  RecurringRule[]
 
   @@index([email])
 }

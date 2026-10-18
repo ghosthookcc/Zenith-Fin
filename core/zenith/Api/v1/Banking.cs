@@ -23,6 +23,7 @@ namespace ZenithFin.Api.v1
         private readonly TransactionService _transactionService;
         private readonly CorrectionService _correctionService;
         private readonly AccountAliasService _accountAliasService;
+        private readonly RecurringService _recurringService;
 
         private readonly JwtAuthenticator _jwtAuthenticator;
 
@@ -160,6 +161,24 @@ namespace ZenithFin.Api.v1
             return Ok(result.Response);
         }
 
+        [HttpPut]
+        [ResourceGuard]
+        [Route("accounts/transactions/{id:long}/recurring")]
+        public async Task<IActionResult> SetRecurring(long id,
+                                                      [FromBody] TransactionDto.SetRecurringRequest request)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            RecurringResult result = await _recurringService.SetAsync(sessionId, id, request);
+
+            if (result.StatusCode != StatusCodes.Status200OK)
+                return StatusCode(result.StatusCode, new { message = result.Message, success = false });
+
+            return Ok(new { recurring = result.Recurring });
+        }
+
         [HttpGet]
         [ResourceGuard]
         [Route("connections")]
@@ -245,6 +264,7 @@ namespace ZenithFin.Api.v1
                        TransactionService transactionService,
                        CorrectionService correctionService,
                        AccountAliasService accountAliasService,
+                       RecurringService recurringService,
                        JwtAuthenticator jwtAuthenticator)
         {
             _workspace = workspace;
@@ -253,6 +273,7 @@ namespace ZenithFin.Api.v1
             _transactionService = transactionService;
             _correctionService = correctionService;
             _accountAliasService = accountAliasService;
+            _recurringService = recurringService;
             _jwtAuthenticator = jwtAuthenticator;
         }
     }

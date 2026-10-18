@@ -40,6 +40,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<AccountAliasRepository>();
             builder.Services.AddSingleton<AccountAliasService>();
 
+            builder.Services.AddSingleton<RecurringRuleRepository>();
+            builder.Services.AddSingleton<RecurringService>();
+
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CorrectionRepository>();
             builder.Services.AddSingleton<CategorizationService>();

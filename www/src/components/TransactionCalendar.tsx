@@ -30,6 +30,15 @@ interface CalendarTransaction {
     bankTransactionCode?: string | null;
     tagId?: number | null;
     tagSource?: string | null;
+    recurring?: Recurring | null;
+}
+
+interface Recurring {
+    frequency: string;
+    label: string;
+    occurrences: number;
+    next: string;
+    manual: boolean;
 }
 
 interface CalendarTag {
@@ -286,6 +295,14 @@ function creditTitle(creditAccount: CreditAccountRule): string {
         default:
             return `Counted as money in or out on ${creditAccount.name}`;
     }
+}
+
+function recurringTitle(recurring: Recurring): string {
+    const next = formatDate(recurring.next, { day: 'numeric', month: 'short' });
+
+    return `Recurring, ${recurring.label.toLowerCase()} · ${recurring.occurrences} ${
+        recurring.occurrences === 1 ? 'payment' : 'payments'
+    } so far · next around ${next}${recurring.manual ? ' · marked by you' : ''}`;
 }
 
 function creditCategory(creditAccount: CreditAccountRule): CalendarTag {
@@ -881,6 +898,46 @@ export const TransactionCalendar = component$(() => {
                 ?.focus();
         } catch (err) {
             picker.error = err instanceof Error ? err.message : 'Could not change the category.';
+        } finally {
+            picker.saving = false;
+        }
+    });
+
+    const setRecurring = $(async (transaction: CalendarTransaction, recurring: boolean) => {
+        if (picker.saving) {
+            return;
+        }
+
+        picker.saving = true;
+        picker.error = null;
+
+        try {
+            const response = await fetch(`/api/transactions/${transaction.id}/recurring`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ recurring }),
+            });
+
+            const payload = await readJson(response);
+
+            if (!response.ok) {
+                throw new Error(messageFrom(payload) ?? `Could not change it (${response.status})`);
+            }
+
+            notice.value = {
+                id: transaction.id,
+                text: recurring
+                    ? 'Marked as a recurring payment, along with the others like it.'
+                    : 'No longer treated as a recurring payment.',
+            };
+
+            await load();
+        } catch (err) {
+            picker.error = err instanceof Error ? err.message : 'Could not change it.';
         } finally {
             picker.saving = false;
         }
@@ -1713,6 +1770,15 @@ export const TransactionCalendar = component$(() => {
                                                                             Learned
                                                                         </span>
                                                                     )}
+                                                                    {transaction.recurring && (
+                                                                        <span
+                                                                            class="cal-ai-badge cal-recurring-badge"
+                                                                            title={recurringTitle(transaction.recurring)}
+                                                                        >
+                                                                            <Icon name="refresh" />
+                                                                            {transaction.recurring.label}
+                                                                        </span>
+                                                                    )}
                                                                     {creditOf(transaction) && (
                                                                         <span
                                                                             class="cal-ai-badge cal-credit-badge"
@@ -1787,11 +1853,11 @@ export const TransactionCalendar = component$(() => {
                                                                     id={`cal-picker-${transaction.id}`}
                                                                     class="cal-picker"
                                                                     role="group"
-                                                                    aria-label={`Change category for ${title}`}
+                                                                    aria-label={`Edit ${title}`}
                                                                 >
                                                                     <div class="cal-picker-head">
                                                                         <span class="cal-picker-title">
-                                                                            Change category
+                                                                            Edit transaction
                                                                         </span>
                                                                         <button
                                                                             type="button"
@@ -1845,6 +1911,31 @@ export const TransactionCalendar = component$(() => {
                                                                             </button>
                                                                         ))}
                                                                     </div>
+
+                                                                    {transaction.description && (
+                                                                        <label class="cal-picker-remember cal-picker-recurring">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={!!transaction.recurring}
+                                                                                disabled={picker.saving}
+                                                                                onChange$={(_, element) =>
+                                                                                    setRecurring(transaction, element.checked)
+                                                                                }
+                                                                            />
+                                                                            <span>
+                                                                                Recurring payment
+                                                                                <small>
+                                                                                    {transaction.recurring
+                                                                                        ? `${transaction.recurring.label} · ${
+                                                                                              transaction.recurring.manual
+                                                                                                  ? 'marked by you'
+                                                                                                  : 'found from your history'
+                                                                                          }`
+                                                                                        : 'Tick it to follow these payments as recurring. With only one so far, Zenith assumes it repeats monthly.'}
+                                                                                </small>
+                                                                            </span>
+                                                                        </label>
+                                                                    )}
 
                                                                     {picker.error && (
                                                                         <p class="cal-picker-error" role="alert">

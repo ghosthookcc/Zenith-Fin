@@ -653,6 +653,25 @@
     color: #9fd8aa;
 }
 
+.cal-recurring-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-color: #5a5f86;
+    vertical-align: -1px;
+    color: #c4c8ee;
+}
+
+.cal-recurring-badge svg {
+    width: 10px;
+    height: 10px;
+}
+
+.cal-picker-recurring {
+    padding-top: 10px;
+    border-top: 1px solid var(--cal-line);
+}
+
 .cal-credit-badge {
     max-width: 12em;
     overflow: hidden;
