@@ -62,6 +62,8 @@ namespace ZenithFin.Categorization
             }
         }
 
+        private const int MinimumPrefixLength = 4;
+
         private readonly TokenPattern[] _tokens;
 
         public int Length => _tokens.Length;
@@ -71,6 +73,21 @@ namespace ZenithFin.Categorization
             _tokens = pattern.Split(' ', StringSplitOptions.RemoveEmptyEntries)
                              .Select(token => new TokenPattern(token.Trim('*'), token.StartsWith('*'), token.EndsWith('*')))
                              .ToArray();
+        }
+
+        private KeywordPattern(TokenPattern[] tokens)
+        {
+            _tokens = tokens;
+        }
+
+        public static KeywordPattern? FromKeyword(string keyword)
+        {
+            string[] tokens = TextTokens.Tokenize(keyword);
+
+            return tokens.Length == 0
+                ? null
+                : new KeywordPattern(tokens.Select(token => new TokenPattern(token, false, token.Length >= MinimumPrefixLength))
+                                           .ToArray());
         }
 
         public bool Matches(IReadOnlyList<string> tokens)

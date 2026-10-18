@@ -1,0 +1,367 @@
+.cat-new {
+    white-space: nowrap;
+}
+
+.cat-retry {
+    margin-top: 8px;
+}
+
+.cat-editor,
+.cat-panel {
+    margin-bottom: 22px;
+    color: var(--cal-ink);
+}
+
+.cat-editor form {
+    padding: 24px 28px 22px;
+}
+
+.cat-editor-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.cat-editor-head h2 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.cat-editor-head p {
+    margin-top: 3px;
+    font-size: 0.8125rem;
+    color: var(--cal-muted);
+}
+
+.cat-preview-tile {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+}
+
+.cat-preview-tile svg {
+    width: 21px;
+    height: 21px;
+}
+
+.cat-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px 32px;
+}
+
+.cat-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.cat-field-wide {
+    grid-column: 1 / -1;
+}
+
+.cat-label {
+    padding: 0;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    color: var(--cal-ink-2);
+}
+
+.cat-input {
+    width: 100%;
+    padding: 10px 13px;
+    border: 1px solid #363e4b;
+    border-radius: 9px;
+    background: #1c222b;
+    color: var(--cal-ink);
+    font: inherit;
+    font-size: 0.875rem;
+}
+
+.cat-input::placeholder {
+    color: var(--cal-muted);
+}
+
+.cat-input:focus-visible {
+    outline: 2px solid var(--cal-mint);
+    outline-offset: 2px;
+}
+
+.cat-hint {
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: var(--cal-muted);
+}
+
+.cat-icon-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+    gap: 6px;
+}
+
+.cat-icon-option {
+    display: grid;
+    place-items: center;
+    height: 38px;
+    padding: 0;
+    border: 1px solid #323a49;
+    border-radius: 9px;
+    background: #1c222b;
+    color: var(--cal-ink-2);
+}
+
+.cat-icon-option svg {
+    width: 18px;
+    height: 18px;
+}
+
+.cat-icon-option:hover {
+    border-color: #4a5466;
+    background: #232a37;
+}
+
+.cat-color-row,
+.cat-kind-row,
+.cat-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cat-color-option {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    background: var(--swatch);
+    box-shadow: inset 0 0 0 2px var(--cal-surface);
+}
+
+.cat-color-option:hover {
+    border-color: #4a5466;
+}
+
+.cat-kind-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid #323a49;
+    border-radius: 999px;
+    font-size: 0.875rem;
+    color: var(--cal-ink-2);
+    cursor: pointer;
+}
+
+.cat-kind-option input {
+    margin: 0;
+    accent-color: var(--cal-mint);
+}
+
+.cat-kind-option:focus-within {
+    outline: 2px solid var(--cal-mint);
+    outline-offset: 2px;
+}
+
+.cat-option-selected,
+.cat-option-selected:hover {
+    border-color: var(--cal-mint);
+    color: var(--cal-ink);
+}
+
+.cat-icon-option.cat-option-selected {
+    box-shadow: inset 0 0 0 1px var(--cal-mint);
+}
+
+.cat-word {
+    padding: 3px 9px;
+    border: 1px solid #3a4352;
+    border-radius: 999px;
+    background: #232a37;
+    font-size: 0.75rem;
+    color: var(--cal-ink-2);
+}
+
+.cat-error {
+    margin-top: 18px;
+    padding: 10px 13px;
+    border: 1px solid #6b3434;
+    border-radius: 9px;
+    background: #2c1d20;
+    font-size: 0.8125rem;
+    color: #f3c1bd;
+}
+
+.cat-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+.cat-primary,
+.cat-primary:disabled {
+    padding: 9px 18px;
+    border: 1px solid var(--cal-mint);
+    border-radius: 999px;
+    background: var(--cal-mint);
+    color: #11151d;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.cat-primary:hover:not(:disabled) {
+    border-color: #d3e6c9;
+    background: #d3e6c9;
+}
+
+.cat-primary:disabled {
+    opacity: 0.6;
+}
+
+.cat-danger,
+.cat-danger:disabled {
+    padding: 7px 13px;
+    border: 1px solid #8a3f3f;
+    border-radius: 999px;
+    background: #3a2024;
+    color: #f3c1bd;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.cat-danger:hover:not(:disabled) {
+    border-color: #a54b4b;
+    background: #4a262b;
+}
+
+.cat-danger:disabled {
+    opacity: 0.6;
+}
+
+.cat-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 22px 28px 10px;
+}
+
+.cat-panel-head h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1rem;
+    font-weight: 500;
+    letter-spacing: -0.2px;
+}
+
+.cat-panel-note {
+    font-size: 0.75rem;
+    color: var(--cal-muted);
+}
+
+.cat-list {
+    margin: 0;
+    padding: 4px 16px 18px;
+    list-style: none;
+}
+
+.cat-row {
+    display: grid;
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: 10px;
+}
+
+.cat-row:hover {
+    background: #aeb9cc09;
+}
+
+.cat-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.cat-row-name {
+    font-size: 0.9375rem;
+    font-weight: 500;
+}
+
+.cat-row-meta {
+    overflow: hidden;
+    font-size: 0.75rem;
+    color: var(--cal-muted);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cat-row-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.cat-confirm {
+    font-size: 0.75rem;
+    color: var(--cal-ink-2);
+}
+
+.cat-list-compact {
+    columns: 2;
+    column-gap: 24px;
+}
+
+.cat-list-compact .cat-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+    break-inside: avoid;
+}
+
+@media (max-width: 760px) {
+    .cat-editor form {
+        padding: 20px 18px;
+    }
+
+    .cat-fields {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .cat-panel-head {
+        padding: 18px 18px 8px;
+    }
+
+    .cat-list {
+        padding: 4px 6px 14px;
+    }
+
+    .cat-list-compact {
+        columns: 1;
+    }
+
+    .cat-row {
+        grid-template-columns: 30px minmax(0, 1fr);
+    }
+
+    .cat-row .cal-tag-tile {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+    }
+
+    .cat-row-actions {
+        grid-column: 2;
+        justify-content: flex-start;
+    }
+}

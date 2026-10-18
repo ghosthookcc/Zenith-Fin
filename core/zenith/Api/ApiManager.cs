@@ -32,6 +32,7 @@ namespace ZenithFin.Api
 
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CategorizationService>();
+            builder.Services.AddSingleton<TagService>();
 
             builder.Services.AddSingleton<JwtAuthenticator>();
 

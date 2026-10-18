@@ -1,0 +1,16 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+import SideMenu from "../components/SideMenu";
+import { CategoryManager } from "../components/CategoryManager";
+
+import "../styles/calendar.css";
+import "../styles/categories.css";
+
+export const prerender = false;
+---
+
+<Layout title="Categories">
+    <SideMenu currentPath={Astro.url.pathname} />
+    <CategoryManager />
+</Layout>

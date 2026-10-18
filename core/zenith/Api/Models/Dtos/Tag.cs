@@ -11,6 +11,22 @@ namespace ZenithFin.Api.Models.Dtos
             public string Color { get; set; } = string.Empty;
             public string Kind { get; set; } = string.Empty;
             public bool IsSystem { get; set; }
+            public string[] Keywords { get; set; } = Array.Empty<string>();
+        }
+
+        public sealed class SaveTagRequest
+        {
+            public string? Name { get; set; }
+            public string? Icon { get; set; }
+            public string? Color { get; set; }
+            public string? Kind { get; set; }
+            public string[]? Keywords { get; set; }
+        }
+
+        public sealed class TagsResponse
+        {
+            public IReadOnlyList<Tag> Tags { get; set; } = Array.Empty<Tag>();
+            public IReadOnlyDictionary<long, int> Usage { get; set; } = new Dictionary<long, int>();
         }
     }
 }

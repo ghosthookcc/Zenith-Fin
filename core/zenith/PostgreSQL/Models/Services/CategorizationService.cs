@@ -1,3 +1,4 @@
+using ZenithFin.Api.Models.Dtos;
 using ZenithFin.Categorization;
 using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Repositories;
@@ -28,9 +29,18 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (candidates.Length == 0) return 0;
 
-            Dictionary<string, long> tagIds = (await _tagRepository.GetTagsForUserAsync(userId))
-                                              .Where(tag => tag.IsSystem && tag.Key != null)
-                                              .ToDictionary(tag => tag.Key!, tag => tag.Id);
+            TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId);
+
+            Dictionary<string, long> systemTagIds = tags.Where(tag => tag.IsSystem && tag.Key != null)
+                                                        .ToDictionary(tag => tag.Key!, tag => tag.Id);
+
+            UserTagRule[] userRules = tags.Where(tag => !tag.IsSystem)
+                                          .Select(tag => new UserTagRule(tag.Id,
+                                                                         tag.Keywords.Select(KeywordPattern.FromKeyword)
+                                                                                     .OfType<KeywordPattern>()
+                                                                                     .ToArray()))
+                                          .Where(rule => rule.Patterns.Count > 0)
+                                          .ToArray();
 
             TransactionAccountRow[] accounts = await _transactionRepository.GetAccountsForUserAsync(userId);
             OwnerProfile owner = new(await _userRepository.GetFullNameAsync(userId),
@@ -40,15 +50,20 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             foreach (CategorizationCandidate candidate in candidates)
             {
-                string key = RuleCategorizer.Categorize(new CategorizationInput(candidate.CounterpartyName,
-                                                                                candidate.RemittanceInformation,
-                                                                                candidate.BankTransactionCode,
-                                                                                candidate.CounterpartyAccount,
-                                                                                candidate.CreditDebitIndicator,
-                                                                                candidate.OriginalCurrency),
-                                                        owner);
+                CategoryMatch match = RuleCategorizer.Categorize(new CategorizationInput(candidate.CounterpartyName,
+                                                                                         candidate.RemittanceInformation,
+                                                                                         candidate.BankTransactionCode,
+                                                                                         candidate.CounterpartyAccount,
+                                                                                         candidate.CreditDebitIndicator,
+                                                                                         candidate.OriginalCurrency),
+                                                                 owner,
+                                                                 userRules);
 
-                if (!tagIds.TryGetValue(key, out long tagId)) continue;
+                long tagId;
+
+                if (match.UserTagId != null) tagId = match.UserTagId.Value;
+                else if (match.Key == null || !systemTagIds.TryGetValue(match.Key, out tagId)) continue;
+
                 if (candidate.TagSource == RuleSource && candidate.TagId == tagId) continue;
 
                 changes.Add((candidate.Id, tagId));
