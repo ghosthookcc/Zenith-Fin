@@ -8,6 +8,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string Name { get; set; } = string.Empty;
             public long AccountId { get; set; }
             public string Counting { get; set; } = string.Empty;
+            public decimal? CreditLimit { get; set; }
         }
 
         public sealed class SaveCreditAccountRequest
@@ -15,6 +16,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string? Name { get; set; }
             public long? AccountId { get; set; }
             public string? Counting { get; set; }
+            public decimal? CreditLimit { get; set; }
         }
 
         public sealed class CreditAccountsResponse

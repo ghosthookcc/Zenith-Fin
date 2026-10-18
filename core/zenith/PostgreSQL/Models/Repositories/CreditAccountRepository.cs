@@ -20,7 +20,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    id AS "Id",
                                    name AS "Name",
                                    account_id AS "AccountId",
-                                   counting::text AS "Counting"
+                                   counting::text AS "Counting",
+                                   credit_limit AS "CreditLimit"
                                FROM "CreditAccount"
                                WHERE user_id = @UserId
                                ORDER BY id;
@@ -35,12 +36,13 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
         public async Task<long?> InsertCreditAccountAsync(long userId,
                                                           string name,
                                                           long accountId,
-                                                          string counting)
+                                                          string counting,
+                                                          decimal? creditLimit)
         {
             const string sql = """
                                INSERT INTO "CreditAccount"
-                               (user_id, account_id, name, counting)
-                               SELECT @UserId, a.id, @Name, @Counting::"CreditCounting"
+                               (user_id, account_id, name, counting, credit_limit)
+                               SELECT @UserId, a.id, @Name, @Counting::"CreditCounting", @CreditLimit
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc
                                    ON bc.id = a.bank_connection_id
@@ -55,7 +57,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 UserId = userId,
                 AccountId = accountId,
                 Name = name,
-                Counting = counting
+                Counting = counting,
+                CreditLimit = creditLimit
             });
         }
 
@@ -63,13 +66,15 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                                          long creditAccountId,
                                                          string name,
                                                          long accountId,
-                                                         string counting)
+                                                         string counting,
+                                                         decimal? creditLimit)
         {
             const string sql = """
                                UPDATE "CreditAccount"
                                SET name = @Name,
                                    account_id = @AccountId,
-                                   counting = @Counting::"CreditCounting"
+                                   counting = @Counting::"CreditCounting",
+                                   credit_limit = @CreditLimit
                                WHERE id = @CreditAccountId
                                  AND user_id = @UserId
                                  AND EXISTS (
@@ -89,7 +94,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 CreditAccountId = creditAccountId,
                 AccountId = accountId,
                 Name = name,
-                Counting = counting
+                Counting = counting,
+                CreditLimit = creditLimit
             }) > 0;
         }
 

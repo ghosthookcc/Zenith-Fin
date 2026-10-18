@@ -4,6 +4,7 @@ import { Icon } from './Icon';
 
 export interface CategoryBreakdownRow {
     id: number;
+    selectable?: boolean;
     name: string;
     icon: string;
     color: string;
@@ -37,17 +38,9 @@ export const CategoryBreakdown = component$<CategoryBreakdownProps>((props) => {
                 <p class="cal-empty">No spending in {props.monthName}.</p>
             ) : (
                 <ul class="cal-breakdown-list">
-                    {props.rows.map((row) => (
-                        <li key={row.id}>
-                            <button
-                                type="button"
-                                class={{
-                                    'cal-breakdown-row': true,
-                                    'cal-breakdown-selected': props.selectedId === row.id,
-                                }}
-                                aria-pressed={props.selectedId === row.id}
-                                onClick$={() => props.onSelect$(row.id)}
-                            >
+                    {props.rows.map((row) => {
+                        const content = (
+                            <>
                                 <span
                                     class="cal-tag-tile"
                                     style={{ '--tag-color': row.color }}
@@ -61,9 +54,29 @@ export const CategoryBreakdown = component$<CategoryBreakdownProps>((props) => {
                                 <span class="cal-breakdown-track" aria-hidden="true">
                                     <span style={{ width: `${row.width}%` }} />
                                 </span>
-                            </button>
-                        </li>
-                    ))}
+                            </>
+                        );
+
+                        return (
+                            <li key={row.id}>
+                                {row.selectable === false ? (
+                                    <div class="cal-breakdown-row cal-breakdown-static">{content}</div>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        class={{
+                                            'cal-breakdown-row': true,
+                                            'cal-breakdown-selected': props.selectedId === row.id,
+                                        }}
+                                        aria-pressed={props.selectedId === row.id}
+                                        onClick$={() => props.onSelect$(row.id)}
+                                    >
+                                        {content}
+                                    </button>
+                                )}
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
         </section>

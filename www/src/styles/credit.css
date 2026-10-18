@@ -30,6 +30,51 @@
     white-space: nowrap;
 }
 
+.credit-note {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 0.8125rem;
+    color: var(--cal-muted);
+}
+
+.credit-note svg {
+    width: 15px;
+    height: 15px;
+}
+
+.credit-over {
+    color: #f3c98b;
+}
+
+.credit-meter {
+    height: 6px;
+    margin-top: 16px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: #2a3140;
+}
+
+.credit-meter > span {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--account-color);
+}
+
+.credit-meter-over > span {
+    background: #c98500;
+}
+
+.credit-card .card-footer {
+    margin-top: 12px;
+}
+
+.credit-card .card-footer strong {
+    color: var(--cal-ink-2);
+}
+
 .credit-actions {
     display: flex;
     flex-wrap: wrap;

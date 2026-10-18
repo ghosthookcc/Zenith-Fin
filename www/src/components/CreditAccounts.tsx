@@ -1,24 +1,26 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 
 import { Icon } from './Icon';
+import { countingChoices, countingLabel, creditUsed, type CreditAccountRule } from '../utils/credit';
 
 export interface CreditAccountOption {
     id: number;
     name: string;
     bank: string;
     iban?: string | null;
+    currency: string;
     color: string;
 }
 
-interface CreditAccount {
-    id: number;
-    name: string;
-    accountId: number;
-    counting: string;
+interface CreditAccountsResponse {
+    creditAccounts: CreditAccountRule[];
 }
 
-interface CreditAccountsResponse {
-    creditAccounts: CreditAccount[];
+interface MonthTransaction {
+    accountId: number;
+    amount: number;
+    currency: string;
+    status: string;
 }
 
 interface Editor {
@@ -27,26 +29,12 @@ interface Editor {
     name: string;
     accountId: string;
     counting: string;
+    creditLimit: string;
     saving: boolean;
     error: string | null;
 }
 
-const countingChoices = [
-    {
-        value: 'NEUTRAL',
-        label: 'Neutral',
-        hint: "Its transactions are left out of the month's money in and out.",
-    },
-    {
-        value: 'FLOW',
-        label: 'Money in & out',
-        hint: 'Its transactions count like any other money in and out.',
-    },
-];
-
-function countingLabel(counting: string): string {
-    return countingChoices.find((choice) => choice.value === counting)?.label ?? counting;
-}
+const maskedAmount = '•• •••,••';
 
 function accountLabel(account: CreditAccountOption | undefined): string {
     if (!account) {
@@ -56,6 +44,25 @@ function accountLabel(account: CreditAccountOption | undefined): string {
     const iban = account.iban?.replace(/\s+/g, '');
 
     return `${account.name}${iban ? ` ··${iban.slice(-4)}` : ''} · ${account.bank}`;
+}
+
+function formatKr(minor: number): string {
+    return new Intl.NumberFormat('sv-SE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(minor / 100);
+}
+
+function currentMonth(): { from: string; to: string; name: string } {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+    return {
+        from: `${now.getFullYear()}-${month}-01`,
+        to: `${now.getFullYear()}-${month}-${String(lastDay).padStart(2, '0')}`,
+        name: new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(now),
+    };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -96,10 +103,12 @@ function isCreditAccountsResponse(value: unknown): value is CreditAccountsRespon
     );
 }
 
-export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((props) => {
-    const data = useSignal<CreditAccount[] | null>(null);
+export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidden: boolean }>((props) => {
+    const data = useSignal<CreditAccountRule[] | null>(null);
+    const monthTransactions = useSignal<MonthTransaction[] | null>(null);
     const loading = useSignal(true);
     const error = useSignal<string | null>(null);
+    const usageError = useSignal(false);
     const confirmingDelete = useSignal<number | null>(null);
     const deleting = useSignal<number | null>(null);
 
@@ -108,9 +117,38 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
         id: null,
         name: '',
         accountId: '',
-        counting: 'NEUTRAL',
+        counting: 'OUT',
+        creditLimit: '',
         saving: false,
         error: null,
+    });
+
+    const loadUsage = $(async () => {
+        usageError.value = false;
+
+        const month = currentMonth();
+        const query = new URLSearchParams({ from: month.from, to: month.to });
+
+        try {
+            const response = await fetch(`/api/transactions?${query}`, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            const payload = (await readJson(response)) as { transactions?: MonthTransaction[] } | null;
+
+            if (!response.ok || !Array.isArray(payload?.transactions)) {
+                throw new Error('Could not load transactions');
+            }
+
+            monthTransactions.value = payload.transactions;
+        } catch {
+            usageError.value = true;
+        }
     });
 
     const load = $(async () => {
@@ -147,18 +185,27 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
         }
     });
 
-    const openEditor = $((creditAccount: CreditAccount | null) => {
+    const openEditor = $((creditAccount: CreditAccountRule | null) => {
         editor.open = true;
         editor.id = creditAccount?.id ?? null;
         editor.name = creditAccount?.name ?? '';
         editor.accountId = creditAccount ? String(creditAccount.accountId) : '';
-        editor.counting = creditAccount?.counting ?? 'NEUTRAL';
+        editor.counting = creditAccount?.counting ?? 'OUT';
+        editor.creditLimit = creditAccount?.creditLimit != null ? String(creditAccount.creditLimit) : '';
         editor.error = null;
         confirmingDelete.value = null;
     });
 
     const save = $(async () => {
         if (editor.saving) {
+            return;
+        }
+
+        const limitText = editor.creditLimit.trim().replace(/\s+/g, '').replace(',', '.');
+        const creditLimit = limitText === '' ? null : Number(limitText);
+
+        if (creditLimit !== null && (!Number.isFinite(creditLimit) || creditLimit < 0)) {
+            editor.error = 'The credit limit must be a number of kronor, 0 or more';
             return;
         }
 
@@ -179,6 +226,7 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
                         name: editor.name,
                         accountId: editor.accountId ? Number(editor.accountId) : null,
                         counting: editor.counting,
+                        creditLimit,
                     }),
                 },
             );
@@ -238,12 +286,14 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
     useVisibleTask$(
         () => {
             void load();
+            void loadUsage();
         },
         {
             strategy: 'document-ready',
         },
     );
 
+    const month = currentMonth();
     const creditAccounts = data.value ?? [];
     const accountsById: Record<number, CreditAccountOption> = Object.fromEntries(
         props.accounts.map((account) => [account.id, account]),
@@ -252,6 +302,7 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
         .filter((creditAccount) => creditAccount.id !== editor.id)
         .map((creditAccount) => creditAccount.accountId);
     const selectedCounting = countingChoices.find((choice) => choice.value === editor.counting);
+    const kr = (minor: number) => (props.hidden ? maskedAmount : formatKr(minor));
 
     return (
         <section class="accounts-section cal-shell credit-section" aria-labelledby="credit-title">
@@ -383,6 +434,27 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
                                 </div>
                                 {selectedCounting && <p class="cat-hint">{selectedCounting.hint}</p>}
                             </fieldset>
+
+                            <div class="cat-field">
+                                <label for="credit-limit" class="cat-label">
+                                    Credit limit in kr
+                                </label>
+                                <input
+                                    id="credit-limit"
+                                    class="cat-input"
+                                    type="text"
+                                    inputMode="decimal"
+                                    placeholder="For example 10 000"
+                                    aria-describedby="credit-limit-hint"
+                                    value={editor.creditLimit}
+                                    onInput$={(_, element) => {
+                                        editor.creditLimit = element.value;
+                                    }}
+                                />
+                                <span id="credit-limit-hint" class="cat-hint">
+                                    Optional, only for you to keep track. Going over is fine.
+                                </span>
+                            </div>
                         </div>
 
                         {editor.error && (
@@ -419,9 +491,8 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
                 !editor.open && (
                     <div class="overview-panel">
                         <p class="cal-empty">
-                            No credit accounts yet. Create one and link it to the account your credit
-                            runs through, then choose whether it counts as neutral or as money in and
-                            out.
+                            No credit accounts yet. Create one, link it to the account your credit runs
+                            through, and choose how its transactions count.
                         </p>
                     </div>
                 )
@@ -429,6 +500,21 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
                 <div class="accounts-grid">
                     {creditAccounts.map((creditAccount) => {
                         const account = accountsById[creditAccount.accountId];
+                        const used = monthTransactions.value
+                            ? creditUsed(
+                                  monthTransactions.value.filter(
+                                      (transaction) =>
+                                          transaction.accountId === creditAccount.accountId &&
+                                          transaction.currency === (account?.currency ?? 'SEK'),
+                                  ),
+                                  creditAccount.counting,
+                              )
+                            : null;
+                        const limit =
+                            creditAccount.creditLimit != null
+                                ? Math.round(creditAccount.creditLimit * 100)
+                                : null;
+                        const over = used !== null && limit !== null && used > limit;
 
                         return (
                             <article
@@ -451,6 +537,52 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[] }>((p
                                 <p class="account-purpose" title={accountLabel(account)}>
                                     {`Linked to ${accountLabel(account)}`}
                                 </p>
+
+                                {used === null ? (
+                                    <p class="credit-note">
+                                        {usageError.value
+                                            ? `Could not load ${month.name}'s transactions.`
+                                            : `Adding up ${month.name}…`}
+                                    </p>
+                                ) : limit === null ? (
+                                    <>
+                                        <div class="card-balance">
+                                            {kr(used)} <span>kr</span>
+                                        </div>
+                                        <p class="credit-note">
+                                            Used in {month.name}. Add a credit limit to see what is
+                                            left.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div class="card-balance">
+                                            {kr(Math.abs(limit - used))} <span>kr</span>
+                                        </div>
+                                        <p class={{ 'credit-note': true, 'credit-over': over }}>
+                                            {over && <Icon name="info" />}
+                                            {over ? 'over the credit limit' : 'left to use'}
+                                        </p>
+                                        <div
+                                            class={{ 'credit-meter': true, 'credit-meter-over': over }}
+                                            aria-hidden="true"
+                                        >
+                                            <span
+                                                style={{
+                                                    width: `${
+                                                        limit > 0 ? Math.min(100, (used / limit) * 100) : 100
+                                                    }%`,
+                                                }}
+                                            />
+                                        </div>
+                                        <div class="card-footer">
+                                            <span>Used in {month.name}</span>
+                                            <strong>
+                                                {kr(used)} of {kr(limit)} kr
+                                            </strong>
+                                        </div>
+                                    </>
+                                )}
 
                                 {confirmingDelete.value === creditAccount.id ? (
                                     <div class="credit-actions" role="group" aria-label="Confirm delete">

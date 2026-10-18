@@ -594,6 +594,21 @@
     color: #9fd8aa;
 }
 
+.cal-credit-badge {
+    max-width: 12em;
+    overflow: hidden;
+    border-color: #4a5466;
+    text-overflow: ellipsis;
+    vertical-align: -3px;
+    color: var(--cal-ink-2);
+}
+
+.cal-breakdown-static,
+.cal-breakdown-static:hover {
+    background: none;
+    cursor: default;
+}
+
 .cal-tag-button {
     padding: 0;
     cursor: pointer;

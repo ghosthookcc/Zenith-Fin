@@ -3,6 +3,7 @@ import { $, component$, sync$, useSignal, useStore, useVisibleTask$ } from '@bui
 import { CategoryBreakdown, type CategoryBreakdownRow } from './CategoryBreakdown';
 import { Icon } from './Icon';
 import { accountColors } from '../utils/accounts';
+import { countedAmount, type CreditAccountRule, uncountedStatuses } from '../utils/credit';
 
 interface CalendarAccount {
     id: number;
@@ -41,19 +42,12 @@ interface CalendarTag {
     isSystem: boolean;
 }
 
-interface CalendarCreditAccount {
-    id: number;
-    name: string;
-    accountId: number;
-    counting: string;
-}
-
 interface TransactionsResponse {
     from: string;
     to: string;
     accounts: CalendarAccount[];
     tags: CalendarTag[];
-    creditAccounts?: CalendarCreditAccount[];
+    creditAccounts?: CreditAccountRule[];
     transactions: CalendarTransaction[];
 }
 
@@ -106,8 +100,6 @@ interface DaySummary {
 }
 
 const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
-const uncountedStatuses = ['CNCL', 'RJCT', 'SCHD'];
 
 const inactiveAccountColor = '#5d6678';
 const maskedAmount = '•• •••,••';
@@ -245,23 +237,61 @@ function mostCommonCurrency(transactions: CalendarTransaction[], fallback: strin
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? fallback;
 }
 
+function flowAmount(
+    transaction: CalendarTransaction,
+    excludedTagIds: number[],
+    creditByAccount: Record<number, CreditAccountRule>,
+): number | null {
+    const creditAccount = creditByAccount[transaction.accountId];
+
+    if (creditAccount) {
+        return countedAmount(transaction.amount, creditAccount.counting);
+    }
+
+    return excludedTagIds.includes(transaction.tagId ?? uncategorized.id) ? null : transaction.amount;
+}
+
 function isCounted(
     transaction: CalendarTransaction,
     excludedTagIds: number[],
-    neutralAccountIds: number[],
+    creditByAccount: Record<number, CreditAccountRule>,
 ): boolean {
     return (
         !uncountedStatuses.includes(transaction.status) &&
-        !excludedTagIds.includes(transaction.tagId ?? uncategorized.id) &&
-        !neutralAccountIds.includes(transaction.accountId)
+        flowAmount(transaction, excludedTagIds, creditByAccount) !== null
     );
+}
+
+function creditTitle(creditAccount: CreditAccountRule): string {
+    switch (creditAccount.counting) {
+        case 'NEUTRAL':
+            return `Not counted, because ${creditAccount.name} is neutral`;
+        case 'OUT':
+            return `Counted as money out on ${creditAccount.name}`;
+        case 'IN':
+            return `Counted as money in on ${creditAccount.name}`;
+        default:
+            return `Counted as money in or out on ${creditAccount.name}`;
+    }
+}
+
+function creditCategory(creditAccount: CreditAccountRule): CalendarTag {
+    return {
+        id: -creditAccount.id,
+        key: null,
+        name: creditAccount.name,
+        icon: 'wallet',
+        color: '#8792a5',
+        kind: 'SPENDING',
+        isSystem: false,
+    };
 }
 
 function summarizeDays(
     transactions: CalendarTransaction[],
     currency: string,
     excludedTagIds: number[],
-    neutralAccountIds: number[],
+    creditByAccount: Record<number, CreditAccountRule>,
 ): Map<string, DaySummary> {
     const days = new Map<string, DaySummary>();
 
@@ -275,8 +305,12 @@ function summarizeDays(
 
         day.transactions.push(transaction);
 
-        if (isCounted(transaction, excludedTagIds, neutralAccountIds)) {
-            const minor = Math.round(transaction.amount * 100);
+        const amount = uncountedStatuses.includes(transaction.status)
+            ? null
+            : flowAmount(transaction, excludedTagIds, creditByAccount);
+
+        if (amount !== null) {
+            const minor = Math.round(amount * 100);
 
             if (transaction.currency !== currency) {
                 day.otherCurrencies += 1;
@@ -297,28 +331,36 @@ function spendingByCategory(
     transactions: CalendarTransaction[],
     currency: string,
     tagsById: Record<number, CalendarTag>,
-    neutralAccountIds: number[],
+    creditByAccount: Record<number, CreditAccountRule>,
 ): { tag: CalendarTag; amount: number }[] {
-    const totals = new Map<number, number>();
+    const totals = new Map<number, { tag: CalendarTag; amount: number }>();
 
     for (const transaction of transactions) {
-        const tag = tagsById[transaction.tagId ?? uncategorized.id] ?? uncategorized;
-
-        if (
-            tag.kind !== 'SPENDING' ||
-            transaction.currency !== currency ||
-            uncountedStatuses.includes(transaction.status) ||
-            neutralAccountIds.includes(transaction.accountId)
-        ) {
+        if (transaction.currency !== currency || uncountedStatuses.includes(transaction.status)) {
             continue;
         }
 
-        totals.set(tag.id, (totals.get(tag.id) ?? 0) - Math.round(transaction.amount * 100));
+        const tag = tagsById[transaction.tagId ?? uncategorized.id] ?? uncategorized;
+        const creditAccount = creditByAccount[transaction.accountId];
+        const amount = creditAccount
+            ? countedAmount(transaction.amount, creditAccount.counting)
+            : tag.kind === 'SPENDING'
+              ? transaction.amount
+              : null;
+
+        if (amount === null) {
+            continue;
+        }
+
+        const bucket = tag.kind === 'SPENDING' ? tag : creditCategory(creditAccount!);
+        const total = totals.get(bucket.id) ?? { tag: bucket, amount: 0 };
+
+        total.amount -= Math.round(amount * 100);
+        totals.set(bucket.id, total);
     }
 
-    return Array.from(totals.entries())
-        .filter(([, amount]) => amount > 0)
-        .map(([id, amount]) => ({ tag: tagsById[id] ?? uncategorized, amount }))
+    return Array.from(totals.values())
+        .filter((total) => total.amount > 0)
         .sort((a, b) => b.amount - a.amount);
 }
 
@@ -773,9 +815,9 @@ export const TransactionCalendar = component$(() => {
         tags.map((tag) => [tag.id, tag]),
     );
     const transferTagIds = tags.filter((tag) => tag.kind === 'TRANSFER').map((tag) => tag.id);
-    const neutralAccountIds = (data.value?.creditAccounts ?? [])
-        .filter((creditAccount) => creditAccount.counting === 'NEUTRAL')
-        .map((creditAccount) => creditAccount.accountId);
+    const creditByAccount: Record<number, CreditAccountRule> = Object.fromEntries(
+        (data.value?.creditAccounts ?? []).map((creditAccount) => [creditAccount.accountId, creditAccount]),
+    );
 
     const filteredAccount = accountFilter.value === 'all' ? null : Number(accountFilter.value);
     const direction =
@@ -789,8 +831,13 @@ export const TransactionCalendar = component$(() => {
         transferTagIds.includes(transaction.tagId ?? uncategorized.id);
     const inDirection = (transaction: CalendarTransaction) =>
         direction === null || (direction === 'in' ? transaction.amount > 0 : transaction.amount < 0);
-    const isNeutralCredit = (transaction: CalendarTransaction) =>
-        neutralAccountIds.includes(transaction.accountId);
+    const creditOf = (transaction: CalendarTransaction): CreditAccountRule | undefined =>
+        creditByAccount[transaction.accountId];
+    const inFlowDirection = (transaction: CalendarTransaction) => {
+        const amount = flowAmount(transaction, transferTagIds, creditByAccount);
+
+        return amount !== null && (direction === 'in' ? amount > 0 : amount < 0);
+    };
 
     const accountTransactions = (covered ? data.value!.transactions : []).filter(
         (transaction) => filteredAccount === null || transaction.accountId === filteredAccount,
@@ -798,7 +845,7 @@ export const TransactionCalendar = component$(() => {
     const hasUncategorized = accountTransactions.some((transaction) => !transaction.tagId);
     const visible = accountTransactions.filter((transaction) =>
         direction !== null
-            ? inDirection(transaction) && !isTransfer(transaction) && !isNeutralCredit(transaction)
+            ? inFlowDirection(transaction)
             : filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag,
     );
     const monthTransactions = visible.filter((transaction) =>
@@ -810,7 +857,7 @@ export const TransactionCalendar = component$(() => {
             accounts[0]?.currency ??
             'SEK',
     );
-    const days = summarizeDays(visible, currency, excludedTagIds, neutralAccountIds);
+    const days = summarizeDays(visible, currency, excludedTagIds, creditByAccount);
     const excludedTransfers =
         filteredTag !== null
             ? 0
@@ -818,26 +865,38 @@ export const TransactionCalendar = component$(() => {
                   (transaction) =>
                       transaction.date.startsWith(monthPrefix) &&
                       isTransfer(transaction) &&
-                      !isNeutralCredit(transaction) &&
+                      !creditOf(transaction) &&
                       inDirection(transaction),
               ).length;
     const excludedCredit = accountTransactions.filter(
         (transaction) =>
             transaction.date.startsWith(monthPrefix) &&
-            isNeutralCredit(transaction) &&
+            creditOf(transaction)?.counting === 'NEUTRAL' &&
             inDirection(transaction) &&
             (filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag),
     ).length;
+    const recountedCredit = monthTransactions.filter((transaction) => {
+        const creditAccount = creditOf(transaction);
+
+        if (!creditAccount || creditAccount.counting === 'NEUTRAL') {
+            return false;
+        }
+
+        const amount = countedAmount(transaction.amount, creditAccount.counting) ?? 0;
+
+        return Math.sign(amount) !== Math.sign(transaction.amount) || isTransfer(transaction);
+    }).length;
 
     const categorySpending = spendingByCategory(
         accountTransactions.filter((transaction) => transaction.date.startsWith(monthPrefix)),
         currency,
         tagsById,
-        neutralAccountIds,
+        creditByAccount,
     );
     const totalSpending = categorySpending.reduce((sum, category) => sum + category.amount, 0);
     const breakdownRows: CategoryBreakdownRow[] = categorySpending.map(({ tag, amount }) => ({
         id: tag.id,
+        selectable: tag.id >= 0,
         name: tag.name,
         icon: tag.icon,
         color: tag.color,
@@ -1110,6 +1169,14 @@ export const TransactionCalendar = component$(() => {
                     </p>
                 )}
 
+                {recountedCredit > 0 && (
+                    <p class="cal-note">
+                        {recountedCredit} {recountedCredit === 1 ? 'transaction' : 'transactions'} on
+                        credit accounts {recountedCredit === 1 ? 'is' : 'are'} counted as the credit
+                        account is set up, not by {recountedCredit === 1 ? 'its' : 'their'} direction.
+                    </p>
+                )}
+
                 {otherCurrencies > 0 && (
                     <p class="cal-note">
                         Totals are in {currency}. {otherCurrencies}{' '}
@@ -1377,6 +1444,14 @@ export const TransactionCalendar = component$(() => {
                                                                             Learned
                                                                         </span>
                                                                     )}
+                                                                    {creditOf(transaction) && (
+                                                                        <span
+                                                                            class="cal-ai-badge cal-credit-badge"
+                                                                            title={creditTitle(creditOf(transaction)!)}
+                                                                        >
+                                                                            {creditOf(transaction)!.name}
+                                                                        </span>
+                                                                    )}
                                                                     {' · '}
                                                                     <span
                                                                         class="cal-account-dot"
@@ -1407,7 +1482,7 @@ export const TransactionCalendar = component$(() => {
                                                                         'cal-tx-uncounted': !isCounted(
                                                                             transaction,
                                                                             excludedTagIds,
-                                                                            neutralAccountIds,
+                                                                            creditByAccount,
                                                                         ),
                                                                         'cal-tx-void':
                                                                             transaction.status === 'CNCL' ||

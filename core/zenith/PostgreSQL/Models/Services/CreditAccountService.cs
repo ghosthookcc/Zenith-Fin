@@ -20,11 +20,13 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private sealed record ValidCreditAccount(string Name,
                                                  long AccountId,
-                                                 string Counting);
+                                                 string Counting,
+                                                 decimal? CreditLimit);
 
         private const int MaxNameLength = 40;
+        private const decimal MaxCreditLimit = 1_000_000_000m;
 
-        private static readonly string[] Countings = { "NEUTRAL", "FLOW" };
+        private static readonly string[] Countings = { "NEUTRAL", "IN", "OUT", "FLOW" };
 
         private static readonly CreditAccountResult Unauthorized = new(StatusCodes.Status401Unauthorized, "No user found for session");
 
@@ -65,7 +67,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             try
             {
-                creditAccountId = await _creditAccountRepository.InsertCreditAccountAsync(userId.Value, valid.Name, valid.AccountId, valid.Counting);
+                creditAccountId = await _creditAccountRepository.InsertCreditAccountAsync(userId.Value, valid.Name, valid.AccountId, valid.Counting, valid.CreditLimit);
             }
             catch (PostgresException errno) when (errno.SqlState == PostgresErrorCodes.UniqueViolation)
             {
@@ -93,7 +95,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             try
             {
-                bool updated = await _creditAccountRepository.UpdateCreditAccountAsync(userId.Value, creditAccountId, valid.Name, valid.AccountId, valid.Counting);
+                bool updated = await _creditAccountRepository.UpdateCreditAccountAsync(userId.Value, creditAccountId, valid.Name, valid.AccountId, valid.Counting, valid.CreditLimit);
 
                 if (!updated) return NotFound();
             }
@@ -154,9 +156,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
             string counting = request.Counting?.Trim().ToUpperInvariant() ?? "";
 
             if (!Countings.Contains(counting))
-                return (null, BadRequest("Choose whether the credit account counts as neutral or as money in and out"));
+                return (null, BadRequest("Choose whether the credit account counts as neutral, money in, money out, or money in and out"));
 
-            return (new ValidCreditAccount(name, accountId, counting), null);
+            if (request.CreditLimit is < 0 or > MaxCreditLimit)
+                return (null, BadRequest("The credit limit must be between 0 and 1 000 000 000 kr"));
+
+            decimal? creditLimit = request.CreditLimit is decimal limit ? Math.Round(limit, 2, MidpointRounding.AwayFromZero) : null;
+
+            return (new ValidCreditAccount(name, accountId, counting, creditLimit), null);
         }
 
         private static CreditAccountResult BadRequest(string message)

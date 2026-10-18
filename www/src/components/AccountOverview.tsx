@@ -772,8 +772,10 @@ export const AccountOverview = component$(() => {
                                     name: account.name,
                                     bank: account.bank,
                                     iban: account.iban,
+                                    currency: account.currency,
                                     color: account.color,
                                 }))}
+                                hidden={hidden.value}
                             />
                         </>
                     )}
