@@ -129,7 +129,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    ON bc.id = a.bank_connection_id
                                WHERE bc.user_id = @UserId
                                  AND (t.tag_source IS NULL
-                                      OR (@IncludeRuleTagged AND t.tag_source = 'RULE'::"TagSource"));
+                                      OR (@IncludeRuleTagged AND t.tag_source IN ('RULE'::"TagSource", 'AI'::"TagSource")));
                                """;
 
             using var connection = _connectionFactory.Create();
@@ -160,7 +160,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                  AND a.id = t.account_id
                                  AND bc.id = a.bank_connection_id
                                  AND bc.user_id = @UserId
-                                 AND (t.tag_source IS NULL OR t.tag_source = 'RULE'::"TagSource");
+                                 AND t.tag_source IS DISTINCT FROM 'USER'::"TagSource";
                                """;
 
             using var connection = _connectionFactory.Create();
@@ -171,6 +171,92 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 TagIds = tags.Select(tag => tag.TagId).ToArray(),
                 TaggedAt = taggedAt
             });
+        }
+
+        public async Task<AiCandidateRow[]> GetAiCandidatesAsync(long userId,
+                                                                 long otherTagId)
+        {
+            const string sql = """
+                               SELECT
+                                   t.id AS "Id",
+                                   t.counterparty_name AS "CounterpartyName",
+                                   COALESCE(t.remittance_information, ARRAY[]::text[]) AS "RemittanceInformation",
+                                   t.bank_transaction_code AS "BankTransactionCode",
+                                   t.credit_debit_indicator AS "CreditDebitIndicator",
+                                   t.amount AS "Amount",
+                                   t.currency AS "Currency"
+                               FROM "Transaction" t
+                               INNER JOIN "Account" a
+                                   ON a.id = t.account_id
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               WHERE bc.user_id = @UserId
+                                 AND t.tag_source = 'RULE'::"TagSource"
+                                 AND t.tag_id = @OtherTagId
+                               ORDER BY t.occurred_on DESC, t.id DESC;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            IEnumerable<AiCandidateRow> candidates = await connection.QueryAsync<AiCandidateRow>(sql, new
+            {
+                UserId = userId,
+                OtherTagId = otherTagId
+            });
+
+            return candidates.ToArray();
+        }
+
+        public async Task<int> ApplyAiTagsAsync(long userId,
+                                                IReadOnlyList<(long TransactionId, long TagId)> tags,
+                                                long otherTagId,
+                                                DateTime taggedAt)
+        {
+            if (taggedAt.Kind != DateTimeKind.Utc) throw new ArgumentException("Tag time must be UTC.", nameof(taggedAt));
+
+            const string sql = """
+                               UPDATE "Transaction" AS t
+                               SET tag_id = assigned.tag_id,
+                                   tag_source = 'AI'::"TagSource",
+                                   tagged_at = @TaggedAt
+                               FROM unnest(@TransactionIds, @TagIds) AS assigned(transaction_id, tag_id),
+                                    "Account" a,
+                                    "BankConnection" bc
+                               WHERE t.id = assigned.transaction_id
+                                 AND a.id = t.account_id
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId
+                                 AND t.tag_source = 'RULE'::"TagSource"
+                                 AND t.tag_id = @OtherTagId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.ExecuteAsync(sql, new
+            {
+                UserId = userId,
+                TransactionIds = tags.Select(tag => tag.TransactionId).ToArray(),
+                TagIds = tags.Select(tag => tag.TagId).ToArray(),
+                OtherTagId = otherTagId,
+                TaggedAt = taggedAt
+            });
+        }
+
+        public async Task<int> ReopenAiOtherAsync(long userId,
+                                                  long otherTagId)
+        {
+            const string sql = """
+                               UPDATE "Transaction" AS t
+                               SET tag_source = 'RULE'::"TagSource"
+                               FROM "Account" a,
+                                    "BankConnection" bc
+                               WHERE a.id = t.account_id
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId
+                                 AND t.tag_source = 'AI'::"TagSource"
+                                 AND t.tag_id = @OtherTagId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.ExecuteAsync(sql, new { UserId = userId, OtherTagId = otherTagId });
         }
 
         public async Task ReplaceTransactionsAsync(long userId,

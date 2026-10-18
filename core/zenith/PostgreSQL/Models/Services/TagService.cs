@@ -20,6 +20,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly UserRepository _userRepository;
 
         private readonly CategorizationService _categorizationService;
+        private readonly AiCategorizationService _aiCategorizationService;
 
         private sealed record ValidTag(string Name,
                                        string Icon,
@@ -40,12 +41,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         public TagService(TagRepository tagRepository,
                           UserRepository userRepository,
-                          CategorizationService categorizationService)
+                          CategorizationService categorizationService,
+                          AiCategorizationService aiCategorizationService)
         {
             _tagRepository = tagRepository;
             _userRepository = userRepository;
 
             _categorizationService = categorizationService;
+            _aiCategorizationService = aiCategorizationService;
         }
 
         public async Task<TagDto.TagsResponse?> GetTagsAsync(string sessionId)
@@ -57,7 +60,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
             return new TagDto.TagsResponse
             {
                 Tags = await _tagRepository.GetTagsForUserAsync(userId.Value),
-                Usage = await _tagRepository.GetTagUsageAsync(userId.Value)
+                Usage = await _tagRepository.GetTagUsageAsync(userId.Value),
+                Ai = _aiCategorizationService.GetStatus(userId.Value)
             };
         }
 
@@ -131,7 +135,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (!await _tagRepository.DeleteTagAsync(userId.Value, tagId)) return NotFound();
 
-            await RecategorizeAsync(userId.Value);
+            await RecategorizeAsync(userId.Value, reopenAiOther: false);
 
             return new TagOperationResult(StatusCodes.Status200OK, null);
         }
@@ -139,17 +143,20 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private async Task<TagOperationResult> CompleteAsync(long userId,
                                                              long tagId)
         {
-            await RecategorizeAsync(userId);
+            await RecategorizeAsync(userId, reopenAiOther: true);
 
             TagDto.Tag? saved = (await _tagRepository.GetTagsForUserAsync(userId)).FirstOrDefault(tag => tag.Id == tagId);
 
             return saved == null ? NotFound() : new TagOperationResult(StatusCodes.Status200OK, null, saved);
         }
 
-        private async Task RecategorizeAsync(long userId)
+        private async Task RecategorizeAsync(long userId,
+                                             bool reopenAiOther)
         {
             try
             {
+                if (reopenAiOther) await _aiCategorizationService.ReopenOtherAsync(userId);
+
                 await _categorizationService.CategorizeAsync(userId, reviewRuleTags: true);
             }
             catch (Exception errno)

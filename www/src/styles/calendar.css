@@ -575,6 +575,20 @@
     height: 18px;
 }
 
+.cal-ai-badge {
+    display: inline-block;
+    margin-left: 5px;
+    padding: 0 5px;
+    border: 1px solid #4b5a7a;
+    border-radius: 4px;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    line-height: 1.45;
+    letter-spacing: 0.3px;
+    vertical-align: 1px;
+    color: #b8c4e6;
+}
+
 .cal-account-dot {
     display: inline-block;
     width: 6px;

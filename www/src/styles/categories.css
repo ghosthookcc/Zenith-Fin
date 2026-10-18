@@ -324,6 +324,45 @@
     column-gap: 24px;
 }
 
+.cat-ai-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 0 28px 22px;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--cal-ink-2);
+}
+
+.cat-ai-detail {
+    font-size: 0.8125rem;
+    color: var(--cal-muted);
+}
+
+.cat-ai-body .cat-error {
+    margin-top: 4px;
+}
+
+.cat-ai-state {
+    padding: 4px 10px;
+    border: 1px solid #3a4352;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    color: var(--cal-muted);
+}
+
+.cat-ai-on {
+    border-color: #4c7a55;
+    background: #1f3326;
+    color: #9fd8aa;
+}
+
+.cat-ai-problem {
+    border-color: #8a5a2e;
+    background: #33281b;
+    color: #f3c98b;
+}
+
 .cat-list-compact .cat-row {
     grid-template-columns: 34px minmax(0, 1fr);
     break-inside: avoid;
@@ -340,6 +379,10 @@
 
     .cat-panel-head {
         padding: 18px 18px 8px;
+    }
+
+    .cat-ai-body {
+        padding: 0 18px 18px;
     }
 
     .cat-list {

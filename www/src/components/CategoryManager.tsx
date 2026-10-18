@@ -13,9 +13,19 @@ interface Category {
     keywords: string[];
 }
 
+interface AiStatus {
+    enabled: boolean;
+    model: string;
+    provider: string;
+    lastRunAt?: string | null;
+    lastTagged?: number | null;
+    lastError?: string | null;
+}
+
 interface CategoriesResponse {
     tags: Category[];
     usage: Record<string, number>;
+    ai?: AiStatus | null;
 }
 
 interface Editor {
@@ -101,6 +111,15 @@ function parseKeywords(text: string): string[] {
 
 function usageLabel(count: number): string {
     return `${count} ${count === 1 ? 'transaction' : 'transactions'}`;
+}
+
+function formatTime(iso: string): string {
+    return new Intl.DateTimeFormat('en-GB', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+    }).format(new Date(iso));
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -591,6 +610,60 @@ export const CategoryManager = component$(() => {
                     </ul>
                 )}
             </section>
+
+            {data.value?.ai && (
+                <section class="overview-panel cat-panel cat-ai" aria-labelledby="cat-ai-title">
+                    <div class="cat-panel-head">
+                        <h2 id="cat-ai-title">
+                            <span class="tiny-mark" />
+                            Sorting with AI
+                        </h2>
+                        <span
+                            class={{
+                                'cat-ai-state': true,
+                                'cat-ai-on': data.value.ai.enabled && !data.value.ai.lastError,
+                                'cat-ai-problem': data.value.ai.enabled && !!data.value.ai.lastError,
+                            }}
+                        >
+                            {!data.value.ai.enabled
+                                ? 'Off'
+                                : data.value.ai.lastError
+                                  ? 'Needs attention'
+                                  : 'On'}
+                        </span>
+                    </div>
+
+                    <div class="cat-ai-body">
+                        <p>
+                            Your match words and the built-in rules go first. The AI sorts what they
+                            leave in Other the next time your banks sync.
+                        </p>
+
+                        {data.value.ai.enabled ? (
+                            <p class="cat-ai-detail">
+                                Using {data.value.ai.model} at {data.value.ai.provider}.
+                                {data.value.ai.lastRunAt &&
+                                    !data.value.ai.lastError &&
+                                    ` Last run ${formatTime(data.value.ai.lastRunAt)} sorted ${usageLabel(
+                                        data.value.ai.lastTagged ?? 0,
+                                    )}.`}
+                            </p>
+                        ) : (
+                            <p class="cat-ai-detail">
+                                Turn it on with "AI" in core/zenith/appsettings.Development.json: set
+                                Enabled to true, add your ApiKey, and restart the backend.
+                            </p>
+                        )}
+
+                        {data.value.ai.enabled && data.value.ai.lastError && (
+                            <p class="cat-error" role="alert">
+                                Last run {data.value.ai.lastRunAt ? formatTime(data.value.ai.lastRunAt) : ''}{' '}
+                                failed: {data.value.ai.lastError}
+                            </p>
+                        )}
+                    </div>
+                </section>
+            )}
 
             <section class="overview-panel cat-panel" aria-labelledby="cat-system-title">
                 <div class="cat-panel-head">

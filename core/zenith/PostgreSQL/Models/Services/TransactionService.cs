@@ -18,6 +18,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly TagRepository _tagRepository;
 
         private readonly CategorizationService _categorizationService;
+        private readonly AiCategorizationService _aiCategorizationService;
 
         private readonly EnableBankingWorkspace _workspace;
 
@@ -25,6 +26,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   UserRepository userRepository,
                                   TagRepository tagRepository,
                                   CategorizationService categorizationService,
+                                  AiCategorizationService aiCategorizationService,
                                   EnableBankingWorkspace workspace)
         {
             _transactionRepository = transactionRepository;
@@ -32,6 +34,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _tagRepository = tagRepository;
 
             _categorizationService = categorizationService;
+            _aiCategorizationService = aiCategorizationService;
 
             _workspace = workspace;
         }
@@ -101,6 +104,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                         }));
 
             await CategorizeAsync(userId.Value, reviewRuleTags: true);
+            await _aiCategorizationService.CategorizeAsync(userId.Value);
 
             return new TransactionDto.SyncResponse
             {

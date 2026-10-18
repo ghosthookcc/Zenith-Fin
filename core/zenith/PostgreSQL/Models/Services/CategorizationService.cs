@@ -12,6 +12,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly UserRepository _userRepository;
 
         private const string RuleSource = "RULE";
+        private const string AiSource = "AI";
 
         public CategorizationService(TransactionRepository transactionRepository,
                                      TagRepository tagRepository,
@@ -62,6 +63,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 long tagId;
 
                 if (match.UserTagId != null) tagId = match.UserTagId.Value;
+                else if (candidate.TagSource == AiSource) continue;
                 else if (match.Key == null || !systemTagIds.TryGetValue(match.Key, out tagId)) continue;
 
                 if (candidate.TagSource == RuleSource && candidate.TagId == tagId) continue;

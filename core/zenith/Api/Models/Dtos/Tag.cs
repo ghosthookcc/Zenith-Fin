@@ -23,10 +23,21 @@ namespace ZenithFin.Api.Models.Dtos
             public string[]? Keywords { get; set; }
         }
 
+        public sealed class AiStatus
+        {
+            public bool Enabled { get; set; }
+            public string Model { get; set; } = string.Empty;
+            public string Provider { get; set; } = string.Empty;
+            public DateTime? LastRunAt { get; set; }
+            public int? LastTagged { get; set; }
+            public string? LastError { get; set; }
+        }
+
         public sealed class TagsResponse
         {
             public IReadOnlyList<Tag> Tags { get; set; } = Array.Empty<Tag>();
             public IReadOnlyDictionary<long, int> Usage { get; set; } = new Dictionary<long, int>();
+            public AiStatus Ai { get; set; } = new();
         }
     }
 }

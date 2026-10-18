@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Data;
 using ZenithFin.Api.Auth;
 using ZenithFin.EnableBanking;
+using ZenithFin.AI;
 using ZenithFin.PostgreSQL;
 using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Repositories;
@@ -33,6 +34,10 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CategorizationService>();
             builder.Services.AddSingleton<TagService>();
+
+            builder.Services.Configure<AiOptions>(builder.Configuration.GetSection("AI"));
+            builder.Services.AddSingleton<AiClient>();
+            builder.Services.AddSingleton<AiCategorizationService>();
 
             builder.Services.AddSingleton<JwtAuthenticator>();
 

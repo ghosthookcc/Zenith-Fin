@@ -28,6 +28,7 @@ interface CalendarTransaction {
     remittanceInformation: string[];
     bankTransactionCode?: string | null;
     tagId?: number | null;
+    tagSource?: string | null;
 }
 
 interface CalendarTag {
@@ -1135,7 +1136,16 @@ export const TransactionCalendar = component$(() => {
                                                                     {title}
                                                                 </span>
                                                                 <span class="cal-tx-meta">
-                                                                    {`${tag.name} · `}
+                                                                    {tag.name}
+                                                                    {transaction.tagSource === 'AI' && (
+                                                                        <span
+                                                                            class="cal-ai-badge"
+                                                                            title="Sorted by AI"
+                                                                        >
+                                                                            AI
+                                                                        </span>
+                                                                    )}
+                                                                    {' · '}
                                                                     <span
                                                                         class="cal-account-dot"
                                                                         style={{
