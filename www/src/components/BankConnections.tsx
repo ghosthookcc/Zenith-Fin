@@ -13,6 +13,49 @@ export interface BankConnection {
     transactions: number;
 }
 
+export interface AvailableBank {
+    bank: string;
+    country: string;
+    psuType: string;
+}
+
+export async function bankLoginUrl(bank: AvailableBank): Promise<string> {
+    const response = await fetch('/api/aspsps', {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify([{ bank: bank.bank, country: bank.country, psuType: bank.psuType }]),
+    });
+
+    const payload = (await response.json().catch(() => null)) as {
+        message?: string;
+        urls?: { url?: string }[];
+    } | null;
+    const url = payload?.urls?.[0]?.url;
+
+    if (!response.ok || typeof url !== 'string') {
+        throw new Error(payload?.message || `Could not open ${bank.bank}`);
+    }
+
+    return url;
+}
+
+export function availableBanksFrom(payload: unknown): AvailableBank[] {
+    const groups = (payload as { aspsps?: { aspsps?: Record<string, { country: string; psuType: string }>[] } } | null)
+        ?.aspsps?.aspsps ?? [];
+
+    return groups.flatMap((group) =>
+        Object.entries(group).map(([bank, details]) => ({
+            bank,
+            country: details.country,
+            psuType: details.psuType,
+        })),
+    );
+}
+
 function consentActive(connection: BankConnection, now: number): boolean {
     return connection.status === 'ACTIVE' && Date.parse(connection.consentExpiresAt) > now;
 }
@@ -29,11 +72,14 @@ function accessLabel(connection: BankConnection, now: number): string {
 
 interface SectionProps {
     connections: BankConnection[] | null;
+    available: AvailableBank[] | null;
     reconnectingId: number | null;
     removingId: number | null;
+    connectingBank: string | null;
     error: string | null;
     onReconnect$: QRL<(connection: BankConnection) => void>;
     onRemove$: QRL<(connection: BankConnection) => void>;
+    onAdd$: QRL<(bank: AvailableBank) => void>;
 }
 
 function count(value: number, singular: string, plural: string): string {
@@ -42,8 +88,10 @@ function count(value: number, singular: string, plural: string): string {
 
 export const BankConnectionsSection = component$<SectionProps>((props) => {
     const confirming = useSignal<number | null>(null);
+    const adding = useSignal(false);
     const now = Date.now();
     const connections = props.connections ?? [];
+    const available = props.available;
 
     return (
         <section class="accounts-section cal-shell banks-section" aria-labelledby="banks-title">
@@ -57,7 +105,68 @@ export const BankConnectionsSection = component$<SectionProps>((props) => {
                         or remove one to delete its data from Zenith.
                     </p>
                 </div>
+
+                <button
+                    type="button"
+                    class="cat-primary bank-add-button"
+                    aria-expanded={adding.value}
+                    aria-controls="bank-add-panel"
+                    onClick$={() => {
+                        adding.value = !adding.value;
+                    }}
+                >
+                    Add a bank
+                </button>
             </div>
+
+            {adding.value && (
+                <div id="bank-add-panel" class="overview-panel bank-add" role="group" aria-labelledby="bank-add-title">
+                    <div class="bank-add-head">
+                        <h3 id="bank-add-title">Add a bank</h3>
+                        <button
+                            type="button"
+                            class="cal-chip"
+                            onClick$={() => {
+                                adding.value = false;
+                            }}
+                        >
+                            Close
+                        </button>
+                    </div>
+
+                    {available === null ? (
+                        <p class="cal-empty">Loading the banks you can add…</p>
+                    ) : available.length === 0 ? (
+                        <p class="cal-empty">Every bank Zenith supports is already connected.</p>
+                    ) : (
+                        <ul class="bank-list">
+                            {available.map((bank) => (
+                                <li key={bank.bank} class="bank-row bank-row-add">
+                                    <span class="bank-monogram" aria-hidden="true">
+                                        {bank.bank.charAt(0).toUpperCase()}
+                                    </span>
+                                    <span class="bank-row-main">
+                                        <strong>{bank.bank}</strong>
+                                        <small>{`${bank.country} · ${bank.psuType === 'personal' ? 'Personal' : bank.psuType}`}</small>
+                                    </span>
+                                    <button
+                                        type="button"
+                                        class="cal-chip"
+                                        disabled={props.connectingBank !== null || props.reconnectingId !== null}
+                                        onClick$={() => props.onAdd$(bank)}
+                                    >
+                                        {props.connectingBank === bank.bank ? 'Opening the bank…' : 'Connect'}
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+
+                    <p class="bank-add-note">
+                        You log in at the bank and choose which accounts to share with Zenith.
+                    </p>
+                </div>
+            )}
 
             {props.error && (
                 <div class="cal-alert" role="alert">
@@ -72,7 +181,7 @@ export const BankConnectionsSection = component$<SectionProps>((props) => {
                 {props.connections === null ? (
                     <p class="cal-empty">Loading your banks…</p>
                 ) : connections.length === 0 ? (
-                    <p class="cal-empty">No banks are connected to Zenith yet.</p>
+                    <p class="cal-empty">No banks are connected to Zenith yet. Use Add a bank to connect one.</p>
                 ) : (
                     <ul class="bank-list">
                         {connections.map((connection) => {

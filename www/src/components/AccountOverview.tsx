@@ -1,6 +1,13 @@
 import { component$, $, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 
-import { BankConnectionsSection, ReconnectMenu, type BankConnection } from './BankConnections';
+import {
+    availableBanksFrom,
+    BankConnectionsSection,
+    bankLoginUrl,
+    ReconnectMenu,
+    type AvailableBank,
+    type BankConnection,
+} from './BankConnections';
 import { CreditAccounts } from './CreditAccounts';
 import { Icon } from './Icon';
 import { accountColors as colors } from '../utils/accounts';
@@ -152,6 +159,8 @@ export const AccountOverview = component$(() => {
     const connections = useSignal<BankConnection[] | null>(null);
     const reconnectingId = useSignal<number | null>(null);
     const removingId = useSignal<number | null>(null);
+    const availableBanks = useSignal<AvailableBank[] | null>(null);
+    const connectingBank = useSignal<string | null>(null);
     const bankError = useSignal<string | null>(null);
     const bankNotice = useSignal<string | null>(null);
 
@@ -186,81 +195,50 @@ export const AccountOverview = component$(() => {
         bankError.value = null;
 
         try {
-            const response = await fetch('/api/aspsps', {
-                method: 'POST',
-                headers: {
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/json',
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify([
-                    {
-                        bank: connection.bank,
-                        country: connection.country,
-                        psuType: connection.psuType,
-                    },
-                ]),
-            });
-
-            const payload = (await response.json().catch(() => null)) as {
-                message?: string;
-                urls?: { url?: string }[];
-            } | null;
-            const url = payload?.urls?.[0]?.url;
-
-            if (!response.ok || typeof url !== 'string') {
-                throw new Error(payload?.message || `Could not start reconnecting ${connection.bank}`);
-            }
-
-            window.location.assign(url);
+            window.location.assign(await bankLoginUrl(connection));
         } catch (err) {
             bankError.value = err instanceof Error ? err.message : `Could not start reconnecting ${connection.bank}.`;
             reconnectingId.value = null;
         }
     });
 
-    const removeBank = $(async (connection: BankConnection) => {
-        if (removingId.value !== null) {
-            return;
-        }
-
-        removingId.value = connection.id;
-        bankError.value = null;
-        bankNotice.value = null;
-
+    const loadAvailableBanks = $(async () => {
         try {
-            const response = await fetch(`/api/aspsps/connections/${connection.id}`, {
-                method: 'DELETE',
+            const response = await fetch('/api/aspsps/inactive', {
+                method: 'GET',
                 headers: {
                     Accept: 'application/json',
                 },
                 credentials: 'same-origin',
+                cache: 'no-store',
             });
 
-            const payload = (await response.json().catch(() => null)) as {
-                message?: string;
-                bank?: string;
-                accounts?: number;
-                transactions?: number;
-                revoked?: boolean;
-            } | null;
+            const payload = (await response.json().catch(() => null)) as { success?: boolean; message?: string } | null;
 
-            if (!response.ok || !payload) {
-                throw new Error(payload?.message || `Could not remove ${connection.bank}`);
+            if (!response.ok || !payload?.success) {
+                throw new Error(payload?.message || `Could not load the banks you can add (${response.status})`);
             }
 
-            bankNotice.value = `${connection.bank} is removed from Zenith, along with ${payload.accounts ?? 0} accounts and ${
-                payload.transactions ?? 0
-            } transactions.${
-                payload.revoked ? '' : " Zenith couldn't end its access at the bank, so it ends when the consent runs out."
-            }`;
-
-            await loadConnections();
-            await loadAccounts();
+            availableBanks.value = availableBanksFrom(payload);
         } catch (err) {
-            bankError.value = err instanceof Error ? err.message : `Could not remove ${connection.bank}.`;
-        } finally {
-            removingId.value = null;
+            availableBanks.value = [];
+            bankError.value = err instanceof Error ? err.message : 'Could not load the banks you can add.';
+        }
+    });
+
+    const connectBank = $(async (bank: AvailableBank) => {
+        if (connectingBank.value !== null || reconnectingId.value !== null) {
+            return;
+        }
+
+        connectingBank.value = bank.bank;
+        bankError.value = null;
+
+        try {
+            window.location.assign(await bankLoginUrl(bank));
+        } catch (err) {
+            bankError.value = err instanceof Error ? err.message : `Could not open ${bank.bank}.`;
+            connectingBank.value = null;
         }
     });
 
@@ -399,12 +377,61 @@ export const AccountOverview = component$(() => {
         }
     });
 
+    const removeBank = $(async (connection: BankConnection) => {
+        if (removingId.value !== null) {
+            return;
+        }
+
+        removingId.value = connection.id;
+        bankError.value = null;
+        bankNotice.value = null;
+
+        try {
+            const response = await fetch(`/api/aspsps/connections/${connection.id}`, {
+                method: 'DELETE',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+                message?: string;
+                bank?: string;
+                accounts?: number;
+                transactions?: number;
+                revoked?: boolean;
+            } | null;
+
+            if (!response.ok || !payload) {
+                throw new Error(payload?.message || `Could not remove ${connection.bank}`);
+            }
+
+            const accounts = payload.accounts ?? 0;
+            const transactions = payload.transactions ?? 0;
+
+            bankNotice.value = `${connection.bank} is removed from Zenith, along with ${accounts} ${
+                accounts === 1 ? 'account' : 'accounts'
+            } and ${transactions} ${transactions === 1 ? 'transaction' : 'transactions'}.${
+                payload.revoked ? '' : " Zenith couldn't end its access at the bank, so it ends when the consent runs out."
+            }`;
+
+            await loadConnections();
+            await loadAvailableBanks();
+            await loadAccounts();
+        } catch (err) {
+            bankError.value = err instanceof Error ? err.message : `Could not remove ${connection.bank}.`;
+        } finally {
+            removingId.value = null;
+        }
+    });
+
     useVisibleTask$(
         () => {
             const status = new URLSearchParams(window.location.search).get('bank');
 
             if (status === 'connected') {
-                bankNotice.value = 'Your bank is reconnected. Any new accounts you shared now show up here.';
+                bankNotice.value = 'Your bank is connected. The accounts you shared with Zenith show up here.';
             } else if (status === 'failed') {
                 bankError.value = "The bank connection didn't go through. Try reconnecting again.";
             }
@@ -415,6 +442,7 @@ export const AccountOverview = component$(() => {
 
             void loadAccounts();
             void loadConnections();
+            void loadAvailableBanks();
         },
         {
             strategy: 'document-ready',
@@ -1075,11 +1103,14 @@ export const AccountOverview = component$(() => {
 
                 <BankConnectionsSection
                     connections={connections.value}
+                    available={availableBanks.value}
                     reconnectingId={reconnectingId.value}
                     removingId={removingId.value}
+                    connectingBank={connectingBank.value}
                     error={bankError.value}
                     onReconnect$={reconnect}
                     onRemove$={removeBank}
+                    onAdd$={connectBank}
                 />
             </main>
         </>
