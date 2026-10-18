@@ -1,0 +1,46 @@
+namespace ZenithFin.Categorization
+{
+    public sealed class OwnerProfile
+    {
+        private readonly string? _firstName;
+        private readonly string? _lastName;
+        private readonly string[] _accountNumbers;
+
+        public OwnerProfile(string? fullName,
+                            IEnumerable<string?> ibans)
+        {
+            string[] names = TextTokens.Tokenize(fullName);
+
+            if (names.Length >= 2)
+            {
+                _firstName = names[0];
+                _lastName = names[^1];
+            }
+
+            _accountNumbers = ibans.Select(Digits)
+                                   .Where(digits => digits.Length > 0)
+                                   .ToArray();
+        }
+
+        public bool IsOwnAccount(string? counterpartyAccount)
+        {
+            string digits = Digits(counterpartyAccount);
+            string key = (digits.Length > 10 ? digits[^10..] : digits).TrimStart('0');
+
+            return key.Length >= 7 && _accountNumbers.Any(number => number.EndsWith(key, StringComparison.Ordinal));
+        }
+
+        public bool IsOwnName(IReadOnlyList<string> tokens)
+        {
+            if (_firstName == null || _lastName == null) return false;
+
+            return tokens.Contains(_firstName) &&
+                   tokens.Any(token => token.Length >= 4 && _lastName.StartsWith(token, StringComparison.Ordinal));
+        }
+
+        private static string Digits(string? value)
+        {
+            return value == null ? "" : new string(value.Where(char.IsAsciiDigit).ToArray());
+        }
+    }
+}

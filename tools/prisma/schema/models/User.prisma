@@ -9,6 +9,7 @@ model User {
   sessions         Session[]
   status           UserStatus?
   bank_connections BankConnection[]
+  tags             Tag[]
 
   @@index([email])
 }

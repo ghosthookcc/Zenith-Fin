@@ -28,11 +28,17 @@ model Transaction {
 
   raw Json
 
+  tag_id     BigInt?
+  tag_source TagSource?
+  tagged_at  DateTime?  @db.Timestamptz(3)
+
   first_seen_at DateTime @default(now()) @db.Timestamptz(3)
   updated_at    DateTime @default(now()) @db.Timestamptz(3)
 
   account Account @relation(fields: [account_id], references: [id], onDelete: Cascade)
+  tag     Tag?    @relation(fields: [tag_id], references: [id], onDelete: SetNull)
 
   @@unique([account_id, external_id])
   @@index([account_id, occurred_on])
+  @@index([tag_id])
 }

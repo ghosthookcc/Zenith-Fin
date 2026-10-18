@@ -30,6 +30,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<TransactionRepository>();
             builder.Services.AddSingleton<TransactionService>();
 
+            builder.Services.AddSingleton<TagRepository>();
+            builder.Services.AddSingleton<CategorizationService>();
+
             builder.Services.AddSingleton<JwtAuthenticator>();
 
             builder.Services.Configure<EnableBankingOptions>(builder.Configuration.GetSection("EnableBanking"));

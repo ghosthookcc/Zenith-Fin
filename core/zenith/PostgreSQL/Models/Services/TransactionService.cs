@@ -15,15 +15,23 @@ namespace ZenithFin.PostgreSQL.Models.Services
     {
         private readonly TransactionRepository _transactionRepository;
         private readonly UserRepository _userRepository;
+        private readonly TagRepository _tagRepository;
+
+        private readonly CategorizationService _categorizationService;
 
         private readonly EnableBankingWorkspace _workspace;
 
         public TransactionService(TransactionRepository transactionRepository,
                                   UserRepository userRepository,
+                                  TagRepository tagRepository,
+                                  CategorizationService categorizationService,
                                   EnableBankingWorkspace workspace)
         {
             _transactionRepository = transactionRepository;
             _userRepository = userRepository;
+            _tagRepository = tagRepository;
+
+            _categorizationService = categorizationService;
 
             _workspace = workspace;
         }
@@ -36,7 +44,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (userId == null) return null;
 
+            await CategorizeAsync(userId.Value, reviewRuleTags: false);
+
             TransactionAccountRow[] accounts = await _transactionRepository.GetAccountsForUserAsync(userId.Value);
+            TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId.Value);
             TransactionDto.Transaction[] transactions = await _transactionRepository.GetTransactionsForUserAsync(userId.Value, from, to);
 
             foreach (TransactionDto.Transaction transaction in transactions)
@@ -59,6 +70,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     TransactionsSyncedAt = account.TransactionsSyncedAt,
                     IsStale = account.IsActive && IsDue(account.TransactionsSyncedAt, now, SyncInterval)
                 }).ToArray(),
+                Tags = tags,
                 Transactions = transactions
             };
         }
@@ -87,6 +99,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
                             return connectionResults.ToArray();
                         }));
+
+            await CategorizeAsync(userId.Value, reviewRuleTags: true);
 
             return new TransactionDto.SyncResponse
             {
@@ -317,6 +331,21 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                          string.Join('\u001e', entity.RemittanceInformation));
 
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(content)))[..32].ToLowerInvariant();
+        }
+
+        private async Task CategorizeAsync(long userId,
+                                           bool reviewRuleTags)
+        {
+            try
+            {
+                int tagged = await _categorizationService.CategorizeAsync(userId, reviewRuleTags);
+
+                if (tagged > 0) Console.WriteLine($"Categorization: user={userId}, tagged={tagged}");
+            }
+            catch (Exception errno)
+            {
+                Console.WriteLine($"Categorization failed for user {userId}: {errno}");
+            }
         }
 
         private async Task<long?> GetUserIdAsync(string sessionId)

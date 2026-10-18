@@ -84,6 +84,18 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             return await connection.QueryFirstOrDefaultAsync<UserEssentials?>(sql, new { SessionId = sessionId });
         }
 
+        public async Task<string?> GetFullNameAsync(long userId)
+        {
+            const string sql = """
+            SELECT full_name
+            FROM "User"
+            WHERE id = @UserId
+            """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.QueryFirstOrDefaultAsync<string?>(sql, new { UserId = userId });
+        }
+
         public async Task<ActiveSession?> GetSessionById(string sessionId)
         {
             if (!Guid.TryParse(sessionId, out Guid sessionGuid))

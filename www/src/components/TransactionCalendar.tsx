@@ -1,5 +1,6 @@
 import { $, component$, sync$, useSignal, useVisibleTask$ } from '@builder.io/qwik';
 
+import { CategoryBreakdown, type CategoryBreakdownRow } from './CategoryBreakdown';
 import { Icon } from './Icon';
 import { accountColors } from '../utils/accounts';
 
@@ -26,12 +27,24 @@ interface CalendarTransaction {
     description?: string | null;
     remittanceInformation: string[];
     bankTransactionCode?: string | null;
+    tagId?: number | null;
+}
+
+interface CalendarTag {
+    id: number;
+    key?: string | null;
+    name: string;
+    icon: string;
+    color: string;
+    kind: string;
+    isSystem: boolean;
 }
 
 interface TransactionsResponse {
     from: string;
     to: string;
     accounts: CalendarAccount[];
+    tags: CalendarTag[];
     transactions: CalendarTransaction[];
 }
 
@@ -65,6 +78,16 @@ const uncountedStatuses = ['CNCL', 'RJCT', 'SCHD'];
 
 const inactiveAccountColor = '#5d6678';
 const maskedAmount = '•• •••,••';
+
+const uncategorized: CalendarTag = {
+    id: 0,
+    key: null,
+    name: 'Uncategorized',
+    icon: 'tag',
+    color: '#7b8496',
+    kind: 'SPENDING',
+    isSystem: true,
+};
 
 function isoDate(year: number, monthIndex: number, day: number): string {
     return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
@@ -189,9 +212,17 @@ function mostCommonCurrency(transactions: CalendarTransaction[], fallback: strin
     return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? fallback;
 }
 
+function isCounted(transaction: CalendarTransaction, excludedTagIds: number[]): boolean {
+    return (
+        !uncountedStatuses.includes(transaction.status) &&
+        !excludedTagIds.includes(transaction.tagId ?? uncategorized.id)
+    );
+}
+
 function summarizeDays(
     transactions: CalendarTransaction[],
     currency: string,
+    excludedTagIds: number[],
 ): Map<string, DaySummary> {
     const days = new Map<string, DaySummary>();
 
@@ -205,7 +236,7 @@ function summarizeDays(
 
         day.transactions.push(transaction);
 
-        if (!uncountedStatuses.includes(transaction.status)) {
+        if (isCounted(transaction, excludedTagIds)) {
             const minor = Math.round(transaction.amount * 100);
 
             if (transaction.currency !== currency) {
@@ -221,6 +252,39 @@ function summarizeDays(
     }
 
     return days;
+}
+
+function spendingByCategory(
+    transactions: CalendarTransaction[],
+    currency: string,
+    tagsById: Record<number, CalendarTag>,
+): { tag: CalendarTag; amount: number }[] {
+    const totals = new Map<number, number>();
+
+    for (const transaction of transactions) {
+        const tag = tagsById[transaction.tagId ?? uncategorized.id] ?? uncategorized;
+
+        if (
+            tag.kind !== 'SPENDING' ||
+            transaction.currency !== currency ||
+            uncountedStatuses.includes(transaction.status)
+        ) {
+            continue;
+        }
+
+        totals.set(tag.id, (totals.get(tag.id) ?? 0) - Math.round(transaction.amount * 100));
+    }
+
+    return Array.from(totals.entries())
+        .filter(([, amount]) => amount > 0)
+        .map(([id, amount]) => ({ tag: tagsById[id] ?? uncategorized, amount }))
+        .sort((a, b) => b.amount - a.amount);
+}
+
+function formatShare(part: number, total: number): string {
+    const share = total > 0 ? (part / total) * 100 : 0;
+
+    return share > 0 && share < 1 ? '<1%' : `${Math.round(share)}%`;
 }
 
 function heatCap(dailyExpenses: number[]): number {
@@ -344,6 +408,7 @@ function isTransactionsResponse(value: unknown): value is TransactionsResponse {
         typeof (value as TransactionsResponse).from === 'string' &&
         typeof (value as TransactionsResponse).to === 'string' &&
         Array.isArray((value as TransactionsResponse).accounts) &&
+        Array.isArray((value as TransactionsResponse).tags) &&
         Array.isArray((value as TransactionsResponse).transactions)
     );
 }
@@ -356,6 +421,7 @@ export const TransactionCalendar = component$(() => {
     const viewMonth = useSignal(todayMonth - 1);
     const selectedDate = useSignal<string | null>(null);
     const accountFilter = useSignal('all');
+    const categoryFilter = useSignal('all');
     const hidden = useSignal(false);
 
     const data = useSignal<TransactionsResponse | null>(null);
@@ -492,6 +558,10 @@ export const TransactionCalendar = component$(() => {
         selectedDate.value = selectedDate.value === cell.date ? null : cell.date;
     });
 
+    const selectCategory = $((id: number) => {
+        categoryFilter.value = categoryFilter.value === String(id) ? 'all' : String(id);
+    });
+
     useVisibleTask$(
         async () => {
             const initial = await load();
@@ -522,9 +592,24 @@ export const TransactionCalendar = component$(() => {
         data.value.from <= cells[0].date &&
         data.value.to >= cells[cells.length - 1].date;
 
+    const tags = data.value?.tags ?? [];
+    const tagsById: Record<number, CalendarTag> = Object.fromEntries(
+        tags.map((tag) => [tag.id, tag]),
+    );
+    const transferTagIds = tags.filter((tag) => tag.kind === 'TRANSFER').map((tag) => tag.id);
+
     const filteredAccount = accountFilter.value === 'all' ? null : Number(accountFilter.value);
-    const visible = (covered ? data.value!.transactions : []).filter(
+    const filteredTag = categoryFilter.value === 'all' ? null : Number(categoryFilter.value);
+    const showingTransfers = filteredTag !== null && transferTagIds.includes(filteredTag);
+    const excludedTagIds = showingTransfers ? [] : transferTagIds;
+
+    const accountTransactions = (covered ? data.value!.transactions : []).filter(
         (transaction) => filteredAccount === null || transaction.accountId === filteredAccount,
+    );
+    const hasUncategorized = accountTransactions.some((transaction) => !transaction.tagId);
+    const visible = accountTransactions.filter(
+        (transaction) =>
+            filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag,
     );
     const monthTransactions = visible.filter((transaction) =>
         transaction.date.startsWith(monthPrefix),
@@ -535,7 +620,28 @@ export const TransactionCalendar = component$(() => {
             accounts[0]?.currency ??
             'SEK',
     );
-    const days = summarizeDays(visible, currency);
+    const days = summarizeDays(visible, currency, excludedTagIds);
+    const excludedTransfers = showingTransfers
+        ? 0
+        : monthTransactions.filter((transaction) =>
+              transferTagIds.includes(transaction.tagId ?? uncategorized.id),
+          ).length;
+
+    const categorySpending = spendingByCategory(
+        accountTransactions.filter((transaction) => transaction.date.startsWith(monthPrefix)),
+        currency,
+        tagsById,
+    );
+    const totalSpending = categorySpending.reduce((sum, category) => sum + category.amount, 0);
+    const breakdownRows: CategoryBreakdownRow[] = categorySpending.map(({ tag, amount }) => ({
+        id: tag.id,
+        name: tag.name,
+        icon: tag.icon,
+        color: tag.color,
+        amountLabel: hidden.value ? maskedAmount : formatMoney(amount / 100, currency),
+        shareLabel: formatShare(amount, totalSpending),
+        width: categorySpending[0].amount > 0 ? (amount / categorySpending[0].amount) * 100 : 0,
+    }));
 
     let income = 0;
     let expenses = 0;
@@ -710,6 +816,38 @@ export const TransactionCalendar = component$(() => {
                     </select>
                     <Icon name="chevronDown" class="cal-select-icon" />
                 </label>
+
+                <label class="cal-select-wrap">
+                    <span class="cal-visually-hidden">Category</span>
+                    <select
+                        class="cal-select cal-select-category"
+                        onChange$={(_, element) => {
+                            categoryFilter.value = element.value;
+                        }}
+                    >
+                        <option value="all" selected={categoryFilter.value === 'all'}>
+                            All categories
+                        </option>
+                        {tags.map((tag) => (
+                            <option
+                                key={tag.id}
+                                value={String(tag.id)}
+                                selected={categoryFilter.value === String(tag.id)}
+                            >
+                                {tag.name}
+                            </option>
+                        ))}
+                        {hasUncategorized && (
+                            <option
+                                value={String(uncategorized.id)}
+                                selected={categoryFilter.value === String(uncategorized.id)}
+                            >
+                                {uncategorized.name}
+                            </option>
+                        )}
+                    </select>
+                    <Icon name="chevronDown" class="cal-select-icon" />
+                </label>
             </div>
 
             <section
@@ -744,6 +882,14 @@ export const TransactionCalendar = component$(() => {
                         {monthTransactions.length === 1 ? 'transaction' : 'transactions'}
                     </span>
                 </div>
+
+                {excludedTransfers > 0 && (
+                    <p class="cal-note">
+                        {excludedTransfers}{' '}
+                        {excludedTransfers === 1 ? 'transfer' : 'transfers'} between your own
+                        accounts {excludedTransfers === 1 ? 'is' : 'are'} left out of these totals.
+                    </p>
+                )}
 
                 {otherCurrencies > 0 && (
                     <p class="cal-note">
@@ -949,19 +1095,18 @@ export const TransactionCalendar = component$(() => {
                                                     const detail = transactionDetail(transaction, title);
                                                     const status = statusLabel(transaction.status);
                                                     const account = accountsById[transaction.accountId];
+                                                    const tag =
+                                                        tagsById[transaction.tagId ?? uncategorized.id] ??
+                                                        uncategorized;
 
                                                     return (
                                                         <li key={transaction.id} class="cal-tx">
                                                             <span
-                                                                class="cal-tx-mark"
-                                                                style={{
-                                                                    '--tx-color':
-                                                                        colors[transaction.accountId] ??
-                                                                        inactiveAccountColor,
-                                                                }}
+                                                                class="cal-tag-tile"
+                                                                style={{ '--tag-color': tag.color }}
                                                                 aria-hidden="true"
                                                             >
-                                                                {title.charAt(0).toUpperCase()}
+                                                                <Icon name={tag.icon} />
                                                             </span>
 
                                                             <span class="cal-tx-main">
@@ -969,6 +1114,15 @@ export const TransactionCalendar = component$(() => {
                                                                     {title}
                                                                 </span>
                                                                 <span class="cal-tx-meta">
+                                                                    {`${tag.name} · `}
+                                                                    <span
+                                                                        class="cal-account-dot"
+                                                                        style={{
+                                                                            backgroundColor:
+                                                                                colors[transaction.accountId] ??
+                                                                                inactiveAccountColor,
+                                                                        }}
+                                                                    />
                                                                     {accountName(account)}
                                                                     {transaction.bankTransactionCode &&
                                                                         transaction.bankTransactionCode !==
@@ -987,10 +1141,10 @@ export const TransactionCalendar = component$(() => {
                                                                     class={{
                                                                         'cal-tx-amount': true,
                                                                         'cal-tx-income': transaction.amount > 0,
-                                                                        'cal-tx-uncounted':
-                                                                            uncountedStatuses.includes(
-                                                                                transaction.status,
-                                                                            ),
+                                                                        'cal-tx-uncounted': !isCounted(
+                                                                            transaction,
+                                                                            excludedTagIds,
+                                                                        ),
                                                                         'cal-tx-void':
                                                                             transaction.status === 'CNCL' ||
                                                                             transaction.status === 'RJCT',
@@ -1031,6 +1185,15 @@ export const TransactionCalendar = component$(() => {
                     </aside>
                 </div>
             </section>
+
+            {covered && (
+                <CategoryBreakdown
+                    rows={breakdownRows}
+                    monthName={monthName}
+                    selectedId={filteredTag}
+                    onSelect$={selectCategory}
+                />
+            )}
         </main>
     );
 });

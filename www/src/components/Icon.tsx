@@ -17,6 +17,18 @@ const paths: Record<string, string> = {
     chevronRight: 'm9 18 6-6-6-6',
     chevronDown: 'm6 9 6 6 6-6',
     refresh: 'M21 12a9 9 0 1 1-2.6-6.4L21 8m0-5v5h-5',
+    cart: 'M3 4h2.2l2.3 11.1A1.5 1.5 0 0 0 9 16.3h8.2a1.5 1.5 0 0 0 1.5-1.1L20.5 8H6.1M10 20a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z',
+    utensils: 'M4.5 3v5.5a2.5 2.5 0 0 0 5 0V3M7 3v18M17.5 21V3c-2 1.2-3.5 4-3.5 8h3.5',
+    bus: 'M5 17V7a3 3 0 0 1 3-3h8a3 3 0 0 1 3 3v10H5Zm0-5h14M8 17v3m8-3v3M8.5 14.5h.01m7 0h.01',
+    bolt: 'M13 2 4.5 13.5H11L10 22l8.5-11.5H12L13 2Z',
+    bag: 'M5.5 8h13l-1 13h-11l-1-13Zm3.5 0V6.5a3 3 0 0 1 6 0V8',
+    film: 'M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v11a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 17.5v-11Zm6.5 2.8v5.4l4.5-2.7-4.5-2.7Z',
+    pulse: 'M3 12h4l2.5-6 5 12 2.5-6h4',
+    trend: 'm3 17 6-6 4 4 8-8m0 0h-5m5 0v5',
+    receipt: 'M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3.5 5h5m-5 4h5m-5 4h3',
+    income: 'M12 3v11m0 0-4-4m4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3',
+    transfer: 'M4 8h14m0 0-4-4m4 4-4 4m6 4H6m0 0 4-4m-4 4 4 4',
+    tag: 'M3.5 12.3V4.5a1 1 0 0 1 1-1h7.8l8.2 8.2-8.8 8.8-8.2-8.2ZM9 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z',
 };
 
 export const Icon = component$<{ name: string; class?: string }>(({ name, class: className }) => (

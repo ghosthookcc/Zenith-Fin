@@ -28,6 +28,9 @@ namespace ZenithFin.Api.Models.Dtos
             public string? BankTransactionCode { get; set; }
             public string? ReferenceNumber { get; set; }
             public string? Note { get; set; }
+
+            public long? TagId { get; set; }
+            public string? TagSource { get; set; }
         }
 
         public sealed class Account
@@ -47,6 +50,7 @@ namespace ZenithFin.Api.Models.Dtos
             public DateOnly From { get; set; }
             public DateOnly To { get; set; }
             public IReadOnlyList<Account> Accounts { get; set; } = Array.Empty<Account>();
+            public IReadOnlyList<TagDto.Tag> Tags { get; set; } = Array.Empty<TagDto.Tag>();
             public IReadOnlyList<Transaction> Transactions { get; set; } = Array.Empty<Transaction>();
         }
 

@@ -84,7 +84,9 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    t.merchant_category_code AS "MerchantCategoryCode",
                                    t.bank_transaction_code AS "BankTransactionCode",
                                    t.reference_number AS "ReferenceNumber",
-                                   t.note AS "Note"
+                                   t.note AS "Note",
+                                   t.tag_id AS "TagId",
+                                   t.tag_source::text AS "TagSource"
                                FROM "Transaction" t
                                INNER JOIN "Account" a
                                    ON a.id = t.account_id
@@ -104,6 +106,71 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             });
 
             return transactions.ToArray();
+        }
+
+        public async Task<CategorizationCandidate[]> GetCategorizationCandidatesAsync(long userId,
+                                                                                    bool includeRuleTagged)
+        {
+            const string sql = """
+                               SELECT
+                                   t.id AS "Id",
+                                   t.tag_id AS "TagId",
+                                   t.tag_source::text AS "TagSource",
+                                   t.counterparty_name AS "CounterpartyName",
+                                   COALESCE(t.remittance_information, ARRAY[]::text[]) AS "RemittanceInformation",
+                                   t.bank_transaction_code AS "BankTransactionCode",
+                                   t.counterparty_account AS "CounterpartyAccount",
+                                   t.credit_debit_indicator AS "CreditDebitIndicator",
+                                   t.original_currency AS "OriginalCurrency"
+                               FROM "Transaction" t
+                               INNER JOIN "Account" a
+                                   ON a.id = t.account_id
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               WHERE bc.user_id = @UserId
+                                 AND (t.tag_source IS NULL
+                                      OR (@IncludeRuleTagged AND t.tag_source = 'RULE'::"TagSource"));
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            IEnumerable<CategorizationCandidate> candidates = await connection.QueryAsync<CategorizationCandidate>(sql, new
+            {
+                UserId = userId,
+                IncludeRuleTagged = includeRuleTagged
+            });
+
+            return candidates.ToArray();
+        }
+
+        public async Task ApplyRuleTagsAsync(long userId,
+                                             IReadOnlyList<(long TransactionId, long TagId)> tags,
+                                             DateTime taggedAt)
+        {
+            if (taggedAt.Kind != DateTimeKind.Utc) throw new ArgumentException("Tag time must be UTC.", nameof(taggedAt));
+
+            const string sql = """
+                               UPDATE "Transaction" AS t
+                               SET tag_id = assigned.tag_id,
+                                   tag_source = 'RULE'::"TagSource",
+                                   tagged_at = @TaggedAt
+                               FROM unnest(@TransactionIds, @TagIds) AS assigned(transaction_id, tag_id),
+                                    "Account" a,
+                                    "BankConnection" bc
+                               WHERE t.id = assigned.transaction_id
+                                 AND a.id = t.account_id
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId
+                                 AND (t.tag_source IS NULL OR t.tag_source = 'RULE'::"TagSource");
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            await connection.ExecuteAsync(sql, new
+            {
+                UserId = userId,
+                TransactionIds = tags.Select(tag => tag.TransactionId).ToArray(),
+                TagIds = tags.Select(tag => tag.TagId).ToArray(),
+                TaggedAt = taggedAt
+            });
         }
 
         public async Task ReplaceTransactionsAsync(long userId,
