@@ -7,6 +7,7 @@ namespace ZenithFin.AI
         public string Model { get; set; } = "gpt-6-luna";
         public string? ApiKey { get; set; }
         public string? ReasoningEffort { get; set; }
+        public int MaxOutputTokens { get; set; } = 8192;
         public int BatchSize { get; set; } = 40;
         public int MaxBatchesPerRun { get; set; } = 5;
 

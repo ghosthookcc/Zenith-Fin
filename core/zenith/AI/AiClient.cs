@@ -1,7 +1,9 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
 
 using Microsoft.Extensions.Options;
 
@@ -10,11 +12,14 @@ namespace ZenithFin.AI
     public sealed class AiException : Exception
     {
         public int? StatusCode { get; }
+        public TimeSpan? RetryAfter { get; }
 
         public AiException(string message,
-                           int? statusCode = null) : base(message)
+                           int? statusCode = null,
+                           TimeSpan? retryAfter = null) : base(message)
         {
             StatusCode = statusCode;
+            RetryAfter = retryAfter;
         }
     }
 
@@ -60,6 +65,7 @@ namespace ZenithFin.AI
             };
 
             if (!string.IsNullOrWhiteSpace(Options.ReasoningEffort)) body["reasoning_effort"] = Options.ReasoningEffort;
+            if (Options.MaxOutputTokens > 0) body["max_completion_tokens"] = Options.MaxOutputTokens;
 
             using HttpRequestMessage request = new(HttpMethod.Post, "chat/completions")
             {
@@ -73,8 +79,7 @@ namespace ZenithFin.AI
             string text = await response.Content.ReadAsStringAsync(cancellationToken);
 
             if (!response.IsSuccessStatusCode)
-                throw new AiException(ErrorMessage(text) ?? $"The AI request failed with HTTP {(int)response.StatusCode}",
-                                      (int)response.StatusCode);
+                throw Failure(text, (int)response.StatusCode, response.Headers.RetryAfter);
 
             return StripCodeFence(MessageContent(text));
         }
@@ -121,8 +126,14 @@ namespace ZenithFin.AI
                 : trimmed;
         }
 
-        private static string? ErrorMessage(string body)
+        private AiException Failure(string body,
+                                    int statusCode,
+                                    RetryConditionHeaderValue? retryHeader)
         {
+            string? message = null;
+            string? code = null;
+            string? failedGeneration = null;
+
             try
             {
                 using JsonDocument document = JsonDocument.Parse(body);
@@ -130,20 +141,56 @@ namespace ZenithFin.AI
 
                 if (root.ValueKind == JsonValueKind.Array && root.GetArrayLength() > 0) root = root[0];
 
-                if (root.ValueKind == JsonValueKind.Object &&
-                    root.TryGetProperty("error", out JsonElement error))
+                if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("error", out JsonElement error))
                 {
-                    if (error.ValueKind == JsonValueKind.String) return error.GetString();
+                    if (error.ValueKind == JsonValueKind.String) message = error.GetString();
 
-                    if (error.ValueKind == JsonValueKind.Object && error.TryGetProperty("message", out JsonElement message))
-                        return message.GetString();
+                    if (error.ValueKind == JsonValueKind.Object)
+                    {
+                        message = error.TryGetProperty("message", out JsonElement value) ? value.GetString() : null;
+                        code = error.TryGetProperty("code", out JsonElement kind) && kind.ValueKind == JsonValueKind.String ? kind.GetString() : null;
+                        failedGeneration = error.TryGetProperty("failed_generation", out JsonElement generation) &&
+                                           generation.ValueKind == JsonValueKind.String
+                            ? generation.GetString()
+                            : null;
+                    }
                 }
             }
             catch (JsonException)
             {
             }
 
-            return null;
+            if (failedGeneration != null)
+                Console.WriteLine($"AI answer that failed validation ({failedGeneration.Length} chars): " +
+                                  failedGeneration[..Math.Min(failedGeneration.Length, 400)]);
+
+            if (code == "json_validate_failed")
+                return new AiException($"The model's answer was cut off or was not valid JSON. Try a lower ReasoningEffort " +
+                                       $"(now {Options.ReasoningEffort ?? "not set"}) or a higher MaxOutputTokens (now {Options.MaxOutputTokens}).",
+                                       statusCode);
+
+            if (statusCode == 429)
+                return new AiException($"{Options.Provider} rate limit reached. The rest is sorted at the next sync.",
+                                       statusCode,
+                                       RetryDelay(retryHeader, message));
+
+            return new AiException(message ?? $"The AI request failed with HTTP {statusCode}", statusCode);
         }
+
+        private static TimeSpan? RetryDelay(RetryConditionHeaderValue? retryHeader,
+                                            string? message)
+        {
+            if (retryHeader?.Delta is TimeSpan delta) return delta;
+            if (retryHeader?.Date is DateTimeOffset date) return date - DateTimeOffset.UtcNow;
+
+            Match match = RetryHint.Match(message ?? "");
+
+            if (!match.Success || !double.TryParse(match.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double amount))
+                return null;
+
+            return match.Groups[2].Value == "ms" ? TimeSpan.FromMilliseconds(amount) : TimeSpan.FromSeconds(amount);
+        }
+
+        private static readonly Regex RetryHint = new(@"try again in ([0-9.]+)(ms|s)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
     }
 }

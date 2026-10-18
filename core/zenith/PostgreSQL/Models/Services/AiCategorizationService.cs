@@ -56,9 +56,9 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             try
             {
-                int tagged = await CategorizeUnlockedAsync(userId);
+                (int tagged, string? error) = await CategorizeUnlockedAsync(userId);
 
-                _statuses[userId] = new TagDto.AiStatus { LastRunAt = DateTime.UtcNow, LastTagged = tagged };
+                _statuses[userId] = new TagDto.AiStatus { LastRunAt = DateTime.UtcNow, LastTagged = tagged, LastError = error };
 
                 if (tagged > 0) Console.WriteLine($"AI categorization: user={userId}, tagged={tagged}");
 
@@ -92,16 +92,16 @@ namespace ZenithFin.PostgreSQL.Models.Services
             if (other != null) await _transactionRepository.ReopenAiOtherAsync(userId, other.Id);
         }
 
-        private async Task<int> CategorizeUnlockedAsync(long userId)
+        private async Task<(int Tagged, string? Error)> CategorizeUnlockedAsync(long userId)
         {
             TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId);
             TagDto.Tag? other = tags.FirstOrDefault(tag => tag.IsSystem && tag.Key == CategoryRules.Other);
 
-            if (other == null) return 0;
+            if (other == null) return (0, null);
 
             AiCandidateRow[] candidates = await _transactionRepository.GetAiCandidatesAsync(userId, other.Id);
 
-            if (candidates.Length == 0) return 0;
+            if (candidates.Length == 0) return (0, null);
 
             AiCategory[] categories = tags.Select(tag => new AiCategory(tag.Id, tag.Name, tag.Kind, tag.Key, tag.Keywords))
                                           .ToArray();
@@ -120,15 +120,22 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             int batchSize = Math.Max(1, _ai.Options.BatchSize);
             int tagged = 0;
+            TimeSpan waited = TimeSpan.Zero;
 
             foreach (AiItem[] batch in items.Take(batchSize * Math.Max(1, _ai.Options.MaxBatchesPerRun)).Chunk(batchSize))
             {
                 AiPrompt prompt = AiCategorizer.BuildPrompt(batch, categories);
+                string json;
 
-                string json = await _ai.CompleteJsonAsync(prompt.Instructions,
-                                                     prompt.Input,
-                                                     AiCategorizer.SchemaName,
-                                                     prompt.Schema);
+                try
+                {
+                    (json, waited) = await CompleteWithRateLimitAsync(prompt, waited);
+                }
+                catch (Exception errno) when (errno is AiException or HttpRequestException or TaskCanceledException)
+                {
+                    Console.WriteLine($"AI categorization stopped for user {userId} after {tagged} transactions: {errno.Message}");
+                    return (tagged, errno.Message);
+                }
 
                 List<(long TransactionId, long TagId)> changes = new();
 
@@ -143,7 +150,37 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     tagged += await _transactionRepository.ApplyAiTagsAsync(userId, changes, other.Id, DateTime.UtcNow);
             }
 
-            return tagged;
+            return (tagged, null);
         }
+
+        private async Task<(string Json, TimeSpan Waited)> CompleteWithRateLimitAsync(AiPrompt prompt,
+                                                                                    TimeSpan waited)
+        {
+            while (true)
+            {
+                try
+                {
+                    string json = await _ai.CompleteJsonAsync(prompt.Instructions,
+                                                              prompt.Input,
+                                                              AiCategorizer.SchemaName,
+                                                              prompt.Schema);
+
+                    return (json, waited);
+                }
+                catch (AiException errno) when (errno.RetryAfter is TimeSpan delay &&
+                                                delay >= TimeSpan.Zero &&
+                                                waited + delay <= MaxRateLimitWaitPerRun)
+                {
+                    TimeSpan pause = delay + TimeSpan.FromMilliseconds(500);
+
+                    Console.WriteLine($"AI rate limited, waiting {pause.TotalSeconds:F1}s before retrying");
+
+                    await Task.Delay(pause);
+                    waited += pause;
+                }
+            }
+        }
+
+        private static readonly TimeSpan MaxRateLimitWaitPerRun = TimeSpan.FromSeconds(60);
     }
 }
