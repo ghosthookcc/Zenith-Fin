@@ -5,21 +5,44 @@ namespace ZenithFin.Categorization
 {
     public static class TextTokens
     {
+        private static readonly Dictionary<char, string> FoldedLetters = BuildFoldedLetters();
+
         public static string[] Tokenize(string? text)
         {
             if (string.IsNullOrWhiteSpace(text)) return Array.Empty<string>();
 
-            string decomposed = text.Normalize(NormalizationForm.FormD);
-            StringBuilder builder = new(decomposed.Length);
+            StringBuilder builder = new(text.Length);
 
-            foreach (char character in decomposed)
+            foreach (char character in text)
             {
                 if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark) continue;
 
-                builder.Append(char.IsLetterOrDigit(character) ? char.ToUpperInvariant(character) : ' ');
+                char upper = char.ToUpperInvariant(character);
+
+                if (FoldedLetters.TryGetValue(upper, out string? folded)) builder.Append(folded);
+                else builder.Append(char.IsLetterOrDigit(upper) ? upper : ' ');
             }
 
             return builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        private static Dictionary<char, string> BuildFoldedLetters()
+        {
+            (string Letters, string Folded)[] groups =
+            {
+                ("ÀÁÂÃÄÅĀĂĄ", "A"), ("ÆǼ", "AE"), ("ÇĆĈĊČ", "C"), ("ĎĐÐ", "D"), ("ÈÉÊËĒĔĖĘĚ", "E"), ("ĜĞĠĢ", "G"),
+                ("ĤĦ", "H"), ("ÌÍÎÏĨĪĬĮİ", "I"), ("Ĵ", "J"), ("Ķ", "K"), ("ĹĻĽĿŁ", "L"), ("ÑŃŅŇ", "N"),
+                ("ÒÓÔÕÖØŌŎŐ", "O"), ("Œ", "OE"), ("ŔŖŘ", "R"), ("ŚŜŞŠ", "S"), ("ẞß", "SS"), ("ŢŤŦ", "T"), ("Þ", "TH"),
+                ("ÙÚÛÜŨŪŬŮŰŲ", "U"), ("Ŵ", "W"), ("ÝŶŸ", "Y"), ("ŹŻŽ", "Z")
+            };
+
+            Dictionary<char, string> folded = new();
+
+            foreach ((string letters, string replacement) in groups)
+                foreach (char letter in letters)
+                    folded[letter] = replacement;
+
+            return folded;
         }
     }
 
