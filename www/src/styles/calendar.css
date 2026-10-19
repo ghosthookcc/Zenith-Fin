@@ -686,6 +686,71 @@
     color: var(--cal-muted);
 }
 
+.cal-manual-badge {
+    border-color: #5d7356;
+    color: var(--cal-mint);
+}
+
+.cal-picker-counting {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 10px;
+    border-top: 1px solid var(--cal-line);
+}
+
+.cal-picker-counting-label {
+    font-size: 0.8125rem;
+    line-height: 1.4;
+    color: var(--cal-ink-2);
+}
+
+.cal-picker-counting-label small {
+    display: block;
+    margin-top: 2px;
+    font-size: 0.75rem;
+    color: var(--cal-muted);
+}
+
+.cal-picker-counting-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.cal-picker-counting-option {
+    min-height: 32px;
+    padding: 4px 12px;
+    border: 1px solid #323a49;
+    border-radius: 999px;
+    background: #1c222b;
+    color: var(--cal-ink-2);
+    font: inherit;
+    font-size: 0.8125rem;
+    cursor: pointer;
+}
+
+.cal-picker-counting-option:hover:not(:disabled) {
+    border-color: #4a5466;
+    background: #232a37;
+    color: var(--cal-ink);
+}
+
+.cal-picker-counting-option[aria-pressed='true'] {
+    border-color: var(--cal-mint);
+    color: var(--cal-ink);
+}
+
+.cal-picker-counting-option:focus-visible {
+    outline: 2px solid var(--cal-mint);
+    outline-offset: 2px;
+}
+
+.cal-picker-counting-option:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
 .cal-breakdown-static,
 .cal-breakdown-static:hover {
     background: none;

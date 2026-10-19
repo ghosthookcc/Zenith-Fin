@@ -31,6 +31,13 @@ export const countingChoices = [
     },
 ];
 
+export const manualCountingChoices: { value: string | null; label: string }[] = [
+    { value: null, label: 'Automatic' },
+    { value: 'IN', label: 'Money in' },
+    { value: 'OUT', label: 'Money out' },
+    { value: 'NEUTRAL', label: 'Neutral' },
+];
+
 export function countingLabel(counting: string): string {
     return countingChoices.find((choice) => choice.value === counting)?.label ?? counting;
 }
@@ -49,20 +56,21 @@ export function countedAmount(amount: number, counting: string): number | null {
 }
 
 export function creditUsed(
-    transactions: { amount: number; status: string }[],
+    transactions: { amount: number; status: string; counting?: string | null }[],
     counting: string,
 ): number {
     let out = 0;
     let incoming = 0;
 
     for (const transaction of transactions) {
-        if (uncountedStatuses.includes(transaction.status)) {
+        if (uncountedStatuses.includes(transaction.status) || transaction.counting === 'NEUTRAL') {
             continue;
         }
 
         const minor = Math.round(Math.abs(transaction.amount) * 100);
+        const outgoing = transaction.counting ? transaction.counting === 'OUT' : transaction.amount < 0;
 
-        if (transaction.amount < 0) {
+        if (outgoing) {
             out += minor;
         } else {
             incoming += minor;
@@ -122,6 +130,7 @@ export interface MonthTransaction {
     currency: string;
     status: string;
     counterpartyAccount?: string | null;
+    counting?: string | null;
 }
 
 export interface MonthRange {

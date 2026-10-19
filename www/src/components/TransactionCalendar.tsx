@@ -7,6 +7,7 @@ import {
     countedAmount,
     countingLabel,
     type CreditAccountRule,
+    manualCountingChoices,
     matchesVirtualAccount,
     uncountedStatuses,
     type VirtualAccountRule,
@@ -38,6 +39,7 @@ interface CalendarTransaction {
     counterpartyAccount?: string | null;
     tagId?: number | null;
     tagSource?: string | null;
+    counting?: string | null;
     recurring?: Recurring | null;
 }
 
@@ -271,18 +273,28 @@ function mostCommonCurrency(transactions: CalendarTransaction[], fallback: strin
 interface AccountRules {
     creditByAccount: Record<number, CreditAccountRule>;
     virtualAccounts: VirtualAccountRule[];
+    manual: boolean;
 }
 
 interface CountingRule {
-    kind: 'credit' | 'virtual';
+    kind: 'credit' | 'virtual' | 'manual';
     id: number;
     name: string;
     counting: string;
 }
 
-const noRules: AccountRules = { creditByAccount: {}, virtualAccounts: [] };
+const noRules: AccountRules = { creditByAccount: {}, virtualAccounts: [], manual: false };
 
 function ruleFor(transaction: CalendarTransaction, rules: AccountRules): CountingRule | null {
+    if (rules.manual && transaction.counting) {
+        return {
+            kind: 'manual',
+            id: transaction.id,
+            name: countingLabel(transaction.counting),
+            counting: transaction.counting,
+        };
+    }
+
     const creditAccount = rules.creditByAccount[transaction.accountId];
 
     if (creditAccount) {
@@ -324,6 +336,17 @@ function isCounted(
 }
 
 function ruleTitle(rule: CountingRule): string {
+    if (rule.kind === 'manual') {
+        switch (rule.counting) {
+            case 'NEUTRAL':
+                return 'You set this to neutral, so it is left out of your totals';
+            case 'OUT':
+                return 'You set this to count as money out';
+            default:
+                return 'You set this to count as money in';
+        }
+    }
+
     const where = rule.kind === 'credit' ? `on ${rule.name}` : `with ${rule.name}`;
 
     switch (rule.counting) {
@@ -335,6 +358,19 @@ function ruleTitle(rule: CountingRule): string {
             return `Counted as money in ${where}`;
         default:
             return `Counted as money in or out ${where}`;
+    }
+}
+
+function countingNotice(counting: string | null): string {
+    switch (counting) {
+        case 'NEUTRAL':
+            return 'Now neutral, so it is left out of your totals.';
+        case 'OUT':
+            return 'Now counted as money out.';
+        case 'IN':
+            return 'Now counted as money in.';
+        default:
+            return 'Back to automatic counting.';
     }
 }
 
@@ -423,7 +459,7 @@ function spendingByCategory(
             continue;
         }
 
-        const bucket = tag.kind === 'SPENDING' ? tag : ruleCategory(rule!);
+        const bucket = tag.kind === 'SPENDING' || rule?.kind === 'manual' ? tag : ruleCategory(rule!);
         const total = totals.get(bucket.id) ?? { tag: bucket, amount: 0 };
 
         total.amount -= Math.round(amount * 100);
@@ -984,6 +1020,44 @@ export const TransactionCalendar = component$(() => {
         }
     });
 
+    const setCounting = $(async (transaction: CalendarTransaction, counting: string | null) => {
+        if (picker.saving || (transaction.counting ?? null) === counting) {
+            return;
+        }
+
+        picker.saving = true;
+        picker.error = null;
+
+        try {
+            const response = await fetch(`/api/transactions/${transaction.id}/counting`, {
+                method: 'PUT',
+                headers: {
+                    'Accept': 'application/json',
+                    'Content-Type': 'application/json',
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({ counting }),
+            });
+
+            const payload = await readJson(response);
+
+            if (!response.ok) {
+                throw new Error(messageFrom(payload) ?? `Could not change how it counts (${response.status})`);
+            }
+
+            notice.value = {
+                id: transaction.id,
+                text: countingNotice(counting),
+            };
+
+            await load();
+        } catch (err) {
+            picker.error = err instanceof Error ? err.message : 'Could not change how it counts.';
+        } finally {
+            picker.saving = false;
+        }
+    });
+
     useVisibleTask$(
         async () => {
             const initial = await load();
@@ -1035,7 +1109,7 @@ export const TransactionCalendar = component$(() => {
     const creditByAccount: Record<number, CreditAccountRule> = Object.fromEntries(
         creditAccounts.map((creditAccount) => [creditAccount.accountId, creditAccount]),
     );
-    const rules: AccountRules = { creditByAccount, virtualAccounts };
+    const rules: AccountRules = { creditByAccount, virtualAccounts, manual: true };
 
     const filteredCredit = accountFilter.value.startsWith('credit:')
         ? (creditAccounts.find((creditAccount) => `credit:${creditAccount.id}` === accountFilter.value) ?? null)
@@ -1067,6 +1141,18 @@ export const TransactionCalendar = component$(() => {
         direction === 'neutral' ||
         (direction === 'in' ? transaction.amount > 0 : transaction.amount < 0);
     const ruleOf = (transaction: CalendarTransaction): CountingRule | null => ruleFor(transaction, rules);
+    const automaticCounting = (transaction: CalendarTransaction): string => {
+        const rule = ruleFor({ ...transaction, counting: null }, rules);
+        const natural = transaction.amount < 0 ? 'money out' : 'money in';
+
+        if (rule) {
+            return rule.counting === 'NEUTRAL'
+                ? `neutral, because ${rule.name} is neutral`
+                : `${rule.counting === 'FLOW' ? natural : countingLabel(rule.counting).toLowerCase()}, as ${rule.name} is set up`;
+        }
+
+        return isTransfer(transaction) ? 'neutral, as a transfer between your own accounts' : natural;
+    };
     const inFlowDirection = (transaction: CalendarTransaction) => {
         const amount = flowAmount(transaction, transferTagIds, rules);
 
@@ -1108,18 +1194,29 @@ export const TransactionCalendar = component$(() => {
                       !ruleOf(transaction) &&
                       inDirection(transaction),
               ).length;
-    const excludedCredit = accountTransactions.filter(
-        (transaction) =>
+    const neutralByRule = (transaction: CalendarTransaction, manual: boolean) => {
+        const rule = ruleOf(transaction);
+
+        return (
             !showingNeutral &&
             transaction.date.startsWith(monthPrefix) &&
-            ruleOf(transaction)?.counting === 'NEUTRAL' &&
+            rule?.counting === 'NEUTRAL' &&
+            (rule.kind === 'manual') === manual &&
             inDirection(transaction) &&
-            (filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag),
-    ).length;
+            (filteredTag === null || (transaction.tagId ?? uncategorized.id) === filteredTag)
+        );
+    };
+    const excludedCredit = accountTransactions.filter((transaction) => neutralByRule(transaction, false)).length;
+    const excludedManual = accountTransactions.filter((transaction) => neutralByRule(transaction, true)).length;
+    const recountedManual = monthTransactions.filter((transaction) => {
+        const rule = ruleOf(transaction);
+
+        return !showingNeutral && rule?.kind === 'manual' && rule.counting !== 'NEUTRAL';
+    }).length;
     const recountedCredit = monthTransactions.filter((transaction) => {
         const rule = ruleOf(transaction);
 
-        if (showingNeutral || !rule || rule.counting === 'NEUTRAL') {
+        if (showingNeutral || !rule || rule.kind === 'manual' || rule.counting === 'NEUTRAL') {
             return false;
         }
 
@@ -1563,6 +1660,20 @@ export const TransactionCalendar = component$(() => {
                     </p>
                 )}
 
+                {excludedManual > 0 && (
+                    <p class="cal-note">
+                        {excludedManual} {excludedManual === 1 ? 'transaction' : 'transactions'} you set to
+                        neutral {excludedManual === 1 ? 'is' : 'are'} left out of these totals.
+                    </p>
+                )}
+
+                {recountedManual > 0 && (
+                    <p class="cal-note">
+                        {recountedManual} {recountedManual === 1 ? 'transaction is' : 'transactions are'}{' '}
+                        counted as money in or out the way you set {recountedManual === 1 ? 'it' : 'them'}.
+                    </p>
+                )}
+
                 {otherCurrencies > 0 && (
                     <p class="cal-note">
                         Totals are in {currency}. {otherCurrencies}{' '}
@@ -1841,7 +1952,12 @@ export const TransactionCalendar = component$(() => {
                                                                     )}
                                                                     {ruleOf(transaction) && (
                                                                         <span
-                                                                            class="cal-ai-badge cal-credit-badge"
+                                                                            class={{
+                                                                                'cal-ai-badge': true,
+                                                                                'cal-credit-badge': true,
+                                                                                'cal-manual-badge':
+                                                                                    ruleOf(transaction)!.kind === 'manual',
+                                                                            }}
                                                                             title={ruleTitle(ruleOf(transaction)!)}
                                                                         >
                                                                             {ruleOf(transaction)!.name}
@@ -2004,6 +2120,43 @@ export const TransactionCalendar = component$(() => {
                                                                             </span>
                                                                         </label>
                                                                     )}
+
+                                                                    <div
+                                                                        class="cal-picker-counting"
+                                                                        role="group"
+                                                                        aria-labelledby={`cal-counting-${transaction.id}`}
+                                                                    >
+                                                                        <span
+                                                                            id={`cal-counting-${transaction.id}`}
+                                                                            class="cal-picker-counting-label"
+                                                                        >
+                                                                            Counts as
+                                                                            <small>
+                                                                                {transaction.counting
+                                                                                    ? `Set by you. Automatic would count it as ${automaticCounting(transaction)}.`
+                                                                                    : `Automatic counts it as ${automaticCounting(transaction)}.`}
+                                                                            </small>
+                                                                        </span>
+                                                                        <div class="cal-picker-counting-options">
+                                                                            {manualCountingChoices.map((choice) => (
+                                                                                <button
+                                                                                    key={choice.label}
+                                                                                    type="button"
+                                                                                    class="cal-picker-counting-option"
+                                                                                    aria-pressed={
+                                                                                        (transaction.counting ?? null) ===
+                                                                                        choice.value
+                                                                                    }
+                                                                                    disabled={picker.saving}
+                                                                                    onClick$={() =>
+                                                                                        setCounting(transaction, choice.value)
+                                                                                    }
+                                                                                >
+                                                                                    {choice.label}
+                                                                                </button>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
 
                                                                     {picker.error && (
                                                                         <p class="cal-picker-error" role="alert">

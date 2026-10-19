@@ -12,6 +12,10 @@ using ZenithFin.Utility;
 
 namespace ZenithFin.PostgreSQL.Models.Services
 {
+    public sealed record CountingResult(int StatusCode,
+                                        string? Message,
+                                        string? Counting = null);
+
     public sealed class TransactionService
     {
         private readonly TransactionRepository _transactionRepository;
@@ -424,6 +428,25 @@ namespace ZenithFin.PostgreSQL.Models.Services
             }
         }
 
+        public async Task<CountingResult> SetCountingAsync(string sessionId,
+                                                           long transactionId,
+                                                           TransactionDto.SetCountingRequest request)
+        {
+            long? userId = await GetUserIdAsync(sessionId);
+
+            if (userId == null) return new CountingResult(StatusCodes.Status401Unauthorized, "No user found for session");
+
+            string? counting = string.IsNullOrWhiteSpace(request.Counting) ? null : request.Counting.Trim().ToUpperInvariant();
+
+            if (counting != null && !ManualCountings.Contains(counting))
+                return new CountingResult(StatusCodes.Status400BadRequest, "Choose neutral, money in or money out");
+
+            if (!await _transactionRepository.SetCountingOverrideAsync(userId.Value, transactionId, counting))
+                return new CountingResult(StatusCodes.Status404NotFound, "Transaction not found");
+
+            return new CountingResult(StatusCodes.Status200OK, null, counting);
+        }
+
         private async Task<long?> GetUserIdAsync(string sessionId)
         {
             if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return null;
@@ -499,6 +522,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private const int FallbackHistoryDays = 89;
         private const int SyncOverlapDays = 14;
         private const int SuccessorMaxDays = 7;
+
+        private static readonly string[] ManualCountings = { "NEUTRAL", "IN", "OUT" };
 
         private static readonly TimeSpan SyncInterval = TimeSpan.FromMinutes(15);
         private static readonly TimeSpan ForcedSyncInterval = TimeSpan.FromMinutes(1);

@@ -179,6 +179,24 @@ namespace ZenithFin.Api.v1
             return Ok(new { recurring = result.Recurring });
         }
 
+        [HttpPut]
+        [ResourceGuard]
+        [Route("accounts/transactions/{id:long}/counting")]
+        public async Task<IActionResult> SetCounting(long id,
+                                                     [FromBody] TransactionDto.SetCountingRequest request)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            CountingResult result = await _transactionService.SetCountingAsync(sessionId, id, request);
+
+            if (result.StatusCode != StatusCodes.Status200OK)
+                return StatusCode(result.StatusCode, new { message = result.Message, success = false });
+
+            return Ok(new { counting = result.Counting });
+        }
+
         [HttpGet]
         [ResourceGuard]
         [Route("connections")]

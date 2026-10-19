@@ -88,7 +88,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    t.reference_number AS "ReferenceNumber",
                                    t.note AS "Note",
                                    t.tag_id AS "TagId",
-                                   t.tag_source::text AS "TagSource"
+                                   t.tag_source::text AS "TagSource",
+                                   t.counting_override::text AS "Counting"
                                FROM "Transaction" t
                                INNER JOIN "Account" a
                                    ON a.id = t.account_id
@@ -186,6 +187,30 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 UserId = userId,
                 TransactionId = transactionId
             });
+        }
+
+        public async Task<bool> SetCountingOverrideAsync(long userId,
+                                                         long transactionId,
+                                                         string? counting)
+        {
+            const string sql = """
+                               UPDATE "Transaction" t
+                               SET counting_override = CAST(@Counting AS "CreditCounting")
+                               FROM "Account" a
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               WHERE t.id = @TransactionId
+                                 AND a.id = t.account_id
+                                 AND bc.user_id = @UserId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.ExecuteAsync(sql, new
+            {
+                UserId = userId,
+                TransactionId = transactionId,
+                Counting = counting
+            }) > 0;
         }
 
         public async Task<bool> SetUserTagAsync(long userId,

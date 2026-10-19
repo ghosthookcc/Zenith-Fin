@@ -67,7 +67,9 @@ function monthSummary(transactions: MonthTransaction[], account: VirtualAccountR
 
         count += 1;
         moved += Math.round(Math.abs(transaction.amount) * 100);
-        counted += Math.round((countedAmount(transaction.amount, account.counting) ?? 0) * 100);
+        counted += Math.round(
+            (countedAmount(transaction.amount, transaction.counting ?? account.counting) ?? 0) * 100,
+        );
     }
 
     return { count, counted, moved };

@@ -31,6 +31,7 @@ namespace ZenithFin.Api.Models.Dtos
 
             public long? TagId { get; set; }
             public string? TagSource { get; set; }
+            public string? Counting { get; set; }
 
             public RecurringInfo? Recurring { get; set; }
         }
@@ -47,6 +48,11 @@ namespace ZenithFin.Api.Models.Dtos
         public sealed class SetRecurringRequest
         {
             public bool? Recurring { get; set; }
+        }
+
+        public sealed class SetCountingRequest
+        {
+            public string? Counting { get; set; }
         }
 
         public sealed class CorrectTagRequest
