@@ -13,6 +13,35 @@ const insecureDispatcher = new Agent({
 export const backendUrl =
   getSecret("ZENITH_API_URL") ?? "https://localhost:4446/api/v1";
 
+export async function validateSession(
+  jwt: string,
+): Promise<{ userId: unknown } | null> {
+  try {
+    const response = await fetchWithTimeout(
+      `${backendUrl}/auth/users/session`,
+      {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${jwt}`,
+          "Content-Type": "application/json",
+        },
+        dispatcher: insecureDispatcher,
+      },
+      10000,
+    );
+
+    const data = (await response.json().catch(() => null)) as {
+      success?: boolean;
+      userId?: unknown;
+    } | null;
+
+    return data?.success === true ? { userId: data.userId } : null;
+  } catch (errno) {
+    console.error("Session check failed:", errno);
+    return null;
+  }
+}
+
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,

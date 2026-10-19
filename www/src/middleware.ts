@@ -1,10 +1,6 @@
 import type { MiddlewareHandler } from "astro";
 
-import { Agent } from "undici";
-
-const insecureDispatcher = new Agent({
-  connect: { rejectUnauthorized: false },
-});
+import { validateSession } from "./utils/backend.ts";
 
 const PUBLIC_ROUTES = [
   "/",
@@ -31,19 +27,8 @@ export const onRequest: MiddlewareHandler = async (
 
   if (isPublic) {
     console.log("🔵 MIDDLEWARE: Public route, skipping auth");
-    if (jwt && !isApi) {
-      const response = await fetch(new URL("/api/session", url.origin), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Cookie: `AuthToken=${jwt}`,
-        },
-        dispatcher: insecureDispatcher,
-      });
-      const data = await response.json();
-      if (data.success === true) {
-        return redirect(LOGGED_IN_LANDING_ROUTE);
-      }
+    if (jwt && !isApi && (await validateSession(jwt))) {
+      return redirect(LOGGED_IN_LANDING_ROUTE);
     }
     return next();
   }
@@ -53,32 +38,16 @@ export const onRequest: MiddlewareHandler = async (
     return redirect("/");
   }
 
-  try {
-    const response = await fetch(new URL("/api/session", url.origin), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Cookie: `AuthToken=${jwt}`,
-      },
-      dispatcher: insecureDispatcher,
-    });
+  const session = await validateSession(jwt);
 
-    console.log("🔵 MIDDLEWARE: Session API response status:", response.status);
-
-    if (!response.ok) {
-      console.log("🔵 MIDDLEWARE: Session invalid, redirecting");
-      return redirect("/");
-    }
-
-    const data = await response.json();
-    console.log("🔵 MIDDLEWARE: Session valid, user:", data.userId);
-
-    (request as any).user = data.userId;
-
-    return next();
-  } catch (errno) {
-    console.error("🔵 MIDDLEWARE: Session check failed:", errno);
-    console.error("Session check failed", errno);
+  if (!session) {
+    console.log("🔵 MIDDLEWARE: Session invalid, redirecting");
     return redirect("/");
   }
+
+  console.log("🔵 MIDDLEWARE: Session valid, user:", session.userId);
+
+  (request as any).user = session.userId;
+
+  return next();
 };
