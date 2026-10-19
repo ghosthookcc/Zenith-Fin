@@ -10,8 +10,16 @@ import {
 } from './BankConnections';
 import { CreditAccounts } from './CreditAccounts';
 import { VirtualAccounts } from './VirtualAccounts';
-import { SharedAccounts, sharedWithLabel, sharesByAccount, type AccountShare } from './SharedAccounts';
-import { currentMonthRange, type MonthTransaction } from '../utils/credit';
+import {
+    accountShareKey,
+    SharedAccounts,
+    sharedWithLabel,
+    sharesByTarget,
+    virtualShareKey,
+    type AccountShare,
+    type ShareTarget,
+} from './SharedAccounts';
+import { currentMonthRange, type MonthTransaction, type VirtualAccountRule } from '../utils/credit';
 import { Icon } from './Icon';
 import { accountColors as colors } from '../utils/accounts';
 
@@ -165,6 +173,8 @@ export const AccountOverview = component$(() => {
     const monthSyncing = useSignal(false);
     const shares = useSignal<AccountShare[] | null>(null);
     const sharesError = useSignal<string | null>(null);
+    const virtualAccounts = useSignal<VirtualAccountRule[] | null>(null);
+    const virtualError = useSignal<string | null>(null);
 
     const loadMonth = $(async () => {
         monthError.value = false;
@@ -250,6 +260,38 @@ export const AccountOverview = component$(() => {
         } catch (err) {
             sharesError.value = err instanceof Error ? err.message : 'Could not load shared accounts.';
         }
+    });
+
+    const loadVirtualAccounts = $(async () => {
+        virtualError.value = null;
+
+        try {
+            const response = await fetch('/api/virtual-accounts', {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+                virtualAccounts?: VirtualAccountRule[];
+                message?: string;
+            } | null;
+
+            if (!response.ok || !payload || !Array.isArray(payload.virtualAccounts)) {
+                throw new Error(payload?.message ?? `Could not load virtual accounts (${response.status})`);
+            }
+
+            virtualAccounts.value = payload.virtualAccounts;
+        } catch (err) {
+            virtualError.value = err instanceof Error ? err.message : 'Could not load virtual accounts.';
+        }
+    });
+
+    const reloadVirtualAccounts = $(async () => {
+        await Promise.all([loadVirtualAccounts(), loadShares()]);
     });
 
     const reconnectingId = useSignal<number | null>(null);
@@ -514,6 +556,7 @@ export const AccountOverview = component$(() => {
             await loadConnections();
             await loadAvailableBanks();
             await loadAccounts();
+            await loadShares();
         } catch (err) {
             bankError.value = err instanceof Error ? err.message : `Could not remove ${connection.bank}.`;
         } finally {
@@ -539,6 +582,7 @@ export const AccountOverview = component$(() => {
             void loadConnections();
             void loadMonth();
             void loadShares();
+            void loadVirtualAccounts();
             void loadAvailableBanks();
         },
         {
@@ -548,7 +592,28 @@ export const AccountOverview = component$(() => {
     
     const accounts = backendAccounts.value.map(makeDisplayAccount);
 
-    const sharedByAccount = sharesByAccount(shares.value ?? []);
+    const sharedByTarget = sharesByTarget(shares.value ?? []);
+
+    const shareTargets: ShareTarget[] = [
+        ...accounts.map((account) => ({
+            key: accountShareKey(account.backendId),
+            kind: 'account' as const,
+            id: account.backendId,
+            name: account.name,
+            bank: account.bank,
+            iban: account.iban,
+            color: account.color,
+        })),
+        ...(virtualAccounts.value ?? []).map((account) => ({
+            key: virtualShareKey(account.id),
+            kind: 'virtual' as const,
+            id: account.id,
+            name: account.name,
+            bank: 'Virtual account',
+            accountNumber: account.accountNumber,
+            color: '#8792a5',
+        })),
+    ];
 
     const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
 
@@ -1143,13 +1208,15 @@ export const AccountOverview = component$(() => {
                                                     </p>
                                                 )}
 
-                                                {sharedByAccount.has(account.backendId) && (
+                                                {sharedByTarget.has(accountShareKey(account.backendId)) && (
                                                     <p
                                                         class="account-shared"
-                                                        title={sharedWithLabel(sharedByAccount.get(account.backendId)!)}
+                                                        title={sharedWithLabel(sharedByTarget.get(accountShareKey(account.backendId))!)}
                                                     >
                                                         <Icon name="users" />
-                                                        <span>{sharedWithLabel(sharedByAccount.get(account.backendId)!)}</span>
+                                                        <span>
+                                                            {sharedWithLabel(sharedByTarget.get(accountShareKey(account.backendId))!)}
+                                                        </span>
                                                     </p>
                                                 )}
 
@@ -1212,19 +1279,17 @@ export const AccountOverview = component$(() => {
                             />
 
                             <VirtualAccounts
+                                virtualAccounts={virtualAccounts.value}
+                                error={virtualError.value}
+                                shares={shares.value}
                                 hidden={hidden.value}
                                 monthTransactions={monthTransactions.value}
                                 monthError={monthError.value}
+                                onChanged$={reloadVirtualAccounts}
                             />
 
                             <SharedAccounts
-                                accounts={accounts.map((account) => ({
-                                    id: account.backendId,
-                                    name: account.name,
-                                    bank: account.bank,
-                                    iban: account.iban,
-                                    color: account.color,
-                                }))}
+                                targets={shareTargets}
                                 shares={shares.value}
                                 error={sharesError.value}
                                 onChanged$={loadShares}

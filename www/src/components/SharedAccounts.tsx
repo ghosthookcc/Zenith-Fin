@@ -4,24 +4,28 @@ import { Icon } from './Icon';
 
 export interface AccountShare {
     id: number;
-    accountId: number;
+    accountId: number | null;
+    virtualAccountId: number | null;
     firstName: string;
     lastName: string;
     hasPersonalNumber: boolean;
 }
 
-export interface ShareableAccount {
+export interface ShareTarget {
+    key: string;
+    kind: 'account' | 'virtual';
     id: number;
     name: string;
     bank: string;
     iban?: string | null;
+    accountNumber?: string | null;
     color: string;
 }
 
 interface Editor {
     open: boolean;
     id: number | null;
-    accountId: string;
+    target: string;
     firstName: string;
     lastName: string;
     personalNumber: string;
@@ -42,7 +46,7 @@ interface Revealed {
 }
 
 interface SharedAccountsProps {
-    accounts: ShareableAccount[];
+    targets: ShareTarget[];
     shares: AccountShare[] | null;
     error: string | null;
     onChanged$: QRL<() => Promise<void>>;
@@ -67,20 +71,42 @@ export function sharedWithLabel(shares: AccountShare[]): string {
     return `Shared with ${personName(shares[0])} and ${shares.length - 1} others`;
 }
 
-export function sharesByAccount(shares: AccountShare[]): Map<number, AccountShare[]> {
-    const grouped = new Map<number, AccountShare[]>();
+export function accountShareKey(accountId: number): string {
+    return `account:${accountId}`;
+}
+
+export function virtualShareKey(virtualAccountId: number): string {
+    return `virtual:${virtualAccountId}`;
+}
+
+function shareKey(share: AccountShare): string {
+    return share.virtualAccountId !== null
+        ? virtualShareKey(share.virtualAccountId)
+        : accountShareKey(share.accountId ?? 0);
+}
+
+export function sharesByTarget(shares: AccountShare[]): Map<string, AccountShare[]> {
+    const grouped = new Map<string, AccountShare[]>();
 
     for (const share of shares) {
-        grouped.set(share.accountId, [...(grouped.get(share.accountId) ?? []), share]);
+        const key = shareKey(share);
+
+        grouped.set(key, [...(grouped.get(key) ?? []), share]);
     }
 
     return grouped;
 }
 
-function accountLabel(account: ShareableAccount): string {
-    const iban = account.iban?.replace(/\s+/g, '');
+function targetLabel(target: ShareTarget): string {
+    if (target.kind === 'virtual') {
+        const digits = target.accountNumber?.replace(/\D/g, '') ?? '';
 
-    return `${account.name}${iban ? ` ··${iban.slice(-4)}` : ''} · ${account.bank}`;
+        return `${target.name}${digits ? ` ··${digits.slice(-4)}` : ''} · ${target.bank}`;
+    }
+
+    const iban = target.iban?.replace(/\s+/g, '');
+
+    return `${target.name}${iban ? ` ··${iban.slice(-4)}` : ''} · ${target.bank}`;
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -121,7 +147,7 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
     const editor = useStore<Editor>({
         open: false,
         id: null,
-        accountId: '',
+        target: '',
         firstName: '',
         lastName: '',
         personalNumber: '',
@@ -211,10 +237,10 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
         }
     });
 
-    const openEditor = $((share: AccountShare | null, accountId: number | null) => {
+    const openEditor = $((share: AccountShare | null, targetKey: string | null) => {
         editor.open = true;
         editor.id = share?.id ?? null;
-        editor.accountId = String(share?.accountId ?? accountId ?? '');
+        editor.target = share ? shareKey(share) : (targetKey ?? '');
         editor.firstName = share?.firstName ?? '';
         editor.lastName = share?.lastName ?? '';
         editor.personalNumber = '';
@@ -238,6 +264,8 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
         editor.saving = true;
         editor.error = null;
 
+        const target = props.targets.find((candidate) => candidate.key === editor.target);
+
         try {
             const response = await fetch(
                 editor.id === null ? '/api/account-shares' : `/api/account-shares/${editor.id}`,
@@ -249,7 +277,8 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
                     },
                     credentials: 'same-origin',
                     body: JSON.stringify({
-                        accountId: editor.accountId ? Number(editor.accountId) : null,
+                        accountId: target?.kind === 'account' ? target.id : null,
+                        virtualAccountId: target?.kind === 'virtual' ? target.id : null,
                         firstName: editor.firstName,
                         lastName: editor.lastName,
                         personalNumber: editor.removeSavedNumber ? null : editor.personalNumber.trim() || null,
@@ -316,9 +345,11 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
         }
     });
 
-    const grouped = sharesByAccount(props.shares ?? []);
-    const sharedAccounts = props.accounts.filter((account) => grouped.has(account.id));
-    const editedAccount = props.accounts.find((account) => String(account.id) === editor.accountId);
+    const grouped = sharesByTarget(props.shares ?? []);
+    const sharedTargets = props.targets.filter((target) => grouped.has(target.key));
+    const editedTarget = props.targets.find((target) => target.key === editor.target);
+    const connectedTargets = props.targets.filter((target) => target.kind === 'account');
+    const virtualTargets = props.targets.filter((target) => target.kind === 'virtual');
     const alert = actionError.value ?? props.error;
 
     return (
@@ -326,11 +357,11 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
             <div class="section-heading">
                 <div>
                     <h2 id="shared-title">
-                        Shared accounts <span>{String(sharedAccounts.length).padStart(2, '0')}</span>
+                        Shared accounts <span>{String(sharedTargets.length).padStart(2, '0')}</span>
                     </h2>
                     <p>
-                        Accounts you share with someone else. Personal numbers stay hidden until you
-                        choose to show them.
+                        Connected or virtual accounts you share with someone else. Personal numbers stay
+                        hidden until you choose to show them.
                     </p>
                 </div>
 
@@ -338,7 +369,7 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
                     <button
                         type="button"
                         class="cat-primary credit-new"
-                        disabled={!props.shares || props.accounts.length === 0}
+                        disabled={!props.shares || props.targets.length === 0}
                         onClick$={() => openEditor(null, null)}
                     >
                         Share an account
@@ -368,7 +399,7 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
                                 <h2 id="share-editor-title">
                                     {editor.id === null ? 'Add a person to an account' : 'Edit person'}
                                 </h2>
-                                <p>{editedAccount ? accountLabel(editedAccount) : 'Pick the account you share'}</p>
+                                <p>{editedTarget ? targetLabel(editedTarget) : 'Pick the account you share'}</p>
                             </div>
                         </div>
 
@@ -384,21 +415,38 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
                                     disabled={editor.id !== null}
                                     aria-describedby="share-account-hint"
                                     onChange$={(_, element) => {
-                                        editor.accountId = element.value;
+                                        editor.target = element.value;
                                     }}
                                 >
-                                    <option value="" selected={editor.accountId === ''}>
+                                    <option value="" selected={editor.target === ''}>
                                         Pick an account
                                     </option>
-                                    {props.accounts.map((account) => (
-                                        <option
-                                            key={account.id}
-                                            value={String(account.id)}
-                                            selected={editor.accountId === String(account.id)}
-                                        >
-                                            {accountLabel(account)}
-                                        </option>
-                                    ))}
+                                    {connectedTargets.length > 0 && (
+                                        <optgroup label="Your accounts">
+                                            {connectedTargets.map((target) => (
+                                                <option
+                                                    key={target.key}
+                                                    value={target.key}
+                                                    selected={editor.target === target.key}
+                                                >
+                                                    {targetLabel(target)}
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
+                                    {virtualTargets.length > 0 && (
+                                        <optgroup label="Virtual accounts">
+                                            {virtualTargets.map((target) => (
+                                                <option
+                                                    key={target.key}
+                                                    value={target.key}
+                                                    selected={editor.target === target.key}
+                                                >
+                                                    {targetLabel(target)}
+                                                </option>
+                                            ))}
+                                        </optgroup>
+                                    )}
                                 </select>
                                 <span id="share-account-hint" class="cat-hint">
                                     {editor.id === null
@@ -508,7 +556,7 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
 
             {!props.shares ? (
                 !props.error && <p class="cal-empty credit-empty">Loading shared accounts…</p>
-            ) : sharedAccounts.length === 0 ? (
+            ) : sharedTargets.length === 0 ? (
                 !editor.open && (
                     <div class="overview-panel">
                         <p class="cal-empty">
@@ -519,29 +567,29 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
                 )
             ) : (
                 <div class="accounts-grid">
-                    {sharedAccounts.map((account) => {
-                        const people = grouped.get(account.id) ?? [];
+                    {sharedTargets.map((target) => {
+                        const people = grouped.get(target.key) ?? [];
 
                         return (
                             <article
-                                key={account.id}
+                                key={target.key}
                                 class="account-card credit-card share-card"
-                                style={{ '--account-color': account.color }}
+                                style={{ '--account-color': target.color }}
                             >
                                 <div class="card-top">
                                     <span class="account-icon">
                                         <Icon name="users" />
                                     </span>
-                                    <span class="card-bank">{account.bank}</span>
+                                    <span class="card-bank">{target.bank}</span>
                                     <span class="credit-counting">
                                         {people.length === 1 ? '1 person' : `${people.length} people`}
                                     </span>
                                 </div>
 
-                                <h3>{account.name}</h3>
+                                <h3>{target.name}</h3>
 
-                                <p class="account-purpose" title={accountLabel(account)}>
-                                    {accountLabel(account)}
+                                <p class="account-purpose" title={targetLabel(target)}>
+                                    {targetLabel(target)}
                                 </p>
 
                                 <ul class="share-people">
@@ -648,7 +696,7 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
                                 </ul>
 
                                 <div class="credit-actions">
-                                    <button type="button" class="cal-chip" onClick$={() => openEditor(null, account.id)}>
+                                    <button type="button" class="cal-chip" onClick$={() => openEditor(null, target.key)}>
                                         Add person
                                     </button>
                                 </div>

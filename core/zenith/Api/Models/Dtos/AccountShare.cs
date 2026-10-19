@@ -5,7 +5,8 @@ namespace ZenithFin.Api.Models.Dtos
         public sealed class AccountShare
         {
             public long Id { get; set; }
-            public long AccountId { get; set; }
+            public long? AccountId { get; set; }
+            public long? VirtualAccountId { get; set; }
             public string FirstName { get; set; } = string.Empty;
             public string LastName { get; set; } = string.Empty;
             public bool HasPersonalNumber { get; set; }
@@ -14,6 +15,7 @@ namespace ZenithFin.Api.Models.Dtos
         public sealed class SaveAccountShareRequest
         {
             public long? AccountId { get; set; }
+            public long? VirtualAccountId { get; set; }
             public string? FirstName { get; set; }
             public string? LastName { get; set; }
             public string? PersonalNumber { get; set; }

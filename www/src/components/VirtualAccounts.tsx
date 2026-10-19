@@ -1,6 +1,7 @@
-import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
+import { $, component$, useSignal, useStore, type QRL } from '@builder.io/qwik';
 
 import { Icon } from './Icon';
+import { sharedWithLabel, sharesByTarget, virtualShareKey, type AccountShare } from './SharedAccounts';
 import {
     countedAmount,
     countingChoices,
@@ -12,10 +13,6 @@ import {
     uncountedStatuses,
     type VirtualAccountRule,
 } from '../utils/credit';
-
-interface VirtualAccountsResponse {
-    virtualAccounts: VirtualAccountRule[];
-}
 
 interface Editor {
     open: boolean;
@@ -30,9 +27,13 @@ interface Editor {
 }
 
 interface VirtualAccountsProps {
+    virtualAccounts: VirtualAccountRule[] | null;
+    error: string | null;
+    shares: AccountShare[] | null;
     hidden: boolean;
     monthTransactions: MonthTransaction[] | null;
     monthError: boolean;
+    onChanged$: QRL<() => Promise<void>>;
 }
 
 const maskedAmount = '•• •••,••';
@@ -102,18 +103,8 @@ function messageFrom(payload: unknown): string | null {
     return null;
 }
 
-function isVirtualAccountsResponse(value: unknown): value is VirtualAccountsResponse {
-    return (
-        !!value &&
-        typeof value === 'object' &&
-        Array.isArray((value as VirtualAccountsResponse).virtualAccounts)
-    );
-}
-
 export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
-    const data = useSignal<VirtualAccountRule[] | null>(null);
-    const loading = useSignal(true);
-    const error = useSignal<string | null>(null);
+    const actionError = useSignal<string | null>(null);
     const confirmingDelete = useSignal<number | null>(null);
     const deleting = useSignal<number | null>(null);
 
@@ -127,40 +118,6 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
         counting: 'NEUTRAL',
         saving: false,
         error: null,
-    });
-
-    const load = $(async () => {
-        loading.value = true;
-        error.value = null;
-
-        try {
-            const response = await fetch('/api/virtual-accounts', {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                },
-                credentials: 'same-origin',
-                cache: 'no-store',
-            });
-
-            const payload = await readJson(response);
-
-            if (!response.ok) {
-                throw new Error(
-                    messageFrom(payload) ?? `Failed to fetch virtual accounts (${response.status})`,
-                );
-            }
-
-            if (!isVirtualAccountsResponse(payload)) {
-                throw new Error('Unexpected response from the virtual account API.');
-            }
-
-            data.value = payload.virtualAccounts;
-        } catch (err) {
-            error.value = err instanceof Error ? err.message : 'Could not load virtual accounts.';
-        } finally {
-            loading.value = false;
-        }
     });
 
     const openEditor = $((account: VirtualAccountRule | null) => {
@@ -212,7 +169,7 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
             }
 
             editor.open = false;
-            await load();
+            await props.onChanged$();
         } catch (err) {
             editor.error = err instanceof Error ? err.message : 'Could not save the virtual account.';
         } finally {
@@ -222,7 +179,7 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
 
     const remove = $(async (id: number) => {
         deleting.value = id;
-        error.value = null;
+        actionError.value = null;
 
         try {
             const response = await fetch(`/api/virtual-accounts/${id}`, {
@@ -247,25 +204,18 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                 editor.open = false;
             }
 
-            await load();
+            await props.onChanged$();
         } catch (err) {
-            error.value = err instanceof Error ? err.message : 'Could not delete the virtual account.';
+            actionError.value = err instanceof Error ? err.message : 'Could not delete the virtual account.';
         } finally {
             deleting.value = null;
         }
     });
 
-    useVisibleTask$(
-        () => {
-            void load();
-        },
-        {
-            strategy: 'document-ready',
-        },
-    );
-
     const month = currentMonthRange();
-    const virtualAccounts = data.value ?? [];
+    const virtualAccounts = props.virtualAccounts ?? [];
+    const sharedByTarget = sharesByTarget(props.shares ?? []);
+    const alert = actionError.value ?? props.error;
     const selectedCounting = countingChoices.find((choice) => choice.value === editor.counting);
     const kr = (minor: number) => (props.hidden ? maskedAmount : formatKr(minor));
 
@@ -286,7 +236,7 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                     <button
                         type="button"
                         class="cat-primary credit-new"
-                        disabled={!data.value}
+                        disabled={!props.virtualAccounts}
                         onClick$={() => openEditor(null)}
                     >
                         New virtual account
@@ -294,14 +244,16 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                 )}
             </div>
 
-            {error.value && (
+            {alert && (
                 <div class="cal-alert" role="alert">
                     <Icon name="info" />
                     <div>
-                        <strong>{error.value}</strong>
-                        <button type="button" class="cal-chip cat-retry" onClick$={load}>
-                            Try again
-                        </button>
+                        <strong>{alert}</strong>
+                        {!actionError.value && (
+                            <button type="button" class="cal-chip cat-retry" onClick$={() => props.onChanged$()}>
+                                Try again
+                            </button>
+                        )}
                     </div>
                 </div>
             )}
@@ -454,8 +406,8 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                 </div>
             )}
 
-            {loading.value && !data.value ? (
-                <p class="cal-empty credit-empty">Loading virtual accounts…</p>
+            {!props.virtualAccounts ? (
+                !props.error && <p class="cal-empty credit-empty">Loading virtual accounts…</p>
             ) : virtualAccounts.length === 0 ? (
                 !editor.open && (
                     <div class="overview-panel">
@@ -472,6 +424,7 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                         const summary = props.monthTransactions
                             ? monthSummary(props.monthTransactions, account)
                             : null;
+                        const people = sharedByTarget.get(virtualShareKey(account.id)) ?? [];
 
                         return (
                             <article
@@ -492,6 +445,13 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                                 <p class="account-purpose" title={numberLabel(account)}>
                                     {numberLabel(account)}
                                 </p>
+
+                                {people.length > 0 && (
+                                    <p class="account-shared" title={sharedWithLabel(people)}>
+                                        <Icon name="users" />
+                                        <span>{sharedWithLabel(people)}</span>
+                                    </p>
+                                )}
 
                                 {summary === null ? (
                                     <p class="credit-note">
@@ -527,7 +487,11 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
 
                                 {confirmingDelete.value === account.id ? (
                                     <div class="credit-actions" role="group" aria-label="Confirm delete">
-                                        <span class="cat-confirm">Its transactions count normally again.</span>
+                                        <span class="cat-confirm">
+                                            {people.length > 0
+                                                ? "Its transactions count normally again, and the people it's shared with are removed."
+                                                : 'Its transactions count normally again.'}
+                                        </span>
                                         <button
                                             type="button"
                                             class="cal-chip"

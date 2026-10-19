@@ -68,7 +68,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (userId == null) return Unauthorized;
 
-            if (request.AccountId == null) return BadRequest("Pick the account you share");
+            if (request.AccountId == null && request.VirtualAccountId == null) return BadRequest("Pick the account you share");
+            if (request.AccountId != null && request.VirtualAccountId != null) return BadRequest("Pick one account to share");
 
             (Person? person, AccountShareResult? invalid) = ValidatePerson(request);
 
@@ -76,14 +77,15 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             AccountShareRow[] existing = await _accountShareRepository.GetSharesForUserAsync(userId.Value);
 
-            AccountShareRow? duplicate = FindDuplicate(existing, request.AccountId.Value, person, null);
+            AccountShareRow? duplicate = FindDuplicate(existing, request.AccountId, request.VirtualAccountId, person, null);
 
             if (duplicate != null) return Duplicate(duplicate);
 
             string? encrypted = person.PersonalNumber == null ? null : _protector.Encrypt(person.PersonalNumber);
 
             long? id = await _accountShareRepository.InsertShareAsync(userId.Value,
-                                                                      request.AccountId.Value,
+                                                                      request.AccountId,
+                                                                      request.VirtualAccountId,
                                                                       person.FirstName,
                                                                       person.LastName,
                                                                       encrypted);
@@ -93,7 +95,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
             return Saved(new AccountShareRow
             {
                 Id = id.Value,
-                AccountId = request.AccountId.Value,
+                AccountId = request.AccountId,
+                VirtualAccountId = request.VirtualAccountId,
                 FirstName = person.FirstName,
                 LastName = person.LastName,
                 PersonalNumberEncrypted = encrypted
@@ -117,7 +120,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (person == null) return invalid!;
 
-            AccountShareRow? duplicate = FindDuplicate(existing, current.AccountId, person, shareId);
+            AccountShareRow? duplicate = FindDuplicate(existing, current.AccountId, current.VirtualAccountId, person, shareId);
 
             if (duplicate != null) return Duplicate(duplicate);
 
@@ -136,6 +139,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             {
                 Id = shareId,
                 AccountId = current.AccountId,
+                VirtualAccountId = current.VirtualAccountId,
                 FirstName = person.FirstName,
                 LastName = person.LastName,
                 PersonalNumberEncrypted = replace ? encrypted : current.PersonalNumberEncrypted
@@ -268,12 +272,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
         }
 
         private static AccountShareRow? FindDuplicate(IEnumerable<AccountShareRow> existing,
-                                                      long accountId,
+                                                      long? accountId,
+                                                      long? virtualAccountId,
                                                       Person person,
                                                       long? editedId)
         {
             return existing.FirstOrDefault(share => share.Id != editedId &&
                                                     share.AccountId == accountId &&
+                                                    share.VirtualAccountId == virtualAccountId &&
                                                     string.Equals(share.FirstName, person.FirstName, StringComparison.OrdinalIgnoreCase) &&
                                                     string.Equals(share.LastName, person.LastName, StringComparison.OrdinalIgnoreCase));
         }
@@ -284,6 +290,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             {
                 Id = row.Id,
                 AccountId = row.AccountId,
+                VirtualAccountId = row.VirtualAccountId,
                 FirstName = row.FirstName,
                 LastName = row.LastName,
                 HasPersonalNumber = row.PersonalNumberEncrypted != null
