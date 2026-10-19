@@ -681,6 +681,11 @@
     color: var(--cal-ink-2);
 }
 
+.cal-neutral-badge {
+    border-color: #4a5466;
+    color: var(--cal-muted);
+}
+
 .cal-breakdown-static,
 .cal-breakdown-static:hover {
     background: none;

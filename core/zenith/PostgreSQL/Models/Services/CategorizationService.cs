@@ -21,6 +21,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private const string TransferKind = "TRANSFER";
 
+        private const int MinimumCounterpartyDigits = 5;
+
         public CategorizationService(TransactionRepository transactionRepository,
                                      TagRepository tagRepository,
                                      UserRepository userRepository,
@@ -60,7 +62,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             HashSet<long> paired = TransferPairs.Find((await _transactionRepository.GetCategorizationCandidatesAsync(userId,
                                                                                                                    includeRuleTagged: true,
                                                                                                                    includeUserTagged: true))
-                                                      .Select(transaction => ToTransferLeg(transaction, owner))
+                                                      .Select(transaction => ToTransferLeg(transaction, owner, transferTagIds))
                                                       .ToArray());
 
             Dictionary<CorrectionKey, long> learned = new();
@@ -122,7 +124,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
         }
 
         private static TransferLeg ToTransferLeg(CategorizationCandidate transaction,
-                                                 OwnerProfile owner)
+                                                 OwnerProfile owner,
+                                                 IReadOnlySet<long> transferTagIds)
         {
             return new TransferLeg(transaction.Id,
                                    transaction.AccountId,
@@ -132,7 +135,17 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                    transaction.CreditDebitIndicator,
                                    transaction.BankTransactionCode,
                                    transaction.Status,
-                                   RuleCategorizer.IsOwnTransfer(ToInput(transaction), owner));
+                                   RuleCategorizer.IsOwnTransfer(ToInput(transaction), owner),
+                                   HasKnownCounterparty(transaction),
+                                   transaction.TagSource is UserSource or LearnedSource &&
+                                   transaction.TagId is long tagId &&
+                                   !transferTagIds.Contains(tagId));
+        }
+
+        private static bool HasKnownCounterparty(CategorizationCandidate transaction)
+        {
+            return !string.IsNullOrWhiteSpace(transaction.CounterpartyName) ||
+                   (transaction.CounterpartyAccount ?? "").Count(char.IsAsciiDigit) >= MinimumCounterpartyDigits;
         }
 
         public static CategorizationInput ToInput(CategorizationCandidate candidate)

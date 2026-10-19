@@ -1847,6 +1847,14 @@ export const TransactionCalendar = component$(() => {
                                                                             {ruleOf(transaction)!.name}
                                                                         </span>
                                                                     )}
+                                                                    {isTransfer(transaction) && !ruleOf(transaction) && (
+                                                                        <span
+                                                                            class="cal-ai-badge cal-neutral-badge"
+                                                                            title="A transfer between your own accounts, so it is left out of your money in and out"
+                                                                        >
+                                                                            Neutral
+                                                                        </span>
+                                                                    )}
                                                                     {' · '}
                                                                     <span
                                                                         class="cal-account-dot"

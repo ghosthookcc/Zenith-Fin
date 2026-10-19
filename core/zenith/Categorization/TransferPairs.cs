@@ -8,7 +8,9 @@ namespace ZenithFin.Categorization
                                      string CreditDebitIndicator,
                                      string? BankTransactionCode,
                                      string Status,
-                                     bool OwnTransfer);
+                                     bool OwnTransfer,
+                                     bool KnownCounterparty,
+                                     bool TaggedByUser);
 
     public static class TransferPairs
     {
@@ -26,30 +28,73 @@ namespace ZenithFin.Categorization
 
             foreach (var group in legs.Where(IsEligible).GroupBy(leg => (leg.Currency, Amount: Math.Abs(leg.Amount))))
             {
+                TransferLeg[] outgoing = group.Where(leg => leg.CreditDebitIndicator == "DBIT").ToArray();
                 TransferLeg[] incoming = group.Where(leg => leg.CreditDebitIndicator == "CRDT").ToArray();
 
-                var candidates = group.Where(leg => leg.CreditDebitIndicator == "DBIT")
-                                      .SelectMany(outgoing => incoming.Where(leg => leg.AccountId != outgoing.AccountId &&
-                                                                                   (outgoing.OwnTransfer || leg.OwnTransfer))
-                                                                      .Select(leg => (Outgoing: outgoing,
-                                                                                      Incoming: leg,
-                                                                                      Days: Math.Abs(outgoing.OccurredOn.DayNumber - leg.OccurredOn.DayNumber))))
-                                      .Where(pair => pair.Days <= MaxDaysApart)
-                                      .OrderBy(pair => pair.Days)
-                                      .ThenByDescending(pair => pair.Outgoing.OwnTransfer && pair.Incoming.OwnTransfer)
-                                      .ThenBy(pair => pair.Outgoing.Id)
-                                      .ThenBy(pair => pair.Incoming.Id);
-
-                foreach ((TransferLeg outgoing, TransferLeg leg, int _) in candidates)
-                {
-                    if (paired.Contains(outgoing.Id) || paired.Contains(leg.Id)) continue;
-
-                    paired.Add(outgoing.Id);
-                    paired.Add(leg.Id);
-                }
+                PairMarked(outgoing, incoming, paired);
+                PairUnmarked(outgoing, incoming, paired);
             }
 
             return paired;
+        }
+
+        private static void PairMarked(IReadOnlyList<TransferLeg> outgoing,
+                                       IReadOnlyList<TransferLeg> incoming,
+                                       HashSet<long> paired)
+        {
+            var candidates = outgoing.SelectMany(leg => incoming.Where(candidate => (leg.OwnTransfer || candidate.OwnTransfer) &&
+                                                                                    AreClose(leg, candidate))
+                                                                .Select(candidate => (Outgoing: leg,
+                                                                                      Incoming: candidate,
+                                                                                      Days: DaysApart(leg, candidate))))
+                                     .OrderBy(pair => pair.Days)
+                                     .ThenByDescending(pair => pair.Outgoing.OwnTransfer && pair.Incoming.OwnTransfer)
+                                     .ThenBy(pair => pair.Outgoing.Id)
+                                     .ThenBy(pair => pair.Incoming.Id);
+
+            foreach ((TransferLeg leg, TransferLeg candidate, int _) in candidates)
+            {
+                if (paired.Contains(leg.Id) || paired.Contains(candidate.Id)) continue;
+
+                paired.Add(leg.Id);
+                paired.Add(candidate.Id);
+            }
+        }
+
+        private static void PairUnmarked(IReadOnlyList<TransferLeg> outgoing,
+                                         IReadOnlyList<TransferLeg> incoming,
+                                         HashSet<long> paired)
+        {
+            TransferLeg[] openOutgoing = outgoing.Where(leg => IsUnmarkedCandidate(leg, paired)).ToArray();
+            TransferLeg[] openIncoming = incoming.Where(leg => IsUnmarkedCandidate(leg, paired)).ToArray();
+
+            foreach (TransferLeg leg in openOutgoing)
+            {
+                TransferLeg[] matches = openIncoming.Where(candidate => AreClose(leg, candidate)).ToArray();
+
+                if (matches.Length != 1 || openOutgoing.Count(other => AreClose(other, matches[0])) != 1) continue;
+
+                paired.Add(leg.Id);
+                paired.Add(matches[0].Id);
+            }
+        }
+
+        private static bool IsUnmarkedCandidate(TransferLeg leg,
+                                                HashSet<long> paired)
+        {
+            return !paired.Contains(leg.Id) && !leg.KnownCounterparty && !leg.TaggedByUser;
+        }
+
+        private static bool AreClose(TransferLeg outgoing,
+                                     TransferLeg incoming)
+        {
+            return outgoing.AccountId != incoming.AccountId && DaysApart(outgoing, incoming) <= MaxDaysApart;
+        }
+
+        private static int DaysApart(TransferLeg outgoing,
+                                     TransferLeg incoming)
+        {
+            return Math.Abs(outgoing.OccurredOn.DayNumber - incoming.OccurredOn.DayNumber);
         }
 
         private static bool IsEligible(TransferLeg leg)
