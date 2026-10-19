@@ -5,26 +5,31 @@ import { forwardToBackend } from "../../../utils/backend.ts";
 export const prerender = false;
 
 function invalidId(): Response {
-    return new Response(
-        JSON.stringify({
-            success: false,
-            message: "Unknown virtual account",
-        }),
-        {
-            status: 404,
-            headers: {
-                "Content-Type": "application/json",
-            },
-        },
-    );
+  return new Response(
+    JSON.stringify({
+      success: false,
+      message: "Unknown virtual account",
+    }),
+    {
+      status: 404,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    },
+  );
 }
 
 export const PUT: APIRoute = async ({ cookies, params, request }) =>
-    params.id && /^\d+$/.test(params.id)
-        ? forwardToBackend(cookies, "PUT", `/virtual-accounts/${params.id}`, await request.text())
-        : invalidId();
+  params.id && /^\d+$/.test(params.id)
+    ? forwardToBackend(
+        cookies,
+        "PUT",
+        `/virtual-accounts/${params.id}`,
+        await request.text(),
+      )
+    : invalidId();
 
 export const DELETE: APIRoute = async ({ cookies, params }) =>
-    params.id && /^\d+$/.test(params.id)
-        ? forwardToBackend(cookies, "DELETE", `/virtual-accounts/${params.id}`)
-        : invalidId();
+  params.id && /^\d+$/.test(params.id)
+    ? forwardToBackend(cookies, "DELETE", `/virtual-accounts/${params.id}`)
+    : invalidId();

@@ -11,67 +11,57 @@ const insecureDispatcher = new Agent({
 export const prerender = false;
 
 export const POST: APIRoute = async ({ cookies }) => {
-    try
-    {
-        const jwt = cookies.get("AuthToken")?.value;
+  try {
+    const jwt = cookies.get("AuthToken")?.value;
 
-        if (!jwt)
-        {
-            return new Response(
-                JSON.stringify(
-                {
-                    message: "No token provided",
-                    success: false
-                }),
-                { status: 401 }
-            );
-        }
-
-        const response = await fetch(`${backendUrl}/auth/users/session`,
-        {
-            method: "GET",
-            headers:
-            {
-                "Authorization": `Bearer ${jwt}`,
-                "Content-Type": "application/json",
-            },
-            dispatcher: insecureDispatcher,
-        }); 
-
-        const data = await response.json();
-
-        if (!data.success)
-        {
-            cookies.delete("AuthToken", { path: "/" });
-            return new Response(JSON.stringify(data), {
-                status: 401,
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-            });        
-        }
-
-        return new Response(
-            JSON.stringify(
-            {
-                success: data.success,
-                userId: data.userId
-            }),
-            { status: data.code }
-        );
-  }
-  catch (errno)
-  {
-      console.error('🟢 SERVER: Fetch failed:', errno);
-
+    if (!jwt) {
       return new Response(
-          JSON.stringify(
-          {
-              message: 'Could not validate session',
-              success: false,
-              error: errno instanceof Error ? errno.message : 'Unknown error'
-          }),
-          { status: 503 }
+        JSON.stringify({
+          message: "No token provided",
+          success: false,
+        }),
+        { status: 401 },
       );
+    }
+
+    const response = await fetch(`${backendUrl}/auth/users/session`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        "Content-Type": "application/json",
+      },
+      dispatcher: insecureDispatcher,
+    });
+
+    const data = await response.json();
+
+    if (!data.success) {
+      cookies.delete("AuthToken", { path: "/" });
+      return new Response(JSON.stringify(data), {
+        status: 401,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: data.success,
+        userId: data.userId,
+      }),
+      { status: data.code },
+    );
+  } catch (errno) {
+    console.error("🟢 SERVER: Fetch failed:", errno);
+
+    return new Response(
+      JSON.stringify({
+        message: "Could not validate session",
+        success: false,
+        error: errno instanceof Error ? errno.message : "Unknown error",
+      }),
+      { status: 503 },
+    );
   }
 };

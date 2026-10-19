@@ -11,67 +11,58 @@ const insecureDispatcher = new Agent({
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
-    try
-    {
-        const body = await request.json();
+  try {
+    const body = await request.json();
 
-        const token = cookies.get("AuthToken")?.value;
-        const headers: Record<string, string> =
-        {
-            "Content-Type": "application/json",
-        }
-        if (token)
-        {
-            headers["Authorization"] = `Bearer ${token}`;
-        }
+    const token = cookies.get("AuthToken")?.value;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
-        const response = await fetch(`${backendUrl}/auth/users/login`,
-        {
-            method: "POST",
-            headers,
-            body: JSON.stringify(
-            {
-                email: body.email,
-                password: body.password,
-            }),
-            dispatcher: insecureDispatcher,
-        });
+    const response = await fetch(`${backendUrl}/auth/users/login`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        email: body.email,
+        password: body.password,
+      }),
+      dispatcher: insecureDispatcher,
+    });
 
-        const data = await response.json();
+    const data = await response.json();
 
-        if (data.success && data.token && data.jwtExpirationDate)
-        {
-            const expires = new Date(data.jwtExpirationDate);
-            cookies.set("AuthToken", data.token,
-            {
-                httpOnly: true,
-                secure: true,
-                sameSite: "none",
-                path: "/",
-                expires,
-            });
-        }
+    if (data.success && data.token && data.jwtExpirationDate) {
+      const expires = new Date(data.jwtExpirationDate);
+      cookies.set("AuthToken", data.token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "none",
+        path: "/",
+        expires,
+      });
+    }
 
-        return new Response(JSON.stringify(
-                            {
-                                message: data.message,
-                                url: data.url,
-                                success: data.success,
-                            }),
-                            { status: data.code });
-  }
-  catch (errno)
-  {
-      console.error('🟢 SERVER: Fetch failed:', errno);
+    return new Response(
+      JSON.stringify({
+        message: data.message,
+        url: data.url,
+        success: data.success,
+      }),
+      { status: data.code },
+    );
+  } catch (errno) {
+    console.error("🟢 SERVER: Fetch failed:", errno);
 
-      return new Response(
-          JSON.stringify(
-          {
-              message: 'Could not connect to authentication server',
-              success: false,
-              error: errno instanceof Error ? errno.message : 'Unknown error'
-          }),
-          { status: 503 }
-      );
+    return new Response(
+      JSON.stringify({
+        message: "Could not connect to authentication server",
+        success: false,
+        error: errno instanceof Error ? errno.message : "Unknown error",
+      }),
+      { status: 503 },
+    );
   }
 };

@@ -1,30 +1,45 @@
-import { component$, useId, useSignal, useStyles$ } from '@builder.io/qwik';
+import { component$, useId, useSignal, useStyles$ } from "@builder.io/qwik";
 
-import { Icon } from './Icon';
+import { Icon } from "./Icon";
 
 interface MenuItem {
-    label: string;
-    href: string;
-    icon: string;
-    hint: string;
+  label: string;
+  href: string;
+  icon: string;
+  hint: string;
 }
 
 interface SideMenuProps {
-    currentPath: string;
+  currentPath: string;
 }
 
 const items: MenuItem[] = [
-    { label: 'Accounts', href: '/accounts', icon: 'wallet', hint: 'Balances, banks and shared accounts' },
-    { label: 'Calendar', href: '/calendar', icon: 'calendar', hint: 'Every transaction, day by day' },
-    { label: 'Categories', href: '/categories', icon: 'tag', hint: 'Sort and train your categories' },
+  {
+    label: "Accounts",
+    href: "/accounts",
+    icon: "wallet",
+    hint: "Balances, banks and shared accounts",
+  },
+  {
+    label: "Calendar",
+    href: "/calendar",
+    icon: "calendar",
+    hint: "Every transaction, day by day",
+  },
+  {
+    label: "Categories",
+    href: "/categories",
+    icon: "tag",
+    hint: "Sort and train your categories",
+  },
 ];
 
 export default component$<SideMenuProps>((props) => {
-    const dialog = useSignal<HTMLDialogElement>();
-    const isOpen = useSignal(false);
-    const id = useId();
+  const dialog = useSignal<HTMLDialogElement>();
+  const isOpen = useSignal(false);
+  const id = useId();
 
-    useStyles$(`
+  useStyles$(`
     .sm-trigger, .sm-panel {
       font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
       color: #f1f2f5;
@@ -210,93 +225,132 @@ export default component$<SideMenuProps>((props) => {
     }
   `);
 
-    const currentPath = props.currentPath.replace(/\/+$/, '') || '/';
+  const currentPath = props.currentPath.replace(/\/+$/, "") || "/";
 
-    return (
-        <>
-            <button
-                type="button"
-                class="sm-trigger"
-                aria-label="Open navigation menu"
-                aria-haspopup="dialog"
-                aria-controls={id}
-                aria-expanded={isOpen.value}
-                onClick$={() => {
-                    if (dialog.value && !dialog.value.open) {
-                        dialog.value.showModal();
-                        isOpen.value = true;
-                    }
-                }}
-            >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-                    <path d="M4 7h16M4 12h11M4 17h16" />
+  return (
+    <>
+      <button
+        type="button"
+        class="sm-trigger"
+        aria-label="Open navigation menu"
+        aria-haspopup="dialog"
+        aria-controls={id}
+        aria-expanded={isOpen.value}
+        onClick$={() => {
+          if (dialog.value && !dialog.value.open) {
+            dialog.value.showModal();
+            isOpen.value = true;
+          }
+        }}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.7"
+          stroke-linecap="round"
+          aria-hidden="true"
+        >
+          <path d="M4 7h16M4 12h11M4 17h16" />
+        </svg>
+        Menu
+      </button>
+
+      <dialog
+        ref={dialog}
+        id={id}
+        class="sm-panel"
+        aria-labelledby={`${id}-title`}
+        onClose$={() => {
+          isOpen.value = false;
+        }}
+        onClick$={(event, element) => {
+          if (event.target !== element) return;
+          const rect = element.getBoundingClientRect();
+          if (
+            event.clientX < rect.left ||
+            event.clientX > rect.right ||
+            event.clientY < rect.top ||
+            event.clientY > rect.bottom
+          ) {
+            element.close();
+          }
+        }}
+      >
+        <div class="sm-inner">
+          <div class="sm-head">
+            <div class="sm-brand">
+              <span class="sm-mark" aria-hidden="true">
+                <svg
+                  viewBox="0 0 64 64"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="7"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M12 48 32 27l20 21" />
+                  <path d="M24 48l8-8.5 8 8.5" stroke-width="5" />
+                  <circle
+                    cx="32"
+                    cy="13"
+                    r="4.5"
+                    fill="currentColor"
+                    stroke="none"
+                  />
                 </svg>
-                Menu
-            </button>
+              </span>
+              <div>
+                <h2 id={`${id}-title`} class="sm-title">
+                  Zenith
+                </h2>
+                <p class="sm-caption">Your money, all in one place</p>
+              </div>
+            </div>
 
-            <dialog
-                ref={dialog}
-                id={id}
-                class="sm-panel"
-                aria-labelledby={`${id}-title`}
-                onClose$={() => { isOpen.value = false; }}
-                onClick$={(event, element) => {
-                    if (event.target !== element) return;
-                    const rect = element.getBoundingClientRect();
-                    if (event.clientX < rect.left || event.clientX > rect.right ||
-                        event.clientY < rect.top || event.clientY > rect.bottom) {
-                        element.close();
+            <form method="dialog" class="sm-close-form">
+              <button
+                class="sm-close"
+                type="submit"
+                autofocus
+                aria-label="Close navigation menu"
+              >
+                <Icon name="close" />
+              </button>
+            </form>
+          </div>
+
+          <nav aria-label="Main navigation">
+            <p class="sm-section">Menu</p>
+            <ul class="sm-list">
+              {items.map((item) => (
+                <li key={item.href}>
+                  <a
+                    class="sm-link"
+                    href={item.href}
+                    aria-current={
+                      item.href === currentPath ? "page" : undefined
                     }
-                }}
-            >
-                <div class="sm-inner">
-                    <div class="sm-head">
-                        <div class="sm-brand">
-                            <span class="sm-mark" aria-hidden="true">
-                                <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
-                                    <path d="M12 48 32 27l20 21" />
-                                    <path d="M24 48l8-8.5 8 8.5" stroke-width="5" />
-                                    <circle cx="32" cy="13" r="4.5" fill="currentColor" stroke="none" />
-                                </svg>
-                            </span>
-                            <div>
-                                <h2 id={`${id}-title`} class="sm-title">Zenith</h2>
-                                <p class="sm-caption">Your money, all in one place</p>
-                            </div>
-                        </div>
-
-                        <form method="dialog" class="sm-close-form">
-                            <button class="sm-close" type="submit" autofocus aria-label="Close navigation menu">
-                                <Icon name="close" />
-                            </button>
-                        </form>
-                    </div>
-
-                    <nav aria-label="Main navigation">
-                        <p class="sm-section">Menu</p>
-                        <ul class="sm-list">
-                            {items.map((item) => (
-                                <li key={item.href}>
-                                    <a
-                                        class="sm-link"
-                                        href={item.href}
-                                        aria-current={item.href === currentPath ? 'page' : undefined}
-                                        onClick$={() => { dialog.value?.close(); }}
-                                    >
-                                        <span class="sm-icon" aria-hidden="true">
-                                            <Icon name={item.icon} />
-                                        </span>
-                                        <span class="sm-text">
-                                            <span class="sm-label">{item.label}</span>
-                                            <span class="sm-hint">{item.hint}</span>
-                                        </span>
-                                    </a>
-                                </li>
-                            ))}
-                        </ul>
-                    </nav>
-                </div>
-            </dialog>
-        </>
-    );
+                    onClick$={() => {
+                      dialog.value?.close();
+                    }}
+                  >
+                    <span class="sm-icon" aria-hidden="true">
+                      <Icon name={item.icon} />
+                    </span>
+                    <span class="sm-text">
+                      <span class="sm-label">{item.label}</span>
+                      <span class="sm-hint">{item.hint}</span>
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        </div>
+      </dialog>
+    </>
+  );
 });

@@ -4,7 +4,8 @@ import { forwardToBackend } from "../../../utils/backend.ts";
 
 export const prerender = false;
 
-export const GET: APIRoute = async ({ cookies }) => forwardToBackend(cookies, "GET", "/virtual-accounts");
+export const GET: APIRoute = async ({ cookies }) =>
+  forwardToBackend(cookies, "GET", "/virtual-accounts");
 
 export const POST: APIRoute = async ({ cookies, request }) =>
-    forwardToBackend(cookies, "POST", "/virtual-accounts", await request.text());
+  forwardToBackend(cookies, "POST", "/virtual-accounts", await request.text());

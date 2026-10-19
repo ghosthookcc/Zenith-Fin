@@ -1,107 +1,107 @@
 .credit-section .section-heading {
-    gap: 16px;
+  gap: 16px;
 }
 
 .credit-new {
-    white-space: nowrap;
+  white-space: nowrap;
 }
 
 .credit-sync {
-    min-height: 1.2em;
-    font-size: 0.75rem;
-    color: var(--cal-muted);
+  min-height: 1.2em;
+  font-size: 0.75rem;
+  color: var(--cal-muted);
 }
 
 .credit-sync:empty {
-    min-height: 0;
-    margin: 0;
+  min-height: 0;
+  margin: 0;
 }
 
 .credit-section .cat-editor {
-    margin-bottom: 22px;
+  margin-bottom: 22px;
 }
 
 .credit-empty {
-    padding: 0;
+  padding: 0;
 }
 
 .credit-counting {
-    margin-left: auto;
-    padding: 3px 9px;
-    border: 1px solid #3a4352;
-    border-radius: 999px;
-    font-size: 0.75rem;
-    white-space: nowrap;
-    color: var(--cal-ink-2);
+  margin-left: auto;
+  padding: 3px 9px;
+  border: 1px solid #3a4352;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  color: var(--cal-ink-2);
 }
 
 .credit-card .account-purpose {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .credit-note {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 6px;
-    font-size: 0.8125rem;
-    color: var(--cal-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.8125rem;
+  color: var(--cal-muted);
 }
 
 .credit-note svg {
-    width: 15px;
-    height: 15px;
+  width: 15px;
+  height: 15px;
 }
 
 .credit-over {
-    color: #f3c98b;
+  color: #f3c98b;
 }
 
 .credit-meter {
-    height: 6px;
-    margin-top: 16px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: #2a3140;
+  height: 6px;
+  margin-top: 16px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #2a3140;
 }
 
 .credit-meter > span {
-    display: block;
-    height: 100%;
-    border-radius: 999px;
-    background: var(--account-color);
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--account-color);
 }
 
 .credit-meter-over > span {
-    background: #c98500;
+  background: #c98500;
 }
 
 .credit-card .card-footer {
-    margin-top: 12px;
+  margin-top: 12px;
 }
 
 .credit-card .card-footer strong {
-    color: var(--cal-ink-2);
+  color: var(--cal-ink-2);
 }
 
 .credit-actions {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin-top: 22px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 22px;
 }
 
 @media (max-width: 760px) {
-    .credit-section .section-heading {
-        flex-direction: column;
-        align-items: flex-start;
-    }
+  .credit-section .section-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
 
 .cat-optional {
-    font-weight: 400;
-    color: var(--cal-muted);
+  font-weight: 400;
+  color: var(--cal-muted);
 }

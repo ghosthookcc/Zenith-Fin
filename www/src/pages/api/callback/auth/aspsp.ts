@@ -11,53 +11,50 @@ const insecureDispatcher = new Agent({
 export const prerender = false;
 
 export const GET: APIRoute = async ({ request, cookies, redirect }) => {
-    console.log('🟢 SERVER: GET handler called');
-    try
-    {
-        const jwt = cookies.get("AuthToken")?.value;
+  console.log("🟢 SERVER: GET handler called");
+  try {
+    const jwt = cookies.get("AuthToken")?.value;
 
-        if (!jwt)
-        {
-            return new Response(
-                JSON.stringify(
-                {
-                    message: "No token provided",
-                    success: false
-                }),
-                { status: 401 }
-            );
-        }
+    if (!jwt) {
+      return new Response(
+        JSON.stringify({
+          message: "No token provided",
+          success: false,
+        }),
+        { status: 401 },
+      );
+    }
 
-        const searchParams = new URL(request.url).searchParams;
-        const paramsAsState = JSON.stringify(
-        {
-                      state: searchParams.get("state"),
-                      code: searchParams.get("code")
-        });
+    const searchParams = new URL(request.url).searchParams;
+    const paramsAsState = JSON.stringify({
+      state: searchParams.get("state"),
+      code: searchParams.get("code"),
+    });
 
-        const response = await fetch(`${backendUrl}/aspsp/auth/callback`,
-        {
-            method: "POST",
-            headers:
-            {
-                "Authorization": `Bearer ${jwt}`,
-                'Content-Type': 'application/json',
-            },
-            body: paramsAsState,
-            dispatcher: insecureDispatcher,
-        });
+    const response = await fetch(`${backendUrl}/aspsp/auth/callback`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        "Content-Type": "application/json",
+      },
+      body: paramsAsState,
+      dispatcher: insecureDispatcher,
+    });
 
-        console.log('🟢 SERVER: Received response:', response);
+    console.log("🟢 SERVER: Received response:", response);
 
-        const data = await response.json();
-        console.log('🟢 SERVER: Received response as json:', data);
+    const data = await response.json();
+    console.log("🟢 SERVER: Received response as json:", data);
 
-        return redirect(response.ok && data?.expiresAt ? "/accounts?bank=connected" : "/accounts?bank=failed", 303);
-  }
-  catch (errno)
-  {
-      console.error('🟢 SERVER: Fetch failed:', errno);
+    return redirect(
+      response.ok && data?.expiresAt
+        ? "/accounts?bank=connected"
+        : "/accounts?bank=failed",
+      303,
+    );
+  } catch (errno) {
+    console.error("🟢 SERVER: Fetch failed:", errno);
 
-      return redirect("/accounts?bank=failed", 303);
+    return redirect("/accounts?bank=failed", 303);
   }
 };
