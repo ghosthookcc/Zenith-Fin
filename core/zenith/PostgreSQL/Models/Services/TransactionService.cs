@@ -19,6 +19,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly TagRepository _tagRepository;
         private readonly CreditAccountRepository _creditAccountRepository;
         private readonly ExpectedSalaryRepository _expectedSalaryRepository;
+        private readonly VirtualAccountRepository _virtualAccountRepository;
 
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
@@ -31,6 +32,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   TagRepository tagRepository,
                                   CreditAccountRepository creditAccountRepository,
                                   ExpectedSalaryRepository expectedSalaryRepository,
+                                  VirtualAccountRepository virtualAccountRepository,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
                                   RecurringService recurringService,
@@ -41,6 +43,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _tagRepository = tagRepository;
             _creditAccountRepository = creditAccountRepository;
             _expectedSalaryRepository = expectedSalaryRepository;
+            _virtualAccountRepository = virtualAccountRepository;
 
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
@@ -113,6 +116,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 Tags = tags,
                 CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),
                 ExpectedSalaries = await _expectedSalaryRepository.GetExpectedSalariesForUserAsync(userId.Value),
+                VirtualAccounts = await _virtualAccountRepository.GetVirtualAccountsForUserAsync(userId.Value),
                 Transactions = transactions
             };
         }

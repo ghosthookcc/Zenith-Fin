@@ -1,7 +1,15 @@
 import { $, component$, useSignal, useStore, useVisibleTask$ } from '@builder.io/qwik';
 
 import { Icon } from './Icon';
-import { countingChoices, countingLabel, creditUsed, type CreditAccountRule } from '../utils/credit';
+import {
+    countingChoices,
+    countingLabel,
+    creditUsed,
+    currentMonthRange,
+    formatKr,
+    type CreditAccountRule,
+    type MonthTransaction,
+} from '../utils/credit';
 
 export interface CreditAccountOption {
     id: number;
@@ -14,18 +22,6 @@ export interface CreditAccountOption {
 
 interface CreditAccountsResponse {
     creditAccounts: CreditAccountRule[];
-}
-
-interface MonthTransaction {
-    accountId: number;
-    amount: number;
-    currency: string;
-    status: string;
-}
-
-interface MonthResponse {
-    accounts?: { isActive: boolean; isStale: boolean }[];
-    transactions?: MonthTransaction[];
 }
 
 interface Editor {
@@ -49,25 +45,6 @@ function accountLabel(account: CreditAccountOption | undefined): string {
     const iban = account.iban?.replace(/\s+/g, '');
 
     return `${account.name}${iban ? ` ··${iban.slice(-4)}` : ''} · ${account.bank}`;
-}
-
-function formatKr(minor: number): string {
-    return new Intl.NumberFormat('sv-SE', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(minor / 100);
-}
-
-function currentMonth(): { from: string; to: string; name: string } {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-
-    return {
-        from: `${now.getFullYear()}-${month}-01`,
-        to: `${now.getFullYear()}-${month}-${String(lastDay).padStart(2, '0')}`,
-        name: new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(now),
-    };
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -108,13 +85,18 @@ function isCreditAccountsResponse(value: unknown): value is CreditAccountsRespon
     );
 }
 
-export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidden: boolean }>((props) => {
+interface CreditAccountsProps {
+    accounts: CreditAccountOption[];
+    hidden: boolean;
+    monthTransactions: MonthTransaction[] | null;
+    monthError: boolean;
+    syncing: boolean;
+}
+
+export const CreditAccounts = component$<CreditAccountsProps>((props) => {
     const data = useSignal<CreditAccountRule[] | null>(null);
-    const monthTransactions = useSignal<MonthTransaction[] | null>(null);
     const loading = useSignal(true);
     const error = useSignal<string | null>(null);
-    const usageError = useSignal(false);
-    const syncing = useSignal(false);
     const confirmingDelete = useSignal<number | null>(null);
     const deleting = useSignal<number | null>(null);
 
@@ -127,61 +109,6 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
         creditLimit: '',
         saving: false,
         error: null,
-    });
-
-    const loadUsage = $(async () => {
-        usageError.value = false;
-
-        const month = currentMonth();
-        const query = new URLSearchParams({ from: month.from, to: month.to });
-
-        const fetchMonth = async (): Promise<MonthResponse> => {
-            const response = await fetch(`/api/transactions?${query}`, {
-                method: 'GET',
-                headers: {
-                    Accept: 'application/json',
-                },
-                credentials: 'same-origin',
-                cache: 'no-store',
-            });
-
-            const payload = (await readJson(response)) as MonthResponse | null;
-
-            if (!response.ok || !payload || !Array.isArray(payload.transactions)) {
-                throw new Error('Could not load transactions');
-            }
-
-            return payload;
-        };
-
-        try {
-            const payload = await fetchMonth();
-
-            monthTransactions.value = payload.transactions ?? [];
-
-            if (!payload.accounts?.some((account) => account.isActive && account.isStale)) {
-                return;
-            }
-
-            syncing.value = true;
-
-            try {
-                await fetch('/api/transactions/sync?force=false', {
-                    method: 'POST',
-                    headers: {
-                        Accept: 'application/json',
-                    },
-                    credentials: 'same-origin',
-                    cache: 'no-store',
-                });
-
-                monthTransactions.value = (await fetchMonth()).transactions ?? [];
-            } finally {
-                syncing.value = false;
-            }
-        } catch {
-            usageError.value = monthTransactions.value === null;
-        }
     });
 
     const load = $(async () => {
@@ -319,14 +246,13 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
     useVisibleTask$(
         () => {
             void load();
-            void loadUsage();
         },
         {
             strategy: 'document-ready',
         },
     );
 
-    const month = currentMonth();
+    const month = currentMonthRange();
     const creditAccounts = data.value ?? [];
     const accountsById: Record<number, CreditAccountOption> = Object.fromEntries(
         props.accounts.map((account) => [account.id, account]),
@@ -346,7 +272,7 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
                     </h2>
                     <p>Link one of your accounts. Everything on it counts toward the credit account.</p>
                     <p class="credit-sync" aria-live="polite">
-                        {syncing.value ? 'Checking your banks for new transactions…' : ''}
+                        {props.syncing ? 'Checking your banks for new transactions…' : ''}
                     </p>
                 </div>
 
@@ -536,9 +462,9 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
                 <div class="accounts-grid">
                     {creditAccounts.map((creditAccount) => {
                         const account = accountsById[creditAccount.accountId];
-                        const used = monthTransactions.value
+                        const used = props.monthTransactions
                             ? creditUsed(
-                                  monthTransactions.value.filter(
+                                  props.monthTransactions.filter(
                                       (transaction) =>
                                           transaction.accountId === creditAccount.accountId &&
                                           transaction.currency === (account?.currency ?? 'SEK'),
@@ -576,7 +502,7 @@ export const CreditAccounts = component$<{ accounts: CreditAccountOption[]; hidd
 
                                 {used === null ? (
                                     <p class="credit-note">
-                                        {usageError.value
+                                        {props.monthError
                                             ? `Could not load ${month.name}'s transactions.`
                                             : `Adding up ${month.name}…`}
                                     </p>

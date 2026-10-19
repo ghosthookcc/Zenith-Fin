@@ -9,6 +9,8 @@ import {
     type BankConnection,
 } from './BankConnections';
 import { CreditAccounts } from './CreditAccounts';
+import { VirtualAccounts } from './VirtualAccounts';
+import { currentMonthRange, type MonthTransaction } from '../utils/credit';
 import { Icon } from './Icon';
 import { accountColors as colors } from '../utils/accounts';
 
@@ -157,6 +159,67 @@ export const AccountOverview = component$(() => {
     const selected = useSignal<string | null>(null);
 
     const connections = useSignal<BankConnection[] | null>(null);
+    const monthTransactions = useSignal<MonthTransaction[] | null>(null);
+    const monthError = useSignal(false);
+    const monthSyncing = useSignal(false);
+
+    const loadMonth = $(async () => {
+        monthError.value = false;
+
+        const month = currentMonthRange();
+        const query = new URLSearchParams({ from: month.from, to: month.to });
+
+        const fetchMonth = async () => {
+            const response = await fetch(`/api/transactions?${query}`, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+                accounts?: { isActive: boolean; isStale: boolean }[];
+                transactions?: MonthTransaction[];
+            } | null;
+
+            if (!response.ok || !payload || !Array.isArray(payload.transactions)) {
+                throw new Error('Could not load transactions');
+            }
+
+            return payload;
+        };
+
+        try {
+            const payload = await fetchMonth();
+
+            monthTransactions.value = payload.transactions ?? [];
+
+            if (!payload.accounts?.some((account) => account.isActive && account.isStale)) {
+                return;
+            }
+
+            monthSyncing.value = true;
+
+            try {
+                await fetch('/api/transactions/sync?force=false', {
+                    method: 'POST',
+                    headers: {
+                        Accept: 'application/json',
+                    },
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                });
+
+                monthTransactions.value = (await fetchMonth()).transactions ?? [];
+            } finally {
+                monthSyncing.value = false;
+            }
+        } catch {
+            monthError.value = monthTransactions.value === null;
+        }
+    });
     const reconnectingId = useSignal<number | null>(null);
     const removingId = useSignal<number | null>(null);
     const availableBanks = useSignal<AvailableBank[] | null>(null);
@@ -442,6 +505,7 @@ export const AccountOverview = component$(() => {
 
             void loadAccounts();
             void loadConnections();
+            void loadMonth();
             void loadAvailableBanks();
         },
         {
@@ -1097,6 +1161,15 @@ export const AccountOverview = component$(() => {
                                     color: account.color,
                                 }))}
                                 hidden={hidden.value}
+                                monthTransactions={monthTransactions.value}
+                                monthError={monthError.value}
+                                syncing={monthSyncing.value}
+                            />
+
+                            <VirtualAccounts
+                                hidden={hidden.value}
+                                monthTransactions={monthTransactions.value}
+                                monthError={monthError.value}
                             />
                         </>
                     )}

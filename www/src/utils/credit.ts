@@ -71,3 +71,80 @@ export function creditUsed(
 
     return counting === 'OUT' || counting === 'IN' ? out + incoming : Math.max(0, out - incoming);
 }
+
+export interface VirtualAccountRule {
+    id: number;
+    name: string;
+    accountNumber: string;
+    clearingNumber?: string | null;
+    iban?: string | null;
+    counting: string;
+}
+
+const minimumMatchDigits = 6;
+
+function significantDigits(value: string | null | undefined): string {
+    return (value ?? '').replace(/\D/g, '').replace(/^0+/, '');
+}
+
+export function virtualAccountKeys(account: VirtualAccountRule): string[] {
+    const keys = [significantDigits(account.accountNumber)];
+
+    if (account.clearingNumber) {
+        keys.push(significantDigits(`${account.clearingNumber}${account.accountNumber}`));
+    }
+
+    const iban = (account.iban ?? '').replace(/[^A-Za-z0-9]/g, '');
+
+    if (iban.length > 4) {
+        keys.push(significantDigits(iban.slice(4)));
+    }
+
+    return keys.filter((key) => key.length >= minimumMatchDigits);
+}
+
+export function matchesVirtualAccount(
+    counterpartyAccount: string | null | undefined,
+    account: VirtualAccountRule,
+): boolean {
+    const counterparty = significantDigits(counterpartyAccount);
+
+    if (counterparty.length < minimumMatchDigits) {
+        return false;
+    }
+
+    return virtualAccountKeys(account).some((key) => counterparty.endsWith(key) || key.endsWith(counterparty));
+}
+
+export interface MonthTransaction {
+    accountId: number;
+    amount: number;
+    currency: string;
+    status: string;
+    counterpartyAccount?: string | null;
+}
+
+export interface MonthRange {
+    from: string;
+    to: string;
+    name: string;
+}
+
+export function currentMonthRange(): MonthRange {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+    return {
+        from: `${now.getFullYear()}-${month}-01`,
+        to: `${now.getFullYear()}-${month}-${String(lastDay).padStart(2, '0')}`,
+        name: new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(now),
+    };
+}
+
+export function formatKr(minor: number): string {
+    return new Intl.NumberFormat('sv-SE', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(minor / 100);
+}

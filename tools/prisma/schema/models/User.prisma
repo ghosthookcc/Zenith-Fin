@@ -14,6 +14,7 @@ model User {
   credit_accounts  CreditAccount[]
   expected_salaries ExpectedSalary[]
   recurring_rules  RecurringRule[]
+  virtual_accounts VirtualAccount[]
 
   @@index([email])
 }

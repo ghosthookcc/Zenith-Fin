@@ -100,3 +100,8 @@
         align-items: flex-start;
     }
 }
+
+.cat-optional {
+    font-weight: 400;
+    color: var(--cal-muted);
+}
