@@ -11,11 +11,9 @@ const insecureDispatcher = new Agent({
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
-    console.log('🟢 SERVER: POST handler called');
     try
     {
         const body = await request.json();
-        console.log('🟢 SERVER: Received data:', body);
 
         const token = cookies.get("AuthToken")?.value;
         const headers: Record<string, string> =
@@ -39,10 +37,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
             dispatcher: insecureDispatcher,
         });
 
-        console.log('🟢 SERVER: Received response:', response);
-
         const data = await response.json();
-        console.log('🟢 SERVER: Received response as json:', data);
 
         if (data.success && data.token && data.jwtExpirationDate)
         {
@@ -55,7 +50,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
                 path: "/",
                 expires,
             });
-            console.log('🟢 SERVER: Cookie set with expires date:', expires.toUTCString());
         }
 
         return new Response(JSON.stringify(

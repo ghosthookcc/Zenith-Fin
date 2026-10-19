@@ -1,26 +1,57 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { RegisterForm } from "../components/RegisterForm";
-import { LoginForm } from "../components/LoginForm";
+import { AuthPanel } from "../components/AuthPanel";
+import { Icon } from "../components/Icon";
+
+import "../styles/auth.css";
 
 export const prerender = false;
 ---
 
-<Layout title="Index">
-    <main id="app">
-        <div class="flex items-center justify-center bg-gray-50 p-4">
-            <div class="w-full">
-                <RegisterForm />
-                <LoginForm />
+<Layout title="Sign in">
+    <main class="auth-page">
+        <section class="auth-intro" aria-labelledby="auth-intro-title">
+            <div class="auth-brand">
+                <span class="auth-mark" aria-hidden="true">
+                    <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12 48 32 27l20 21" />
+                        <path d="M24 48l8-8.5 8 8.5" stroke-width="5" />
+                        <circle cx="32" cy="13" r="4.5" fill="currentColor" stroke="none" />
+                    </svg>
+                </span>
+                <span class="auth-name">Zenith</span>
             </div>
-        </div>
-	</main>
-</Layout>
 
-<style>
-#app {
-    margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
-}
-</style>
+            <h1 id="auth-intro-title">Your money, <span>all in one place.</span></h1>
+            <p class="auth-lead">
+                Every bank account, transaction and budget, sorted and counted the way you want.
+            </p>
+
+            <ul class="auth-points">
+                <li>
+                    <span class="auth-point-icon"><Icon name="bank" /></span>
+                    <span>
+                        <strong>Every bank, side by side</strong>
+                        Balances and transactions from all your banks in one overview.
+                    </span>
+                </li>
+                <li>
+                    <span class="auth-point-icon"><Icon name="calendar" /></span>
+                    <span>
+                        <strong>Sorted for you</strong>
+                        Categories, recurring payments and transfers between your accounts.
+                    </span>
+                </li>
+                <li>
+                    <span class="auth-point-icon"><Icon name="lock" /></span>
+                    <span>
+                        <strong>Private by design</strong>
+                        Runs on your own computer and stays on your own network.
+                    </span>
+                </li>
+            </ul>
+        </section>
+
+        <AuthPanel />
+    </main>
+</Layout>

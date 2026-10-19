@@ -15,12 +15,10 @@ export const prerender = false;
 
 export const POST: APIRoute = async ({ request }) => 
 {
-  console.log('🟢 SERVER: POST handler called');
   try 
   {
       const body = await request.json();
           
-      console.log('🟢 SERVER: Received data:', body);
 
       const response = await fetch(`${backendUrl}/auth/users/register`,
       {
@@ -39,10 +37,7 @@ export const POST: APIRoute = async ({ request }) =>
           dispatcher: insecureDispatcher,
       });
 
-      console.log('🟢 SERVER: Received response:', response); 
-
       const data = await response.json();
-      console.log('🟢 SERVER: Received response as json:', data); 
 
       return new Response(
           JSON.stringify(

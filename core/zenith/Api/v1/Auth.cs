@@ -127,7 +127,7 @@ namespace ZenithFin.Api.v1
             {
                 Message = "Login successful",
                 Success = true,
-                Url = "https://localhost:4444/dashboard",
+                Url = "/accounts",
                 Code = StatusCodes.Status302Found,
                 JwtExpirationDate = session.ExpiresAt,
                 Token = jsonWebToken

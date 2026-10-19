@@ -11,7 +11,6 @@ const insecureDispatcher = new Agent({
 export const prerender = false;
 
 export const POST: APIRoute = async ({ request, cookies }) => {
-    console.log('🟢 SERVER: POST handler called');
     try
     {
         const jwt = cookies.get("AuthToken")?.value;
@@ -40,7 +39,6 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         }); 
 
         const data = await response.json();
-        console.log('🟢 SERVER: Received response as json:', data);
 
         if (!data.success)
         {

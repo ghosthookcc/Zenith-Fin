@@ -709,6 +709,7 @@ export const AccountOverview = component$(() => {
 
                         <button
                             type="button"
+                            class="cal-chip cat-retry"
                             onClick$={loadAccounts}
                         >
                             Try again

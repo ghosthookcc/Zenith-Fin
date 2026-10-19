@@ -1,24 +1,22 @@
 import { component$, useId, useSignal, useStyles$ } from '@builder.io/qwik';
 
-export interface MenuItem {
+import { Icon } from './Icon';
+
+interface MenuItem {
     label: string;
     href: string;
+    icon: string;
+    hint: string;
 }
 
 interface SideMenuProps {
-    brand?: string;
     currentPath: string;
-    items?: MenuItem[];
 }
 
-const defaultItems: MenuItem[] = [
-    { label: 'Overview', href: '/' },
-    { label: 'Accounts', href: '/accounts' },
-    { label: 'Calendar', href: '/calendar' },
-    { label: 'Categories', href: '/categories' },
-    { label: 'Journal', href: '/journal' },
-    { label: 'About', href: '/about' },
-    { label: 'Contact', href: '/contact' },
+const items: MenuItem[] = [
+    { label: 'Accounts', href: '/accounts', icon: 'wallet', hint: 'Balances, banks and shared accounts' },
+    { label: 'Calendar', href: '/calendar', icon: 'calendar', hint: 'Every transaction, day by day' },
+    { label: 'Categories', href: '/categories', icon: 'tag', hint: 'Sort and train your categories' },
 ];
 
 export default component$<SideMenuProps>((props) => {
@@ -28,37 +26,38 @@ export default component$<SideMenuProps>((props) => {
 
     useStyles$(`
     .sm-trigger, .sm-panel {
-      --sm-ink: #202d29;
-      --sm-muted: #68736c;
-      --sm-accent: #245a43;
-      font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-      color: var(--sm-ink);
+      font-family: 'DM Sans', ui-sans-serif, system-ui, sans-serif;
+      color: #f1f2f5;
       font-size: 15px;
       line-height: 1.5;
     }
     .sm-trigger, .sm-panel, .sm-panel * { box-sizing: border-box; }
     .sm-trigger {
       position: fixed;
-      top: max(20px, env(safe-area-inset-top));
-      left: max(20px, env(safe-area-inset-left));
+      top: max(18px, env(safe-area-inset-top));
+      left: max(18px, env(safe-area-inset-left));
       z-index: 40;
       display: inline-flex;
       align-items: center;
-      gap: 10px;
-      min-height: 46px;
-      padding: 10px 16px;
-      border: 1px solid #dedfd7;
-      border-radius: 14px;
-      background: #fafaf5;
-      box-shadow: 0 4px 18px #172a2110;
+      gap: 9px;
+      min-height: 42px;
+      padding: 8px 15px 8px 12px;
+      border: 1px solid #2b3240;
+      border-radius: 13px;
+      background: #161b25d9;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 6px 22px #0000004d;
+      color: #f1f2f5;
       font-weight: 600;
       cursor: pointer;
+      transition: background 150ms ease, border-color 150ms ease;
     }
-    .sm-trigger:hover { background: #efefe7; }
+    .sm-trigger:hover { background: #1d2330; border-color: #3a4252; }
     .sm-panel {
       position: fixed;
       inset: 0 auto 0 0;
-      width: min(360px, calc(100vw - 24px));
+      width: min(340px, calc(100vw - 24px));
       height: 100vh;
       height: 100dvh;
       max-width: none;
@@ -66,16 +65,18 @@ export default component$<SideMenuProps>((props) => {
       margin: 0;
       padding: 0;
       border: 0;
-      border-right: 1px solid #dedfd7;
-      border-radius: 0 24px 24px 0;
-      background: #fafaf5;
-      box-shadow: 18px 0 80px #13261f20;
+      border-right: 1px solid #262d3a;
+      border-radius: 0 22px 22px 0;
+      background: #141922;
+      box-shadow: 24px 0 80px #0000008c;
       overflow-y: auto;
       overscroll-behavior: contain;
     }
     .sm-panel[open] { animation: sm-enter 220ms ease-out; }
     .sm-panel::backdrop {
-      background: #14221b70;
+      background: #05080db3;
+      backdrop-filter: blur(3px);
+      -webkit-backdrop-filter: blur(3px);
       animation: sm-fade 220ms ease-out;
     }
     html:has(.sm-panel[open]) { overflow: hidden; }
@@ -83,82 +84,129 @@ export default component$<SideMenuProps>((props) => {
       display: flex;
       flex-direction: column;
       min-height: 100%;
-      padding: max(20px, env(safe-area-inset-top)) 24px
-        max(24px, env(safe-area-inset-bottom))
-        max(24px, env(safe-area-inset-left));
+      padding: max(18px, env(safe-area-inset-top)) 20px
+        max(22px, env(safe-area-inset-bottom))
+        max(20px, env(safe-area-inset-left));
     }
-    .sm-close-form { margin: 0 0 36px; }
-    .sm-close {
-      display: inline-flex;
+    .sm-head {
+      display: flex;
       align-items: center;
-      gap: 10px;
-      min-height: 46px;
-      padding: 10px 12px;
-      border: 1px solid #dedfd7;
-      border-radius: 12px;
-      background: transparent;
-      color: var(--sm-ink);
-      font: inherit;
-      cursor: pointer;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 34px;
     }
-    .sm-close:hover { background: #eeeee5; }
-    .sm-brand { display: flex; align-items: center; gap: 12px; }
+    .sm-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
     .sm-mark {
       display: grid;
       place-items: center;
       width: 40px;
       height: 40px;
       flex-shrink: 0;
-      border-radius: 13px;
-      background: var(--sm-accent);
-      color: #e0efbe;
-      font-size: 26px;
+      border-radius: 12px;
+      background: #c1d8b6;
+      color: #11151d;
     }
-    .sm-title { margin: 0; font-size: 23px; letter-spacing: -.7px; }
-    .sm-caption { margin: 5px 0 30px; color: var(--sm-muted); font-size: 13px; }
-
-    .sm-list { display: grid; gap: 6px; padding: 0; margin: 12px 0 0 0; list-style: none; }
+    .sm-mark svg { width: 24px; height: 24px; }
+    .sm-title {
+      margin: 0;
+      font-family: 'Manrope', sans-serif;
+      font-size: 21px;
+      font-weight: 750;
+      letter-spacing: -0.6px;
+    }
+    .sm-caption { margin: 1px 0 0; color: #939bad; font-size: 12.5px; }
+    .sm-close-form { margin: 0; }
+    .sm-close {
+      display: grid;
+      place-items: center;
+      width: 38px;
+      height: 38px;
+      padding: 0;
+      border: 1px solid #2b3240;
+      border-radius: 11px;
+      background: transparent;
+      color: #b6becc;
+      cursor: pointer;
+      transition: background 150ms ease, color 150ms ease;
+    }
+    .sm-close:hover { background: #1d2330; color: #f1f2f5; }
+    .sm-section {
+      margin: 0 0 10px;
+      padding: 0 12px;
+      color: #6f788a;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+    }
+    .sm-list { display: grid; gap: 4px; padding: 0; margin: 0; list-style: none; }
     .sm-link {
+      position: relative;
       display: flex;
       align-items: center;
-      gap: 14px;
-      min-height: 52px;
-      padding: 12px 14px;
+      gap: 13px;
+      min-height: 58px;
+      padding: 10px 12px;
       border: 1px solid transparent;
-      border-radius: 12px;
-      color: var(--sm-ink);
+      border-radius: 13px;
+      color: #d6dbe4;
       text-decoration: none;
-      transition: background 150ms ease;
+      transition: background 150ms ease, border-color 150ms ease;
     }
-    .sm-link:hover { background: #eeeee5; }
+    .sm-link:hover { background: #1a202a; color: #f1f2f5; }
+    .sm-icon {
+      display: grid;
+      place-items: center;
+      width: 36px;
+      height: 36px;
+      flex-shrink: 0;
+      border: 1px solid #2b3240;
+      border-radius: 11px;
+      background: #181e28;
+      color: #b6becc;
+    }
+    .sm-icon svg { width: 18px; height: 18px; }
+    .sm-text { display: flex; flex-direction: column; min-width: 0; }
+    .sm-label { font-weight: 600; }
+    .sm-hint {
+      overflow: hidden;
+      color: #8a93a5;
+      font-size: 12.5px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
     .sm-link[aria-current="page"] {
-      background: #e7eddf;
-      border-color: #d6e0cd;
-      color: #214c36;
-      font-weight: 600;
+      background: #1d2430;
+      border-color: #2f3746;
+      color: #f1f2f5;
     }
-    .sm-number { opacity: .65; font-size: 11px; font-variant-numeric: tabular-nums; }
-    .sm-arrow { margin-left: auto; }
-    .sm-footer {
-      margin-top: auto;
-      padding-top: 48px;
-      color: var(--sm-muted);
-      font-size: 12px;
+    .sm-link[aria-current="page"] .sm-icon {
+      border-color: #5d7356;
+      background: #c1d8b61f;
+      color: #c1d8b6;
     }
-    .sm-footer p { margin: 0; padding-top: 20px; border-top: 1px solid #dedfd7; }
+    .sm-link[aria-current="page"]::before {
+      content: '';
+      position: absolute;
+      left: -20px;
+      top: 14px;
+      bottom: 14px;
+      width: 3px;
+      border-radius: 0 3px 3px 0;
+      background: #c1d8b6;
+    }
     .sm-trigger:focus-visible, .sm-panel :focus-visible {
-      outline: 3px solid #4c7950;
-      outline-offset: 4px;
+      outline: 2px solid #c1d8b6;
+      outline-offset: 3px;
     }
     @keyframes sm-enter { from { transform: translateX(-100%); } to { transform: translateX(0); } }
     @keyframes sm-fade { from { opacity: 0; } to { opacity: 1; } }
     @media (max-width: 480px) {
-      .sm-inner { padding-right: 20px; }
       .sm-trigger { left: max(12px, env(safe-area-inset-left)); top: max(12px, env(safe-area-inset-top)); }
     }
     @media (prefers-reduced-motion: reduce) {
       .sm-panel[open], .sm-panel::backdrop { animation: none; }
-      .sm-link { transition: none; }
+      .sm-link, .sm-trigger, .sm-close { transition: none; }
     }
   `);
 
@@ -202,33 +250,46 @@ export default component$<SideMenuProps>((props) => {
                 }}
             >
                 <div class="sm-inner">
-                    <form method="dialog" class="sm-close-form">
-                        <button class="sm-close" type="submit" autofocus aria-label="Close navigation menu">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-                                <path d="m6 6 12 12M6 18 18 6" />
-                            </svg>
-                            Close
-                        </button>
-                    </form>
+                    <div class="sm-head">
+                        <div class="sm-brand">
+                            <span class="sm-mark" aria-hidden="true">
+                                <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M12 48 32 27l20 21" />
+                                    <path d="M24 48l8-8.5 8 8.5" stroke-width="5" />
+                                    <circle cx="32" cy="13" r="4.5" fill="currentColor" stroke="none" />
+                                </svg>
+                            </span>
+                            <div>
+                                <h2 id={`${id}-title`} class="sm-title">Zenith</h2>
+                                <p class="sm-caption">Your money, all in one place</p>
+                            </div>
+                        </div>
 
-                    <div class="sm-brand">
-                        <span class="sm-mark" aria-hidden="true">✳</span>
-                        <h2 id={`${id}-title`} class="sm-title">{props.brand ?? 'Studio'}</h2>
+                        <form method="dialog" class="sm-close-form">
+                            <button class="sm-close" type="submit" autofocus aria-label="Close navigation menu">
+                                <Icon name="close" />
+                            </button>
+                        </form>
                     </div>
 
                     <nav aria-label="Main navigation">
+                        <p class="sm-section">Menu</p>
                         <ul class="sm-list">
-                            {(props.items ?? defaultItems).map((item, index) => (
+                            {items.map((item) => (
                                 <li key={item.href}>
                                     <a
                                         class="sm-link"
                                         href={item.href}
-                                        aria-current={(item.href.replace(/\/+$/, '') || '/') === currentPath ? 'page' : undefined}
+                                        aria-current={item.href === currentPath ? 'page' : undefined}
                                         onClick$={() => { dialog.value?.close(); }}
                                     >
-                                        <span class="sm-number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
-                                        {item.label}
-                                        <span class="sm-arrow" aria-hidden="true">↗</span>
+                                        <span class="sm-icon" aria-hidden="true">
+                                            <Icon name={item.icon} />
+                                        </span>
+                                        <span class="sm-text">
+                                            <span class="sm-label">{item.label}</span>
+                                            <span class="sm-hint">{item.hint}</span>
+                                        </span>
                                     </a>
                                 </li>
                             ))}

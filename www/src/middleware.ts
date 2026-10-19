@@ -6,7 +6,7 @@ const insecureDispatcher = new Agent({ connect: { rejectUnauthorized: false } })
 
 const PUBLIC_ROUTES = ['/', '/api/login', '/api/register', '/api/session', '/favicon.ico'];
 
-const LOGGED_IN_LANDING_ROUTE = "/dashboard";
+const LOGGED_IN_LANDING_ROUTE = "/accounts";
 
 export const onRequest: MiddlewareHandler = async ({ request, redirect, cookies }, next) =>
 {

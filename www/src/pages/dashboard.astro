@@ -1,15 +1,5 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import AspspList from "../components/data/AspspList";
-
-import SideMenu from "../components/SideMenu";
-
 export const prerender = false;
+
+return Astro.redirect("/accounts");
 ---
-<Layout title="Dashboard">
-  <SideMenu currentPath={Astro.url.pathname} />
-  
-  <main id="app">
-    <p>Dashboard</p>
-  </main>
-</Layout>
