@@ -33,7 +33,10 @@ rm -f "$data/api.next/appsettings.Development.json"
 install -m 600 "$backend/appsettings.Development.json" "$data/api.next/appsettings.Production.json"
 
 echo "Building the website"
-if ! (cd "$frontend" && ./node_modules/.bin/astro build) > "$data/build.log" 2>&1; then
+if ! (
+    cd "$frontend"
+    ZENITH_DOMAIN="$domain" ./node_modules/.bin/astro build
+) > "$data/build.log" 2>&1; then
     cat "$data/build.log"
     exit 1
 fi

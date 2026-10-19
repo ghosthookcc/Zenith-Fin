@@ -6,11 +6,23 @@ import fs from "fs";
 import node from "@astrojs/node";
 import tailwindcss from "@tailwindcss/vite";
 
-// https://astro.build/config
+const domain = process.env.ZENITH_DOMAIN || "zenith.fin.se";
+
 export default defineConfig({
   output: "static",
   adapter: node({ mode: "standalone" }),
   integrations: [qwikdev()],
+
+  security: {
+    checkOrigin: true,
+    allowedDomains: [
+      {
+        hostname: domain,
+        protocol: "https",
+      },
+    ],
+  },
+
   vite: {
     server: {
       port: 4444,

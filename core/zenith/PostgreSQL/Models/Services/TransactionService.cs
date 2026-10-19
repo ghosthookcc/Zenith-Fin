@@ -226,30 +226,44 @@ namespace ZenithFin.PostgreSQL.Models.Services
             }
         }
 
-        private async Task<IReadOnlyList<FetchedTransaction>> FetchTransactionsAsync(TransactionAccountRow account,
-                                                                                     DateTime? syncedAt,
-                                                                                     DateOnly today)
+        private async Task<IReadOnlyList<FetchedTransaction>> FetchTransactionsAsync(
+            TransactionAccountRow account,
+            DateTime? syncedAt,
+            DateOnly today)
         {
             if (syncedAt != null)
             {
-                DateOnly from = DateOnly.FromDateTime(syncedAt.Value).AddDays(-SyncOverlapDays);
+                DateOnly from = DateOnly.FromDateTime(syncedAt.Value)
+                                        .AddDays(-SyncOverlapDays);
 
-                return await _workspace.Authenticator.FetchAccountTransactions(account.EnableBankingUid, from);
+                return await _workspace.Authenticator.FetchAccountTransactions(
+                    account.EnableBankingUid,
+                    from,
+                    "default");
             }
 
             try
             {
-                return await _workspace.Authenticator.FetchAccountTransactions(account.EnableBankingUid,
-                                                                               today.AddDays(-InitialHistoryDays),
-                                                                               "longest");
+                return await _workspace.Authenticator.FetchAccountTransactions(
+                    account.EnableBankingUid,
+                    today.AddDays(-InitialHistoryDays),
+                    "longest");
             }
-            catch (EnableBankingException errno)
+            catch (Exception error) when (
+                error is EnableBankingException ||
+                error is Authenticator.TransactionPaginationException)
             {
-                Console.WriteLine($"Full transaction history failed for account {account.Id} " +
-                                  $"({errno.ErrorCode}: {errno.Message}), retrying with the last {FallbackHistoryDays} days");
+                DateOnly recentFrom = today.AddDays(-FallbackHistoryDays);
 
-                return await _workspace.Authenticator.FetchAccountTransactions(account.EnableBankingUid,
-                                                                               today.AddDays(-FallbackHistoryDays));
+                Console.WriteLine(
+                    $"Initial history fetch failed for account {account.Id}: " +
+                    $"{error.Message}. Fetching recent transactions from " +
+                    $"{recentFrom:yyyy-MM-dd}; older history remains incomplete.");
+
+                return await _workspace.Authenticator.FetchAccountTransactions(
+                    account.EnableBankingUid,
+                    recentFrom,
+                    "default");
             }
         }
 

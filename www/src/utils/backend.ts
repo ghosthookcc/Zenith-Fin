@@ -10,8 +10,7 @@ const insecureDispatcher = new Agent({
   },
 });
 
-export const backendUrl =
-  getSecret("ZENITH_API_URL") ?? "https://localhost:4446/api/v1";
+export const backendUrl = getSecret("ZENITH_API_URL") ?? "https://localhost:4446/api/v1";
 
 export async function validateSession(
   jwt: string,

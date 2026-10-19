@@ -60,7 +60,7 @@ namespace ZenithFin.EnableBanking
         public async Task<Response.AccountsBalances> FetchAccountBalance(Guid accountId)
         {
             GetToken();
-            
+
             dynamic response = await Wrapper.GET
                                             .AccountsBalancesById(client, accountId)
                                             .SendAsync();
@@ -74,6 +74,13 @@ namespace ZenithFin.EnableBanking
         {
             GetToken();
 
+            Console.WriteLine($"Transaction fetch start: account={accountId}, " +
+                              $"dateFrom={dateFrom:yyyy-MM-dd}, " +
+                              $"strategy={strategy ?? "(omitted)"}");
+
+            const int maxEmptyRepeatRetries = 5;
+            int emptyRepeatRetries = 0;
+
             List<FetchedTransaction> transactions = new();
             HashSet<string> seenContinuationKeys = new();
             string? continuationKey = null;
@@ -84,15 +91,27 @@ namespace ZenithFin.EnableBanking
                                                 .AccountTransactionsById(client, accountId)
                                                 .WithQuery("date_from", dateFrom.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
 
-                if (strategy != null) request.WithQuery("strategy", strategy);
-                if (continuationKey != null) request.WithQuery("continuation_key", continuationKey);
+                if (strategy != null)
+                {
+                    request = request.WithQuery("strategy", strategy);
+                }
+
+                if (!string.IsNullOrEmpty(continuationKey))
+                {
+                    request = request.WithQuery("continuation_key", continuationKey);
+                }
 
                 using HttpResponseMessage response = await request.SendAsyncRaw();
                 string json = await response.Content.ReadAsStringAsync();
 
                 if (!response.IsSuccessStatusCode) throw EnableBankingException.FromResponse((int)response.StatusCode, json);
 
-                Response.Transactions? body = JsonSerializer.Deserialize<Response.Transactions>(json, EnableBankingJson.Options);
+                Response.Transactions body =
+                    JsonSerializer.Deserialize<Response.Transactions>(
+                        json, EnableBankingJson.Options)
+                    ?? throw new InvalidOperationException(
+                        $"Enable Banking returned a null transaction response " +
+                        $"for account {accountId}.");
                 IReadOnlyList<JsonElement> elements = body?.transactions ?? Array.Empty<JsonElement>();
 
                 foreach (JsonElement element in elements)
@@ -104,16 +123,64 @@ namespace ZenithFin.EnableBanking
 
                 Console.WriteLine($"Fetched transactions page {page} for account {accountId}: {elements.Count} transactions");
 
-                continuationKey = body?.continuationKey;
+                string? nextContinuationKey = body?.continuationKey;
 
-                if (string.IsNullOrEmpty(continuationKey)) return transactions;
-                if (!seenContinuationKeys.Add(continuationKey))
-                    throw new InvalidOperationException($"Enable Banking repeated a continuation key for account {accountId}.");
+                Console.WriteLine(
+                    $"Transaction pagination: account={accountId}, page={page}, " +
+                    $"count={elements.Count}, " +
+                    $"requestKeyPresent={!string.IsNullOrEmpty(continuationKey)}, " +
+                    $"responseKeyPresent={!string.IsNullOrEmpty(nextContinuationKey)}, " +
+                    $"sameAsRequest={continuationKey != null &&
+                        string.Equals(
+                            continuationKey,
+                            nextContinuationKey,
+                            StringComparison.Ordinal)}");
+
+                string? nextKey = body?.continuationKey;
+
+                if (string.IsNullOrEmpty(nextKey))
+                {
+                    return transactions;
+                }
+
+                bool repeatedKey = !seenContinuationKeys.Add(nextKey);
+
+                if (repeatedKey)
+                {
+                    bool emptyPendingResponse =
+                        elements.Count == 0 &&
+                        string.Equals(nextKey, continuationKey, StringComparison.Ordinal);
+
+                    if (!emptyPendingResponse ||
+                        emptyRepeatRetries >= maxEmptyRepeatRetries)
+                    {
+                        throw new TransactionPaginationException(
+                            $"Transaction pagination did not progress for account " +
+                            $"{accountId} after {page} requests. " +
+                            $"Empty repeated-key retries: {emptyRepeatRetries}.");
+                    }
+
+                    emptyRepeatRetries++;
+
+                    throw new TransactionPaginationException(
+                        $"Stopped fetching transactions for account {accountId} " +
+                        $"after {MaxTransactionPages} pages.");
+                }
+
+                continuationKey = nextKey;
             }
 
             throw new InvalidOperationException($"Stopped fetching transactions for account {accountId} after {MaxTransactionPages} pages.");
         }
-        
+
+        internal sealed class TransactionPaginationException : Exception
+        {
+            public TransactionPaginationException(string message)
+                : base(message)
+            {
+            }
+        }
+
         public async Task<bool> RevokeSession(Guid sessionId)
         {
             GetToken();
@@ -128,7 +195,7 @@ namespace ZenithFin.EnableBanking
         public async Task<Response.SessionData> FetchSession(Guid sessionId)
         {
             GetToken();
-            
+
             dynamic response = await Wrapper.GET
                                             .SessionById(client, sessionId)
                                             .SendAsync();
@@ -143,7 +210,7 @@ namespace ZenithFin.EnableBanking
             dynamic response = await Wrapper.GET
                                             .AccountDetailsById(client, accountId)
                                             .SendAsync();
-            
+
             return response;
         }
 
