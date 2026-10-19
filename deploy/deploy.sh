@@ -81,6 +81,8 @@ ExecStart=$node $data/web/dist/server/entry.mjs
 Environment=NODE_ENV=production
 Environment=HOST=127.0.0.1
 Environment=PORT=$web_port
+Environment=SERVER_CERT_PATH=$cert
+Environment=SERVER_KEY_PATH=$key
 Environment=ZENITH_API_URL=https://localhost:$api_https_port/api/v1
 Restart=on-failure
 RestartSec=5
@@ -122,7 +124,7 @@ server {
     }
 
     location / {
-        proxy_pass http://127.0.0.1:$web_port;
+        proxy_pass https://127.0.0.1:$web_port;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
