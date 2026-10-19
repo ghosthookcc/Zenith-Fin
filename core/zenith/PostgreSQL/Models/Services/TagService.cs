@@ -92,7 +92,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 return DuplicateName(tag.Name);
             }
 
-            return await CompleteAsync(userId.Value, tagId);
+            return await CompleteAsync(userId.Value, tagId, reopenAiOther: true);
         }
 
         public async Task<TagOperationResult> UpdateTagAsync(string sessionId,
@@ -112,6 +112,12 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (tag == null) return invalid!;
 
+            TagDto.Tag current = tags.First(existing => existing.Id == tagId);
+
+            bool changesMeaning = current.Name != tag.Name ||
+                                  current.Kind != tag.Kind ||
+                                  !current.Keywords.SequenceEqual(tag.Keywords);
+
             try
             {
                 bool updated = await _tagRepository.UpdateTagAsync(userId.Value, tagId, tag.Name, tag.Icon, tag.Color, tag.Kind, tag.Keywords);
@@ -123,7 +129,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 return DuplicateName(tag.Name);
             }
 
-            return await CompleteAsync(userId.Value, tagId);
+            return await CompleteAsync(userId.Value, tagId, changesMeaning);
         }
 
         public async Task<TagOperationResult> DeleteTagAsync(string sessionId,
@@ -145,9 +151,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
         }
 
         private async Task<TagOperationResult> CompleteAsync(long userId,
-                                                             long tagId)
+                                                             long tagId,
+                                                             bool reopenAiOther)
         {
-            await RecategorizeAsync(userId, reopenAiOther: true);
+            await RecategorizeAsync(userId, reopenAiOther);
 
             TagDto.Tag? saved = (await _tagRepository.GetTagsForUserAsync(userId)).FirstOrDefault(tag => tag.Id == tagId);
 

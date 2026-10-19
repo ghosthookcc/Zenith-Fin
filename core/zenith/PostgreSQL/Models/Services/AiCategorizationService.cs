@@ -152,11 +152,17 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     return (tagged, errno.Message);
                 }
 
+                Dictionary<int, string> choices = AiCategorizer.ParseChoices(json, batch.Length);
                 List<(long TransactionId, long TagId)> changes = new();
 
-                foreach ((int position, string category) in AiCategorizer.ParseChoices(json, batch.Length))
+                if (choices.Count == 0) continue;
+
+                for (int position = 0; position < batch.Length; position++)
                 {
-                    if (!tagIds.TryGetValue(category, out long tagId)) continue;
+                    long tagId = choices.TryGetValue(position, out string? category) &&
+                                 tagIds.TryGetValue(category, out long chosenTagId)
+                        ? chosenTagId
+                        : other.Id;
 
                     changes.AddRange(batch[position].TransactionIds.Select(transactionId => (transactionId, tagId)));
                 }

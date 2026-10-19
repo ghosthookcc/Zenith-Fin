@@ -194,10 +194,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 IReadOnlyList<FetchedTransaction> fetched = await FetchTransactionsAsync(account, syncedAt, today);
                 TransactionEntity[] transactions = MapTransactions(fetched, account.Currency, today);
 
-                ReleasedTransactionRow[] released = await _transactionRepository.ReplaceTransactionsAsync(userId, account.Id, transactions, now);
-                (string ExternalId, long TagId)[] restored = FindSuccessors(released, transactions);
-
-                if (restored.Length > 0) await _transactionRepository.RestoreUserTagsAsync(userId, account.Id, restored, now);
+                await StoreTransactionsAsync(userId, account.Id, transactions, now);
 
                 Console.WriteLine($"Transaction sync: account={account.Id}, " +
                                   $"fetched={fetched.Count}, " +
@@ -369,10 +366,35 @@ namespace ZenithFin.PostgreSQL.Models.Services
             };
         }
 
-        private static (string ExternalId, long TagId)[] FindSuccessors(IReadOnlyList<ReleasedTransactionRow> released,
-                                                                        IReadOnlyList<TransactionEntity> transactions)
+        private async Task StoreTransactionsAsync(long userId,
+                                                  long accountId,
+                                                  IReadOnlyList<TransactionEntity> transactions,
+                                                  DateTime now)
         {
-            List<(string ExternalId, long TagId)> restored = new();
+            ReleasedTransactionRow[] released = await _transactionRepository.ReplaceTransactionsAsync(userId, accountId, transactions, now);
+            (string ExternalId, ReleasedTransactionRow Released)[] successors = FindSuccessors(released, transactions);
+
+            foreach (string source in new[] { CategorizationService.UserSource, CategorizationService.AiSource })
+            {
+                (string ExternalId, long TagId)[] tags = successors.Where(entry => entry.Released.TagSource == source &&
+                                                                                   entry.Released.TagId != null)
+                                                                   .Select(entry => (entry.ExternalId, entry.Released.TagId!.Value))
+                                                                   .ToArray();
+
+                if (tags.Length > 0) await _transactionRepository.RestoreTagsAsync(userId, accountId, tags, source, now);
+            }
+
+            (string ExternalId, string Counting)[] countings = successors.Where(entry => entry.Released.Counting != null)
+                                                                         .Select(entry => (entry.ExternalId, entry.Released.Counting!))
+                                                                         .ToArray();
+
+            if (countings.Length > 0) await _transactionRepository.RestoreCountingAsync(userId, accountId, countings);
+        }
+
+        private static (string ExternalId, ReleasedTransactionRow Released)[] FindSuccessors(IReadOnlyList<ReleasedTransactionRow> released,
+                                                                                             IReadOnlyList<TransactionEntity> transactions)
+        {
+            List<(string ExternalId, ReleasedTransactionRow Released)> restored = new();
 
             foreach (ReleasedTransactionRow row in released)
             {
@@ -389,7 +411,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                                                                                                              item.RemittanceInformation)) == signature)
                                                            .MinBy(item => Math.Abs(item.OccurredOn.DayNumber - releasedOn.DayNumber));
 
-                if (successor != null) restored.Add((successor.ExternalId, row.TagId));
+                if (successor != null) restored.Add((successor.ExternalId, row));
             }
 
             return restored.ToArray();

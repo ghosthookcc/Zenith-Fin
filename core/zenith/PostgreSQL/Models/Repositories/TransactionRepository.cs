@@ -410,6 +410,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                            AND NOT (external_id = ANY(@ExternalIds))
                                          RETURNING tag_id,
                                                    tag_source,
+                                                   counting_override,
                                                    credit_debit_indicator,
                                                    amount,
                                                    currency,
@@ -419,6 +420,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                      )
                                      SELECT
                                          tag_id AS "TagId",
+                                         tag_source::text AS "TagSource",
+                                         counting_override::text AS "Counting",
                                          credit_debit_indicator AS "CreditDebitIndicator",
                                          amount AS "Amount",
                                          currency AS "Currency",
@@ -426,8 +429,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          COALESCE(remittance_information, ARRAY[]::text[]) AS "RemittanceInformation",
                                          to_char(occurred_on, 'YYYY-MM-DD') AS "OccurredOn"
                                      FROM released
-                                     WHERE tag_source = 'USER'::"TagSource"
-                                       AND tag_id IS NOT NULL;
+                                     WHERE (tag_source IN ('USER'::"TagSource", 'AI'::"TagSource") AND tag_id IS NOT NULL)
+                                        OR counting_override IS NOT NULL;
                                      """;
 
             ReleasedTransactionRow[] released = (await connection.QueryAsync<ReleasedTransactionRow>(
@@ -565,17 +568,18 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             return released;
         }
 
-        public async Task RestoreUserTagsAsync(long userId,
-                                               long accountId,
-                                               IReadOnlyList<(string ExternalId, long TagId)> tags,
-                                               DateTime taggedAt)
+        public async Task RestoreTagsAsync(long userId,
+                                           long accountId,
+                                           IReadOnlyList<(string ExternalId, long TagId)> tags,
+                                           string source,
+                                           DateTime taggedAt)
         {
             if (taggedAt.Kind != DateTimeKind.Utc) throw new ArgumentException("Tag time must be UTC.", nameof(taggedAt));
 
             const string sql = """
                                UPDATE "Transaction" AS t
                                SET tag_id = restored.tag_id,
-                                   tag_source = 'USER'::"TagSource",
+                                   tag_source = CAST(@Source AS "TagSource"),
                                    tagged_at = @TaggedAt
                                FROM unnest(@ExternalIds, @TagIds) AS restored(external_id, tag_id),
                                     "Account" a,
@@ -585,7 +589,9 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                  AND a.id = t.account_id
                                  AND bc.id = a.bank_connection_id
                                  AND bc.user_id = @UserId
-                                 AND t.tag_source IS DISTINCT FROM 'USER'::"TagSource";
+                                 AND (t.tag_source IS NULL
+                                      OR t.tag_source = 'RULE'::"TagSource"
+                                      OR (@Source = 'USER' AND t.tag_source <> 'USER'::"TagSource"));
                                """;
 
             using var connection = _connectionFactory.Create();
@@ -595,7 +601,36 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 AccountId = accountId,
                 ExternalIds = tags.Select(tag => tag.ExternalId).ToArray(),
                 TagIds = tags.Select(tag => tag.TagId).ToArray(),
+                Source = source,
                 TaggedAt = taggedAt
+            });
+        }
+
+        public async Task RestoreCountingAsync(long userId,
+                                               long accountId,
+                                               IReadOnlyList<(string ExternalId, string Counting)> countings)
+        {
+            const string sql = """
+                               UPDATE "Transaction" AS t
+                               SET counting_override = CAST(restored.counting AS "CreditCounting")
+                               FROM unnest(@ExternalIds, @Countings) AS restored(external_id, counting),
+                                    "Account" a,
+                                    "BankConnection" bc
+                               WHERE t.account_id = @AccountId
+                                 AND t.external_id = restored.external_id
+                                 AND a.id = t.account_id
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId
+                                 AND t.counting_override IS NULL;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            await connection.ExecuteAsync(sql, new
+            {
+                UserId = userId,
+                AccountId = accountId,
+                ExternalIds = countings.Select(counting => counting.ExternalId).ToArray(),
+                Countings = countings.Select(counting => counting.Counting).ToArray()
             });
         }
 
