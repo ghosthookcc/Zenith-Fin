@@ -5,6 +5,7 @@ namespace ZenithFin.Utility
     public static class ProtectorPurpose
     {
         public const string UserSession = "jwt-user-session";
+        public const string PersonalNumber = "account-share-personal-number";
     }
     public sealed class Protector
     {

@@ -46,6 +46,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<VirtualAccountRepository>();
             builder.Services.AddSingleton<VirtualAccountService>();
 
+            builder.Services.AddSingleton<AccountShareRepository>();
+            builder.Services.AddSingleton<AccountShareService>();
+
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CorrectionRepository>();
             builder.Services.AddSingleton<CategorizationService>();

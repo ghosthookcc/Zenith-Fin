@@ -16,6 +16,7 @@ model Account {
 
   alias          AccountAlias?
   credit_account CreditAccount?
+  shares         AccountShare[]
 
   balances           Balance[]
   transactions       Transaction[]

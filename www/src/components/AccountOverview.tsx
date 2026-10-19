@@ -10,6 +10,7 @@ import {
 } from './BankConnections';
 import { CreditAccounts } from './CreditAccounts';
 import { VirtualAccounts } from './VirtualAccounts';
+import { SharedAccounts, sharedWithLabel, sharesByAccount, type AccountShare } from './SharedAccounts';
 import { currentMonthRange, type MonthTransaction } from '../utils/credit';
 import { Icon } from './Icon';
 import { accountColors as colors } from '../utils/accounts';
@@ -162,6 +163,8 @@ export const AccountOverview = component$(() => {
     const monthTransactions = useSignal<MonthTransaction[] | null>(null);
     const monthError = useSignal(false);
     const monthSyncing = useSignal(false);
+    const shares = useSignal<AccountShare[] | null>(null);
+    const sharesError = useSignal<string | null>(null);
 
     const loadMonth = $(async () => {
         monthError.value = false;
@@ -220,6 +223,35 @@ export const AccountOverview = component$(() => {
             monthError.value = monthTransactions.value === null;
         }
     });
+
+    const loadShares = $(async () => {
+        sharesError.value = null;
+
+        try {
+            const response = await fetch('/api/account-shares', {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                },
+                credentials: 'same-origin',
+                cache: 'no-store',
+            });
+
+            const payload = (await response.json().catch(() => null)) as {
+                shares?: AccountShare[];
+                message?: string;
+            } | null;
+
+            if (!response.ok || !payload || !Array.isArray(payload.shares)) {
+                throw new Error(payload?.message ?? `Could not load shared accounts (${response.status})`);
+            }
+
+            shares.value = payload.shares;
+        } catch (err) {
+            sharesError.value = err instanceof Error ? err.message : 'Could not load shared accounts.';
+        }
+    });
+
     const reconnectingId = useSignal<number | null>(null);
     const removingId = useSignal<number | null>(null);
     const availableBanks = useSignal<AvailableBank[] | null>(null);
@@ -506,6 +538,7 @@ export const AccountOverview = component$(() => {
             void loadAccounts();
             void loadConnections();
             void loadMonth();
+            void loadShares();
             void loadAvailableBanks();
         },
         {
@@ -514,6 +547,8 @@ export const AccountOverview = component$(() => {
     );
     
     const accounts = backendAccounts.value.map(makeDisplayAccount);
+
+    const sharedByAccount = sharesByAccount(shares.value ?? []);
 
     const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
 
@@ -1108,6 +1143,16 @@ export const AccountOverview = component$(() => {
                                                     </p>
                                                 )}
 
+                                                {sharedByAccount.has(account.backendId) && (
+                                                    <p
+                                                        class="account-shared"
+                                                        title={sharedWithLabel(sharedByAccount.get(account.backendId)!)}
+                                                    >
+                                                        <Icon name="users" />
+                                                        <span>{sharedWithLabel(sharedByAccount.get(account.backendId)!)}</span>
+                                                    </p>
+                                                )}
+
                                                 <p class="account-purpose">
                                                     {
                                                         account.purpose
@@ -1170,6 +1215,19 @@ export const AccountOverview = component$(() => {
                                 hidden={hidden.value}
                                 monthTransactions={monthTransactions.value}
                                 monthError={monthError.value}
+                            />
+
+                            <SharedAccounts
+                                accounts={accounts.map((account) => ({
+                                    id: account.backendId,
+                                    name: account.name,
+                                    bank: account.bank,
+                                    iban: account.iban,
+                                    color: account.color,
+                                }))}
+                                shares={shares.value}
+                                error={sharesError.value}
+                                onChanged$={loadShares}
                             />
                         </>
                     )}

@@ -39,6 +39,7 @@ const paths: Record<string, string> = {
     close: 'M6 6l12 12M18 6 6 18',
     check: 'm5 12.5 4.5 4.5L19 7',
     pencil: 'M4 20h4L18.5 9.5a2.8 2.8 0 0 0-4-4L4 16v4Zm9-13 4 4',
+    users: 'M3 20v-1a5 5 0 0 1 5-5h2a5 5 0 0 1 5 5v1M12.5 8a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0Zm3-3.4a3.5 3.5 0 0 1 0 6.8M17.5 14.2a5 5 0 0 1 3.5 4.8v1',
 };
 
 export const Icon = component$<{ name: string; class?: string }>(({ name, class: className }) => (

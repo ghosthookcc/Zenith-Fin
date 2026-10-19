@@ -92,6 +92,11 @@
     outline-offset: 2px;
 }
 
+.cat-input:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
 .cat-hint {
     font-size: 0.75rem;
     line-height: 1.5;

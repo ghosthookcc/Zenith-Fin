@@ -311,3 +311,121 @@
         align-items: flex-start;
     }
 }
+
+.account-shared {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+    min-width: 0;
+    font-size: 0.75rem;
+    color: #a3adbc;
+}
+
+.account-shared svg {
+    flex: none;
+    width: 14px;
+    height: 14px;
+}
+
+.account-shared span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.share-people {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 16px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.share-person {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    border: 1px solid var(--cal-line);
+    border-radius: 10px;
+    background: #1c222b;
+}
+
+.share-person-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.share-person-head strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    color: var(--cal-ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.share-person-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.share-number {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+    margin: 0;
+    font-size: 0.8125rem;
+    color: var(--cal-muted);
+}
+
+.share-number code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.875rem;
+    letter-spacing: 0.04em;
+    color: var(--cal-ink-2);
+}
+
+.share-number-revealed code {
+    color: var(--cal-ink);
+}
+
+.share-reveal {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.share-reveal svg {
+    width: 15px;
+    height: 15px;
+}
+
+.share-countdown {
+    font-size: 0.75rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--cal-muted);
+}
+
+.share-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.share-remove-number {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 0.8125rem;
+    color: var(--cal-ink-2);
+}
