@@ -10,7 +10,7 @@ const insecureDispatcher = new Agent({
 
 export const prerender = false;
 
-export const POST: APIRoute = async ({ request, cookies }) => {
+export const POST: APIRoute = async ({ cookies }) => {
     try
     {
         const jwt = cookies.get("AuthToken")?.value;

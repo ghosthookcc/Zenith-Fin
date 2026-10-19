@@ -20,6 +20,6 @@ export default defineConfig({
             cert: fs.readFileSync("./localhost+2.pem"),
         },
     },
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
   }
 });
