@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { Agent } from "undici";
+import { backendUrl } from "../../../utils/backend.ts";
 
 const insecureDispatcher = new Agent({
     connect: {
@@ -31,7 +32,7 @@ export const GET: APIRoute = async ({ cookies }) => {
         }
 
         const response = await fetch(
-            "https://localhost:4446/api/v1/aspsp/all/inactive",
+            `${backendUrl}/aspsp/all/inactive`,
             {
                 method: "GET",
                 headers: {
@@ -106,7 +107,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
         console.log("🟢 SERVER: POST body:", body);
 
         const response = await fetch(
-            "https://localhost:4446/api/v1/auth/aspsp/connect",
+            `${backendUrl}/auth/aspsp/connect`,
             {
                 method: "POST",
                 headers: {

@@ -1,8 +1,10 @@
+import { backendUrl } from "../utils/backend.ts";
+
 export async function isAuthorized()
 {
     try
     {
-        const response = await fetch("https://localhost:4446/api/v1/oauth/users/session",
+        const response = await fetch(`${backendUrl}/oauth/users/session`,
         {
             method: "GET",
             credentials: "include",

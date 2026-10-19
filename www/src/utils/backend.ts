@@ -1,4 +1,5 @@
 import type { AstroCookies } from "astro";
+import { getSecret } from "astro:env/server";
 import { Agent } from "undici";
 
 import { fetchWithTimeout } from "./network.ts";
@@ -9,7 +10,7 @@ const insecureDispatcher = new Agent({
     },
 });
 
-const backendUrl = "https://localhost:4446/api/v1";
+export const backendUrl = getSecret("ZENITH_API_URL") ?? "https://localhost:4446/api/v1";
 
 function json(status: number, body: unknown): Response {
     return new Response(JSON.stringify(body), {

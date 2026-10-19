@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { Agent } from "undici";
+import { backendUrl } from "../../../../utils/backend.ts";
 
 const insecureDispatcher = new Agent({
   connect: {
@@ -34,7 +35,7 @@ export const GET: APIRoute = async ({ request, cookies, redirect }) => {
                       code: searchParams.get("code")
         });
 
-        const response = await fetch("https://localhost:4446/api/v1/aspsp/auth/callback",
+        const response = await fetch(`${backendUrl}/aspsp/auth/callback`,
         {
             method: "POST",
             headers:

@@ -270,14 +270,18 @@ namespace ZenithFin.EnableBanking
 
             client.Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
 
-            Console.WriteLine("Created application JwT:");
-            Console.WriteLine(token + "\n");
+            if (string.Equals(Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"), "Development", StringComparison.OrdinalIgnoreCase))
+            {
+                Console.WriteLine("Created application JwT:");
+                Console.WriteLine(token + "\n");
+            }
 
             return token;
         }
 
         internal Authenticator(Workspace workspace,
-                               Client client)
+                               Client client,
+                               string? redirectUrl = null)
         {
             this.workspace = workspace;
             this.client = client;
@@ -293,11 +297,13 @@ namespace ZenithFin.EnableBanking
                                           .GetProperty("EnableBanking")
                                           .GetProperty("applicationId")
                                           .GetString()!;
-                _redirectUrl = workspace.config
-                                        .RootElement
-                                        .GetProperty("EnableBanking")
-                                        .GetProperty("redirectUrl")
-                                        .GetString()!;
+                _redirectUrl = string.IsNullOrWhiteSpace(redirectUrl)
+                    ? workspace.config
+                               .RootElement
+                               .GetProperty("EnableBanking")
+                               .GetProperty("redirectUrl")
+                               .GetString()!
+                    : redirectUrl;
             }
         }
     }

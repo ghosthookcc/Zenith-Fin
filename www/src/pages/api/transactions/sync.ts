@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { Agent } from "undici";
 
 import { fetchWithTimeout } from "../../../utils/network.ts";
+import { backendUrl } from "../../../utils/backend.ts";
 
 const insecureDispatcher = new Agent({
     connect: {
@@ -34,7 +35,7 @@ export const POST: APIRoute = async ({ cookies, url }) =>
         const force = url.searchParams.get("force") === "true";
 
         const response = await fetchWithTimeout(
-            `https://localhost:4446/api/v1/aspsp/accounts/transactions/sync?force=${force}`,
+            `${backendUrl}/aspsp/accounts/transactions/sync?force=${force}`,
             {
                 method: "POST",
                 headers: {

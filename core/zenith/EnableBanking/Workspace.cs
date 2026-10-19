@@ -6,6 +6,7 @@ namespace ZenithFin.EnableBanking
     public class EnableBankingOptions
     {
         public string WorkspacePath { get; set; } = default!;
+        public string? RedirectUrl { get; set; }
     }
     public class EnableBankingWorkspace : Workspace
     {
@@ -15,7 +16,7 @@ namespace ZenithFin.EnableBanking
 
         public EnableBankingWorkspace(IOptions<EnableBankingOptions> options) : base(options.Value.WorkspacePath)
         {
-            this.Authenticator = new Authenticator(this, Client);
+            this.Authenticator = new Authenticator(this, Client, options.Value.RedirectUrl);
         }
     }
 }

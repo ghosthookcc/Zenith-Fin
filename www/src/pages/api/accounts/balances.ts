@@ -2,6 +2,7 @@ import type { APIRoute } from "astro";
 import { Agent } from "undici";
 
 import { fetchWithTimeout } from "../../../utils/network.ts";
+import { backendUrl } from "../../../utils/backend.ts";
 
 const insecureDispatcher = new Agent({
     connect: {
@@ -32,7 +33,7 @@ export const GET: APIRoute = async ({ cookies }) =>
         }
 
         const response = await fetchWithTimeout(
-            "https://localhost:4446/api/v1/aspsp/accounts/balances",
+            `${backendUrl}/aspsp/accounts/balances`,
             {
                 method: "GET",
                 headers: {

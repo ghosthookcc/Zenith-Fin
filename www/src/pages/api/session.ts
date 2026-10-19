@@ -1,5 +1,6 @@
 import type { APIRoute } from "astro";
 import { Agent } from "undici";
+import { backendUrl } from "../../utils/backend.ts";
 
 const insecureDispatcher = new Agent({
   connect: {
@@ -27,7 +28,7 @@ export const POST: APIRoute = async ({ request, cookies }) => {
             );
         }
 
-        const response = await fetch("https://localhost:4446/api/v1/auth/users/session",
+        const response = await fetch(`${backendUrl}/auth/users/session`,
         {
             method: "GET",
             headers:
