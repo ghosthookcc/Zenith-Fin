@@ -17,6 +17,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
     public sealed class VirtualAccountService
     {
         private readonly VirtualAccountRepository _virtualAccountRepository;
+        private readonly ManualTransactionService _manualTransactionService;
         private readonly UserRepository _userRepository;
 
         private const int MaxNameLength = 40;
@@ -30,9 +31,11 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private static readonly VirtualAccountResult Unauthorized = new(StatusCodes.Status401Unauthorized, "No user found for session");
 
         public VirtualAccountService(VirtualAccountRepository virtualAccountRepository,
+                                     ManualTransactionService manualTransactionService,
                                      UserRepository userRepository)
         {
             _virtualAccountRepository = virtualAccountRepository;
+            _manualTransactionService = manualTransactionService;
             _userRepository = userRepository;
         }
 
@@ -50,15 +53,27 @@ namespace ZenithFin.PostgreSQL.Models.Services
             {
                 VirtualBalanceTransactionRow[] transactions = await _virtualAccountRepository.GetTransactionsSinceAsync(userId.Value,
                                                                                                                         tracked.Min(account => account.BalanceSetAt!.Value));
+                ManualTransactionDto.ManualTransaction[] manualTransactions = await _manualTransactionService.GetManualTransactionsAsync(userId.Value);
+
+                Dictionary<long, DateTime> recordedAt = manualTransactions.Where(manual => manual.MatchedTransactionId != null)
+                                                                          .ToDictionary(manual => manual.MatchedTransactionId!.Value,
+                                                                                        manual => manual.CreatedAt);
+                ManualTransactionDto.ManualTransaction[] unmatched = manualTransactions.Where(manual => manual.MatchedTransactionId == null)
+                                                                                       .ToArray();
 
                 foreach (VirtualAccountDto.VirtualAccount account in tracked)
                 {
                     string[] keys = VirtualAccountMatcher.Keys(account.AccountNumber, account.ClearingNumber, account.Iban);
+                    DateTime anchor = account.BalanceSetAt!.Value;
 
-                    account.CurrentBalance = account.Balance!.Value -
-                                             transactions.Where(transaction => transaction.FirstSeenAt > account.BalanceSetAt!.Value &&
-                                                                               VirtualAccountMatcher.Matches(transaction.CounterpartyAccount, keys))
-                                                         .Sum(transaction => transaction.Amount);
+                    decimal banked = transactions.Where(transaction => SeenAt(transaction, recordedAt) > anchor &&
+                                                                       VirtualAccountMatcher.Matches(transaction.CounterpartyAccount, keys))
+                                                 .Sum(transaction => transaction.Amount);
+                    decimal recorded = unmatched.Where(manual => manual.CreatedAt > anchor)
+                                                .Sum(manual => (manual.ToVirtualAccountId == account.Id ? manual.Amount : 0) -
+                                                               (manual.FromVirtualAccountId == account.Id ? manual.Amount : 0));
+
+                    account.CurrentBalance = account.Balance!.Value - banked + recorded;
                 }
             }
 
@@ -185,6 +200,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 Balance = balance,
                 CurrentBalance = balance
             }, null);
+        }
+
+        private static DateTime SeenAt(VirtualBalanceTransactionRow transaction,
+                                       IReadOnlyDictionary<long, DateTime> recordedAt)
+        {
+            return recordedAt.TryGetValue(transaction.Id, out DateTime recorded) && recorded < transaction.FirstSeenAt
+                ? recorded
+                : transaction.FirstSeenAt;
         }
 
         private static string Digits(string? value)

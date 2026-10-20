@@ -1,6 +1,7 @@
 import {
   component$,
   $,
+  useOnWindow,
   useSignal,
   useStore,
   useVisibleTask$,
@@ -30,6 +31,12 @@ import {
   type MonthTransaction,
   type VirtualAccountRule,
 } from "../utils/credit";
+import {
+  type ManualTransaction,
+  manualMonthRows,
+  manualTransactionsChangedEvent,
+  openManualTransaction,
+} from "../utils/manual";
 import { Icon } from "./Icon";
 import { accountColors as colors } from "../utils/accounts";
 
@@ -206,13 +213,20 @@ export const AccountOverview = component$(() => {
       const payload = (await response.json().catch(() => null)) as {
         accounts?: { isActive: boolean; isStale: boolean }[];
         transactions?: MonthTransaction[];
+        manualTransactions?: ManualTransaction[];
       } | null;
 
       if (!response.ok || !payload || !Array.isArray(payload.transactions)) {
         throw new Error("Could not load transactions");
       }
 
-      return payload;
+      return {
+        accounts: payload.accounts,
+        transactions: [
+          ...payload.transactions,
+          ...manualMonthRows(payload.manualTransactions ?? []),
+        ],
+      };
     };
 
     try {
@@ -316,6 +330,13 @@ export const AccountOverview = component$(() => {
   const reloadVirtualAccounts = $(async () => {
     await Promise.all([loadVirtualAccounts(), loadShares()]);
   });
+
+  useOnWindow(
+    manualTransactionsChangedEvent,
+    $(async () => {
+      await Promise.all([loadMonth(), loadVirtualAccounts()]);
+    }),
+  );
 
   const reconnectingId = useSignal<number | null>(null);
   const removingId = useSignal<number | null>(null);
@@ -734,6 +755,15 @@ export const AccountOverview = component$(() => {
           </div>
 
           <div class="page-actions">
+            <button
+              class="visibility-button"
+              type="button"
+              onClick$={() => openManualTransaction()}
+            >
+              <Icon name="plus" />
+              New transaction
+            </button>
+
             <ReconnectMenu
               connections={connections.value}
               reconnectingId={reconnectingId.value}

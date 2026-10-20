@@ -70,7 +70,9 @@ function monthSummary(
   for (const transaction of transactions) {
     if (
       uncountedStatuses.includes(transaction.status) ||
-      !matchesVirtualAccount(transaction.counterpartyAccount, account)
+      (transaction.virtualAccountId !== undefined
+        ? transaction.virtualAccountId !== account.id
+        : !matchesVirtualAccount(transaction.counterpartyAccount, account))
     ) {
       continue;
     }

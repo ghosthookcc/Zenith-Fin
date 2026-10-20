@@ -47,6 +47,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<VirtualAccountRepository>();
             builder.Services.AddSingleton<VirtualAccountService>();
 
+            builder.Services.AddSingleton<ManualTransactionRepository>();
+            builder.Services.AddSingleton<ManualTransactionService>();
+
             builder.Services.AddSingleton<AccountShareRepository>();
             builder.Services.AddSingleton<AccountShareService>();
 

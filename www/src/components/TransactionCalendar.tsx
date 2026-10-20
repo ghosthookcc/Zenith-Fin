@@ -2,6 +2,7 @@ import {
   $,
   component$,
   sync$,
+  useOnWindow,
   useSignal,
   useStore,
   useVisibleTask$,
@@ -22,6 +23,12 @@ import {
   uncountedStatuses,
   type VirtualAccountRule,
 } from "../utils/credit";
+import {
+  type ManualTransaction,
+  manualSignedAmount,
+  manualTransactionsChangedEvent,
+  openManualTransaction,
+} from "../utils/manual";
 
 interface CalendarAccount {
   id: number;
@@ -51,6 +58,7 @@ interface CalendarTransaction {
   tagSource?: string | null;
   counting?: string | null;
   recurring?: Recurring | null;
+  manual?: ManualTransaction | null;
 }
 
 interface Recurring {
@@ -84,6 +92,7 @@ interface TransactionsResponse {
   creditAccounts?: CreditAccountRule[];
   virtualAccounts?: VirtualAccountRule[];
   expectedSalaries?: ExpectedSalary[];
+  manualTransactions?: ManualTransaction[];
   transactions: CalendarTransaction[];
 }
 
@@ -155,6 +164,16 @@ const uncategorized: CalendarTag = {
   color: "#7b8496",
   kind: "SPENDING",
   isSystem: true,
+};
+
+const addedByYou: CalendarTag = {
+  id: -2_000_000,
+  key: null,
+  name: "Added by you",
+  icon: "pencil",
+  color: "#8792a5",
+  kind: "SPENDING",
+  isSystem: false,
 };
 
 function isoDate(year: number, monthIndex: number, day: number): string {
@@ -271,6 +290,8 @@ function statusLabel(status: string): string | null {
       return "Cancelled";
     case "RJCT":
       return "Rejected";
+    case "MTCH":
+      return "Matched";
     default:
       return null;
   }
@@ -502,8 +523,9 @@ function spendingByCategory(
       continue;
     }
 
-    const bucket =
-      tag.kind === "SPENDING" || rule?.kind === "manual"
+    const bucket = transaction.manual
+      ? addedByYou
+      : tag.kind === "SPENDING" || rule?.kind === "manual"
         ? tag
         : ruleCategory(rule!);
     const total = totals.get(bucket.id) ?? { tag: bucket, amount: 0 };
@@ -842,6 +864,23 @@ export const TransactionCalendar = component$(() => {
     },
   );
 
+  useOnWindow(
+    manualTransactionsChangedEvent,
+    $(async (event: Event) => {
+      const date = (event as CustomEvent<{ date?: string } | null>).detail
+        ?.date;
+
+      if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+        const [year, month] = date.split("-").map(Number);
+
+        await showMonth(year, month - 1, date);
+        return;
+      }
+
+      await load();
+    }),
+  );
+
   const changeMonth = $(async (offset: number) => {
     const target = new Date(
       Date.UTC(viewYear.value, viewMonth.value + offset, 1),
@@ -989,6 +1028,53 @@ export const TransactionCalendar = component$(() => {
     picker.remember = true;
     picker.error = null;
     notice.value = null;
+  });
+
+  const removeManual = $(async (id: number) => {
+    if (picker.saving) {
+      return;
+    }
+
+    picker.saving = true;
+    picker.error = null;
+
+    try {
+      const response = await fetch(`/api/manual-transactions/${id}`, {
+        method: "DELETE",
+        headers: {
+          Accept: "application/json",
+        },
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      const payload = await readJson(response);
+
+      if (!response.ok && response.status !== 404) {
+        throw new Error(
+          messageFrom(payload) ??
+            `Could not remove the transaction (${response.status})`,
+        );
+      }
+
+      picker.id = null;
+
+      if (data.value) {
+        data.value = {
+          ...data.value,
+          manualTransactions: (data.value.manualTransactions ?? []).filter(
+            (transaction) => transaction.id !== id,
+          ),
+        };
+      }
+    } catch (err) {
+      picker.error =
+        err instanceof Error
+          ? err.message
+          : "Could not remove the transaction.";
+    } finally {
+      picker.saving = false;
+    }
   });
 
   const closePicker = $((id: number) => {
@@ -1313,23 +1399,99 @@ export const TransactionCalendar = component$(() => {
     return amount !== null && (direction === "in" ? amount > 0 : amount < 0);
   };
 
-  const accountTransactions = (covered ? data.value!.transactions : []).filter(
-    (transaction) =>
+  const manualLabel = (
+    accountId: number | null | undefined,
+    virtualAccountId: number | null | undefined,
+    accountNumber: string | null | undefined,
+    name: string | null | undefined,
+  ): string | null => {
+    if (accountId != null && accountsById[accountId]) {
+      return accountName(accountsById[accountId]);
+    }
+
+    const virtualAccount =
+      virtualAccountId != null
+        ? virtualAccounts.find((account) => account.id === virtualAccountId)
+        : undefined;
+
+    if (virtualAccount) {
+      return virtualAccount.name;
+    }
+
+    if (
+      name &&
+      accountNumber &&
+      accountId == null &&
+      virtualAccountId == null
+    ) {
+      return `${name} · ${accountNumber}`;
+    }
+
+    return name || accountNumber || null;
+  };
+  const manualFrom = (transaction: ManualTransaction) =>
+    manualLabel(
+      transaction.fromAccountId,
+      transaction.fromVirtualAccountId,
+      transaction.fromAccountNumber,
+      transaction.fromName,
+    );
+  const manualTo = (transaction: ManualTransaction) =>
+    manualLabel(
+      transaction.toAccountId,
+      transaction.toVirtualAccountId,
+      transaction.toAccountNumber,
+      transaction.toName,
+    ) ?? "another account";
+  const manualRows: CalendarTransaction[] = (
+    covered ? (data.value!.manualTransactions ?? []) : []
+  )
+    .filter((transaction) =>
+      filteredVirtual
+        ? transaction.fromVirtualAccountId === filteredVirtual.id ||
+          transaction.toVirtualAccountId === filteredVirtual.id
+        : filteredAccount === null ||
+          transaction.fromAccountId === filteredAccount ||
+          transaction.toAccountId === filteredAccount,
+    )
+    .map((transaction) => ({
+      id: -transaction.id,
+      accountId:
+        filteredAccount !== null && transaction.toAccountId === filteredAccount
+          ? filteredAccount
+          : (transaction.fromAccountId ?? transaction.toAccountId ?? 0),
+      date: transaction.date,
+      amount: manualSignedAmount(transaction, {
+        accountId: filteredAccount,
+        virtualAccountId: filteredVirtual?.id ?? null,
+      }),
+      currency: transaction.currency,
+      status: transaction.matchedTransactionId != null ? "MTCH" : "BOOK",
+      description: transaction.description || `To ${manualTo(transaction)}`,
+      remittanceInformation: [],
+      counting: transaction.counting,
+      manual: transaction,
+    }));
+  const accountTransactions = [
+    ...manualRows,
+    ...(covered ? data.value!.transactions : []).filter((transaction) =>
       filteredVirtual
         ? matchesVirtualAccount(
             transaction.counterpartyAccount,
             filteredVirtual,
           )
         : filteredAccount === null || transaction.accountId === filteredAccount,
-  );
+    ),
+  ];
   const hasUncategorized = accountTransactions.some(
-    (transaction) => !transaction.tagId,
+    (transaction) => !transaction.manual && !transaction.tagId,
   );
   const visible = accountTransactions.filter((transaction) =>
     direction !== null
       ? inFlowDirection(transaction)
       : filteredTag === null ||
-        (transaction.tagId ?? uncategorized.id) === filteredTag,
+        (!transaction.manual &&
+          (transaction.tagId ?? uncategorized.id) === filteredTag),
   );
   const monthTransactions = visible.filter((transaction) =>
     transaction.date.startsWith(monthPrefix),
@@ -1369,14 +1531,17 @@ export const TransactionCalendar = component$(() => {
   const excludedCredit = accountTransactions.filter((transaction) =>
     neutralByRule(transaction, false),
   ).length;
-  const excludedManual = accountTransactions.filter((transaction) =>
-    neutralByRule(transaction, true),
+  const excludedManual = accountTransactions.filter(
+    (transaction) => !transaction.manual && neutralByRule(transaction, true),
   ).length;
   const recountedManual = monthTransactions.filter((transaction) => {
     const rule = ruleOf(transaction);
 
     return (
-      !showingNeutral && rule?.kind === "manual" && rule.counting !== "NEUTRAL"
+      !transaction.manual &&
+      !showingNeutral &&
+      rule?.kind === "manual" &&
+      rule.counting !== "NEUTRAL"
     );
   }).length;
   const recountedCredit = monthTransactions.filter((transaction) => {
@@ -1520,6 +1685,15 @@ export const TransactionCalendar = component$(() => {
         </div>
 
         <div class="cal-actions">
+          <button
+            type="button"
+            class="visibility-button cal-new-button"
+            onClick$={() => openManualTransaction()}
+          >
+            <Icon name="plus" />
+            New transaction
+          </button>
+
           <span class="cal-sync-label" aria-live="polite">
             {syncing.value
               ? "Syncing with your banks…"
@@ -2114,9 +2288,12 @@ export const TransactionCalendar = component$(() => {
                           const detail = transactionDetail(transaction, title);
                           const status = statusLabel(transaction.status);
                           const account = accountsById[transaction.accountId];
-                          const tag =
-                            tagsById[transaction.tagId ?? uncategorized.id] ??
-                            uncategorized;
+                          const manual = transaction.manual ?? null;
+                          const tag = manual
+                            ? addedByYou
+                            : (tagsById[
+                                transaction.tagId ?? uncategorized.id
+                              ] ?? uncategorized);
                           const pickerOpen = picker.id === transaction.id;
                           const rowNotice =
                             notice.value?.id === transaction.id
@@ -2141,8 +2318,14 @@ export const TransactionCalendar = component$(() => {
                                 class="cal-tag-tile cal-tag-button"
                                 style={{ "--tag-color": tag.color }}
                                 data-tag-button={transaction.id}
-                                title="Change category"
-                                aria-label={`${tag.name}. Change category`}
+                                title={
+                                  manual ? "Show details" : "Change category"
+                                }
+                                aria-label={
+                                  manual
+                                    ? `${tag.name}. Show details`
+                                    : `${tag.name}. Change category`
+                                }
                                 aria-expanded={pickerOpen}
                                 aria-controls={
                                   pickerOpen
@@ -2158,72 +2341,99 @@ export const TransactionCalendar = component$(() => {
                                 <span class="cal-tx-title" title={title}>
                                   {title}
                                 </span>
-                                <span class="cal-tx-meta">
-                                  {tag.name}
-                                  {transaction.tagSource === "AI" && (
+                                {manual ? (
+                                  <span class="cal-tx-meta">
                                     <span
-                                      class="cal-ai-badge"
-                                      title="Sorted by AI"
+                                      class="cal-ai-badge cal-added-badge"
+                                      title="You added this transaction yourself"
                                     >
-                                      AI
+                                      Added by you
                                     </span>
-                                  )}
-                                  {transaction.tagSource === "LEARNED" && (
                                     <span
-                                      class="cal-ai-badge cal-learned-badge"
-                                      title="Sorted like a transaction you changed"
+                                      class="cal-ai-badge cal-credit-badge cal-manual-badge"
+                                      title={ruleTitle({
+                                        kind: "manual",
+                                        id: transaction.id,
+                                        name: countingLabel(manual.counting),
+                                        counting: manual.counting,
+                                      })}
                                     >
-                                      Learned
+                                      {countingLabel(manual.counting)}
                                     </span>
-                                  )}
-                                  {transaction.recurring && (
-                                    <span
-                                      class="cal-ai-badge cal-recurring-badge"
-                                      title={recurringTitle(
-                                        transaction.recurring,
-                                      )}
-                                    >
-                                      <Icon name="refresh" />
-                                      {transaction.recurring.label}
-                                    </span>
-                                  )}
-                                  {ruleOf(transaction) && (
-                                    <span
-                                      class={{
-                                        "cal-ai-badge": true,
-                                        "cal-credit-badge": true,
-                                        "cal-manual-badge":
-                                          ruleOf(transaction)!.kind ===
-                                          "manual",
-                                      }}
-                                      title={ruleTitle(ruleOf(transaction)!)}
-                                    >
-                                      {ruleOf(transaction)!.name}
-                                    </span>
-                                  )}
-                                  {isTransfer(transaction) &&
-                                    !ruleOf(transaction) && (
+                                    {" · "}
+                                    {manualFrom(manual)
+                                      ? `${manualFrom(manual)} → ${manualTo(manual)}`
+                                      : `To ${manualTo(manual)}`}
+                                  </span>
+                                ) : (
+                                  <span class="cal-tx-meta">
+                                    {tag.name}
+                                    {transaction.tagSource === "AI" && (
                                       <span
-                                        class="cal-ai-badge cal-neutral-badge"
-                                        title="A transfer between your own accounts, so it is left out of your money in and out"
+                                        class="cal-ai-badge"
+                                        title="Sorted by AI"
                                       >
-                                        Neutral
+                                        AI
                                       </span>
                                     )}
-                                  {" · "}
-                                  <span
-                                    class="cal-account-dot"
-                                    style={{
-                                      backgroundColor:
-                                        colors[transaction.accountId] ??
-                                        inactiveAccountColor,
-                                    }}
-                                  />
-                                  {accountName(account)}
-                                  {transaction.bankTransactionCode &&
-                                    transaction.bankTransactionCode !== title &&
-                                    ` · ${transaction.bankTransactionCode}`}
-                                </span>
+                                    {transaction.tagSource === "LEARNED" && (
+                                      <span
+                                        class="cal-ai-badge cal-learned-badge"
+                                        title="Sorted like a transaction you changed"
+                                      >
+                                        Learned
+                                      </span>
+                                    )}
+                                    {transaction.recurring && (
+                                      <span
+                                        class="cal-ai-badge cal-recurring-badge"
+                                        title={recurringTitle(
+                                          transaction.recurring,
+                                        )}
+                                      >
+                                        <Icon name="refresh" />
+                                        {transaction.recurring.label}
+                                      </span>
+                                    )}
+                                    {ruleOf(transaction) && (
+                                      <span
+                                        class={{
+                                          "cal-ai-badge": true,
+                                          "cal-credit-badge": true,
+                                          "cal-manual-badge":
+                                            ruleOf(transaction)!.kind ===
+                                            "manual",
+                                        }}
+                                        title={ruleTitle(ruleOf(transaction)!)}
+                                      >
+                                        {ruleOf(transaction)!.name}
+                                      </span>
+                                    )}
+                                    {isTransfer(transaction) &&
+                                      !ruleOf(transaction) && (
+                                        <span
+                                          class="cal-ai-badge cal-neutral-badge"
+                                          title="A transfer between your own accounts, so it is left out of your money in and out"
+                                        >
+                                          Neutral
+                                        </span>
+                                      )}
+                                    {" · "}
+                                    <span
+                                      class="cal-account-dot"
+                                      style={{
+                                        backgroundColor:
+                                          colors[transaction.accountId] ??
+                                          inactiveAccountColor,
+                                      }}
+                                    />
+                                    {accountName(account)}
+                                    {transaction.bankTransactionCode &&
+                                      transaction.bankTransactionCode !==
+                                        title &&
+                                      ` · ${transaction.bankTransactionCode}`}
+                                  </span>
+                                )}
                                 {detail && (
                                   <span class="cal-tx-detail" title={detail}>
                                     {detail}
@@ -2270,7 +2480,77 @@ export const TransactionCalendar = component$(() => {
                                 )}
                               </span>
 
-                              {pickerOpen && (
+                              {pickerOpen && manual && (
+                                <div
+                                  id={`cal-picker-${transaction.id}`}
+                                  class="cal-picker"
+                                  role="group"
+                                  aria-label={`Details for ${title}`}
+                                >
+                                  <div class="cal-picker-head">
+                                    <span class="cal-picker-title">
+                                      Added by you
+                                    </span>
+                                    <button
+                                      type="button"
+                                      class="cal-icon-button cal-picker-close"
+                                      aria-label="Close"
+                                      onClick$={() =>
+                                        closePicker(transaction.id)
+                                      }
+                                    >
+                                      <Icon name="close" />
+                                    </button>
+                                  </div>
+
+                                  <dl class="cal-manual-facts">
+                                    <div>
+                                      <dt>From</dt>
+                                      <dd>
+                                        {manualFrom(manual) ?? "Not specified"}
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>To</dt>
+                                      <dd>{manualTo(manual)}</dd>
+                                    </div>
+                                    <div>
+                                      <dt>Counts as</dt>
+                                      <dd>{countingLabel(manual.counting)}</dd>
+                                    </div>
+                                  </dl>
+
+                                  <p class="cal-manual-note">
+                                    {manual.matchedTransactionId != null
+                                      ? "Your bank shows this payment now, so Zenith counts the bank's version and leaves this one out."
+                                      : manual.fromAccountId != null ||
+                                          manual.toAccountId != null
+                                        ? "Counted until your bank shows the same payment. Then the bank's version takes over."
+                                        : "None of your connected banks are involved, so this one keeps counting."}
+                                  </p>
+
+                                  {picker.error && (
+                                    <p class="cal-picker-error" role="alert">
+                                      {picker.error}
+                                    </p>
+                                  )}
+
+                                  <div class="cal-manual-actions">
+                                    <button
+                                      type="button"
+                                      class="cal-chip cal-manual-remove"
+                                      disabled={picker.saving}
+                                      onClick$={() => removeManual(manual.id)}
+                                    >
+                                      {picker.saving
+                                        ? "Removing…"
+                                        : "Remove transaction"}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {pickerOpen && !manual && (
                                 <div
                                   id={`cal-picker-${transaction.id}`}
                                   class="cal-picker"

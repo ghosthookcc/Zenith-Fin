@@ -1,6 +1,8 @@
 import { component$, useId, useSignal, useStyles$ } from "@builder.io/qwik";
 
 import { Icon } from "./Icon";
+import { NewTransaction } from "./NewTransaction";
+import { openManualTransaction } from "../utils/manual";
 
 interface MenuItem {
   label: string;
@@ -210,6 +212,25 @@ export default component$<SideMenuProps>((props) => {
       border-radius: 0 3px 3px 0;
       background: #c1d8b6;
     }
+    .sm-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      width: 100%;
+      min-height: 48px;
+      margin: 0 0 28px;
+      padding: 10px 16px;
+      border: 1px solid #c1d8b6;
+      border-radius: 13px;
+      background: #c1d8b6;
+      color: #11151d;
+      font-weight: 650;
+      cursor: pointer;
+      transition: background 150ms ease, border-color 150ms ease;
+    }
+    .sm-action:hover { background: #d3e6c9; border-color: #d3e6c9; }
+    .sm-action svg { width: 18px; height: 18px; }
     .sm-trigger:focus-visible, .sm-panel :focus-visible {
       outline: 2px solid #c1d8b6;
       outline-offset: 3px;
@@ -221,7 +242,7 @@ export default component$<SideMenuProps>((props) => {
     }
     @media (prefers-reduced-motion: reduce) {
       .sm-panel[open], .sm-panel::backdrop { animation: none; }
-      .sm-link, .sm-trigger, .sm-close { transition: none; }
+      .sm-link, .sm-trigger, .sm-close, .sm-action { transition: none; }
     }
   `);
 
@@ -322,6 +343,18 @@ export default component$<SideMenuProps>((props) => {
             </form>
           </div>
 
+          <button
+            type="button"
+            class="sm-action"
+            onClick$={() => {
+              dialog.value?.close();
+              openManualTransaction();
+            }}
+          >
+            <Icon name="plus" />
+            New transaction
+          </button>
+
           <nav aria-label="Main navigation">
             <p class="sm-section">Menu</p>
             <ul class="sm-list">
@@ -351,6 +384,8 @@ export default component$<SideMenuProps>((props) => {
           </nav>
         </div>
       </dialog>
+
+      <NewTransaction />
     </>
   );
 });

@@ -96,6 +96,7 @@ namespace ZenithFin.Api.Models.Dtos
             public IReadOnlyList<CreditAccountDto.CreditAccount> CreditAccounts { get; set; } = Array.Empty<CreditAccountDto.CreditAccount>();
             public IReadOnlyList<ExpectedSalaryDto.ExpectedSalary> ExpectedSalaries { get; set; } = Array.Empty<ExpectedSalaryDto.ExpectedSalary>();
             public IReadOnlyList<VirtualAccountDto.VirtualAccount> VirtualAccounts { get; set; } = Array.Empty<VirtualAccountDto.VirtualAccount>();
+            public IReadOnlyList<ManualTransactionDto.ManualTransaction> ManualTransactions { get; set; } = Array.Empty<ManualTransactionDto.ManualTransaction>();
             public IReadOnlyList<Transaction> Transactions { get; set; } = Array.Empty<Transaction>();
         }
 

@@ -696,6 +696,63 @@
   color: var(--cal-mint);
 }
 
+.cal-added-badge {
+  margin-left: 0;
+  margin-right: 1px;
+  border-color: #56688a;
+  color: #b9c8e8;
+}
+
+.cal-manual-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.cal-manual-facts div {
+  min-width: 0;
+}
+
+.cal-manual-facts dt {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--cal-muted);
+}
+
+.cal-manual-facts dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8125rem;
+  color: var(--cal-ink);
+}
+
+.cal-manual-note {
+  margin: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--cal-line);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--cal-muted);
+}
+
+.cal-manual-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cal-manual-remove,
+.cal-manual-remove:hover:not(:disabled) {
+  border-color: #8a3f3f;
+  color: #f3c1bd;
+}
+
+.cal-manual-remove:hover:not(:disabled) {
+  background: #3a2024;
+}
+
 .cal-picker-counting {
   display: flex;
   flex-direction: column;
@@ -1174,6 +1231,10 @@
 }
 
 @media (max-width: 640px) {
+  .cal-manual-facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .cal-toolbar {
     gap: 10px;
   }

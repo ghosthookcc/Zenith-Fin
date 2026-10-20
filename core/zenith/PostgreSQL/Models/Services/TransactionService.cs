@@ -25,6 +25,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly ExpectedSalaryRepository _expectedSalaryRepository;
         private readonly VirtualAccountRepository _virtualAccountRepository;
 
+        private readonly ManualTransactionService _manualTransactionService;
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
         private readonly RecurringService _recurringService;
@@ -37,6 +38,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   CreditAccountRepository creditAccountRepository,
                                   ExpectedSalaryRepository expectedSalaryRepository,
                                   VirtualAccountRepository virtualAccountRepository,
+                                  ManualTransactionService manualTransactionService,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
                                   RecurringService recurringService,
@@ -49,6 +51,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _expectedSalaryRepository = expectedSalaryRepository;
             _virtualAccountRepository = virtualAccountRepository;
 
+            _manualTransactionService = manualTransactionService;
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
             _recurringService = recurringService;
@@ -102,6 +105,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             DateTime now = DateTime.UtcNow;
 
+            string first = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            string last = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+            ManualTransactionDto.ManualTransaction[] manualTransactions = (await _manualTransactionService.GetManualTransactionsAsync(userId.Value))
+                .Where(transaction => string.CompareOrdinal(transaction.Date, first) >= 0 &&
+                                      string.CompareOrdinal(transaction.Date, last) <= 0)
+                .ToArray();
+
             return new TransactionDto.TransactionsResponse
             {
                 From = from,
@@ -121,6 +132,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),
                 ExpectedSalaries = await _expectedSalaryRepository.GetExpectedSalariesForUserAsync(userId.Value),
                 VirtualAccounts = await _virtualAccountRepository.GetVirtualAccountsForUserAsync(userId.Value),
+                ManualTransactions = manualTransactions,
                 Transactions = transactions
             };
         }

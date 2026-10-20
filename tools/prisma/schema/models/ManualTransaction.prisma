@@ -1,0 +1,30 @@
+model ManualTransaction {
+  id                      BigInt         @id @default(autoincrement())
+  user_id                 BigInt
+  occurred_on             DateTime       @db.Date
+  amount                  Decimal        @db.Decimal(24, 8)
+  currency                String         @default("SEK") @db.VarChar(3)
+  description             String?
+  counting                CreditCounting
+  from_account_id         BigInt?
+  from_virtual_account_id BigInt?
+  from_account_number     String?
+  from_name               String?
+  to_account_id           BigInt?
+  to_virtual_account_id   BigInt?
+  to_account_number       String?
+  to_name                 String?
+  created_at              DateTime       @default(now()) @db.Timestamptz(3)
+
+  user                 User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  from_account         Account?        @relation("ManualTransactionFrom", fields: [from_account_id], references: [id], onDelete: SetNull)
+  from_virtual_account VirtualAccount? @relation("ManualTransactionFrom", fields: [from_virtual_account_id], references: [id], onDelete: SetNull)
+  to_account           Account?        @relation("ManualTransactionTo", fields: [to_account_id], references: [id], onDelete: SetNull)
+  to_virtual_account   VirtualAccount? @relation("ManualTransactionTo", fields: [to_virtual_account_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, occurred_on])
+  @@index([from_account_id])
+  @@index([to_account_id])
+  @@index([from_virtual_account_id])
+  @@index([to_virtual_account_id])
+}

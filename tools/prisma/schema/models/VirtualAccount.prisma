@@ -13,6 +13,9 @@ model VirtualAccount {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
   shares AccountShare[]
 
+  manual_transactions_from ManualTransaction[] @relation("ManualTransactionFrom")
+  manual_transactions_to   ManualTransaction[] @relation("ManualTransactionTo")
+
   @@unique([user_id, name])
   @@index([user_id])
 }

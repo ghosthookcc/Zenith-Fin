@@ -6,7 +6,7 @@ export interface CreditAccountRule {
   creditLimit?: number | null;
 }
 
-export const uncountedStatuses = ["CNCL", "RJCT", "SCHD"];
+export const uncountedStatuses = ["CNCL", "RJCT", "SCHD", "MTCH"];
 
 export const countingChoices = [
   {
@@ -149,6 +149,7 @@ export interface MonthTransaction {
   status: string;
   counterpartyAccount?: string | null;
   counting?: string | null;
+  virtualAccountId?: number;
 }
 
 export interface MonthRange {

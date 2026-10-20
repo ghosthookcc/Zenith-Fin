@@ -18,6 +18,9 @@ model Account {
   credit_account CreditAccount?
   shares         AccountShare[]
 
+  manual_transactions_from ManualTransaction[] @relation("ManualTransactionFrom")
+  manual_transactions_to   ManualTransaction[] @relation("ManualTransactionTo")
+
   balances           Balance[]
   transactions       Transaction[]
   bankConnection     BankConnection? @relation(fields: [bank_connection_id], references: [id])

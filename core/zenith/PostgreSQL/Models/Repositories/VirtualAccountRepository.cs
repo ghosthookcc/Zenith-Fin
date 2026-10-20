@@ -104,6 +104,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
         {
             const string sql = """
                                SELECT
+                                   t.id AS "Id",
                                    t.counterparty_account AS "CounterpartyAccount",
                                    t.amount AS "Amount",
                                    t.first_seen_at AS "FirstSeenAt"
