@@ -27,6 +27,8 @@ interface Editor {
   clearingNumber: string;
   iban: string;
   counting: string;
+  balance: string;
+  originalBalance: string;
   saving: boolean;
   error: string | null;
 }
@@ -100,6 +102,31 @@ async function readJson(response: Response): Promise<unknown> {
   }
 }
 
+function balanceInput(amount: number | null | undefined): string {
+  if (amount === null || amount === undefined) {
+    return "";
+  }
+
+  return Number.isInteger(amount)
+    ? String(amount)
+    : amount.toFixed(2).replace(".", ",");
+}
+
+function parseBalance(text: string): number | null | undefined {
+  const cleaned = text
+    .replace(/[\s\u00a0]/g, "")
+    .replace(/kr$/i, "")
+    .replace(",", ".");
+
+  if (cleaned === "") {
+    return null;
+  }
+
+  const amount = Number(cleaned);
+
+  return Number.isFinite(amount) ? amount : undefined;
+}
+
 function messageFrom(payload: unknown): string | null {
   if (typeof payload === "string") {
     return payload;
@@ -129,6 +156,8 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
     clearingNumber: "",
     iban: "",
     counting: "NEUTRAL",
+    balance: "",
+    originalBalance: "",
     saving: false,
     error: null,
   });
@@ -141,12 +170,22 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
     editor.clearingNumber = account?.clearingNumber ?? "";
     editor.iban = account?.iban ?? "";
     editor.counting = account?.counting ?? "NEUTRAL";
+    editor.balance = balanceInput(account?.currentBalance);
+    editor.originalBalance = editor.balance;
     editor.error = null;
     confirmingDelete.value = null;
   });
 
   const save = $(async () => {
     if (editor.saving) {
+      return;
+    }
+
+    const balance = parseBalance(editor.balance);
+
+    if (balance === undefined) {
+      editor.error =
+        "Enter the balance as a number, for example 25 000 or 1 250,50.";
       return;
     }
 
@@ -171,6 +210,8 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
             clearingNumber: editor.clearingNumber || null,
             iban: editor.iban || null,
             counting: editor.counting,
+            balance,
+            setBalance: editor.balance.trim() !== editor.originalBalance.trim(),
           }),
         },
       );
@@ -386,6 +427,28 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                 />
               </div>
 
+              <div class="cat-field">
+                <label for="virtual-balance" class="cat-label">
+                  Current balance <span class="cat-optional">(optional)</span>
+                </label>
+                <input
+                  id="virtual-balance"
+                  class="cat-input"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="For example 25 000"
+                  aria-describedby="virtual-balance-hint"
+                  value={editor.balance}
+                  onInput$={(_, element) => {
+                    editor.balance = element.value;
+                  }}
+                />
+                <span id="virtual-balance-hint" class="cat-hint">
+                  What the account holds right now. Transfers to and from it
+                  then move the balance. Leave it empty to stop tracking.
+                </span>
+              </div>
+
               <fieldset class="cat-field cat-field-wide">
                 <legend class="cat-label">Counts as</legend>
                 <div class="cat-kind-row">
@@ -511,6 +574,28 @@ export const VirtualAccounts = component$<VirtualAccountsProps>((props) => {
                       ? `Could not load ${month.name}'s transactions.`
                       : `Adding up ${month.name}…`}
                   </p>
+                ) : account.currentBalance != null ? (
+                  <>
+                    <div class="card-balance">
+                      {kr(Math.round(account.currentBalance * 100))}{" "}
+                      <span>kr</span>
+                    </div>
+                    <p class="credit-note">
+                      {`Balance · ${kr(account.counting === "NEUTRAL" ? summary.moved : Math.abs(summary.counted))} kr ${
+                        account.counting === "NEUTRAL"
+                          ? `moved in ${month.name}`
+                          : account.counting === "FLOW"
+                            ? `${summary.counted < 0 ? "net out" : "net in"} in ${month.name}`
+                            : `counted as money ${account.counting === "OUT" ? "out" : "in"} in ${month.name}`
+                      }`}
+                    </p>
+                    <div class="card-footer">
+                      <span>This month</span>
+                      <strong>
+                        {`${summary.count} ${summary.count === 1 ? "transaction" : "transactions"}`}
+                      </strong>
+                    </div>
+                  </>
                 ) : (
                   <>
                     <div class="card-balance">

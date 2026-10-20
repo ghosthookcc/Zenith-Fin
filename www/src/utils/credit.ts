@@ -98,6 +98,9 @@ export interface VirtualAccountRule {
   clearingNumber?: string | null;
   iban?: string | null;
   counting: string;
+  balance?: number | null;
+  balanceSetAt?: string | null;
+  currentBalance?: number | null;
 }
 
 const minimumMatchDigits = 6;

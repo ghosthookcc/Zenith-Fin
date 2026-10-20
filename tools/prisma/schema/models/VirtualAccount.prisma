@@ -6,6 +6,8 @@ model VirtualAccount {
   clearing_number String?
   iban            String?
   counting        CreditCounting @default(NEUTRAL)
+  balance         Decimal?       @db.Decimal(24, 8)
+  balance_set_at  DateTime?      @db.Timestamptz(3)
   created_at      DateTime       @default(now()) @db.Timestamptz(3)
 
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)

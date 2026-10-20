@@ -81,6 +81,8 @@ interface DisplayAccount {
   color: string;
   purpose: string;
   icon: "plane" | "home" | "heart" | "wallet" | "shield" | "layers";
+  kind: "connected" | "virtual";
+  shareKey: string;
 }
 
 const icons: DisplayAccount["icon"][] = [
@@ -162,6 +164,8 @@ function makeDisplayAccount(
     color: colors[index % colors.length],
     purpose: account.iban ? `IBAN ${account.iban}` : "Connected bank account",
     icon: icons[index % icons.length],
+    kind: "connected",
+    shareKey: accountShareKey(account.id),
   };
 }
 
@@ -638,6 +642,30 @@ export const AccountOverview = component$(() => {
 
   const accounts = backendAccounts.value.map(makeDisplayAccount);
 
+  const virtualOverview: DisplayAccount[] = (virtualAccounts.value ?? [])
+    .filter((account) => account.currentBalance != null)
+    .map((account, index) => ({
+      id: `virtual-${account.id}`,
+      backendId: account.id,
+      name: account.name,
+      originalName: null,
+      alias: null,
+      bank: "Virtual account",
+      iban: account.iban ?? null,
+      currency: "SEK",
+      inConsent: true,
+      balance: account.currentBalance ?? 0,
+      color: colors[(accounts.length + index) % colors.length],
+      purpose: `Account ${account.accountNumber}`,
+      icon: "layers",
+      kind: "virtual",
+      shareKey: virtualShareKey(account.id),
+    }));
+
+  const overviewAccounts = [...accounts, ...virtualOverview];
+
+  const connectedBanks = new Set(accounts.map((account) => account.bank)).size;
+
   const sharedByTarget = sharesByTarget(shares.value ?? []);
 
   const shareTargets: ShareTarget[] = [
@@ -661,16 +689,18 @@ export const AccountOverview = component$(() => {
     })),
   ];
 
-  const totalBalance = accounts.reduce(
+  const totalBalance = overviewAccounts.reduce(
     (sum, account) => sum + account.balance,
     0,
   );
 
-  const active = accounts.find((account) => account.id === selected.value);
+  const active = overviewAccounts.find(
+    (account) => account.id === selected.value,
+  );
 
   let angle = 0;
 
-  const segments = accounts.map((account) => {
+  const segments = overviewAccounts.map((account) => {
     const start = angle;
 
     const share = totalBalance > 0 ? account.balance / totalBalance : 0;
@@ -680,7 +710,7 @@ export const AccountOverview = component$(() => {
     return { ...account, path: arcPath(start + 1.7, angle - 1.7) };
   });
 
-  const banks = accounts.reduce<
+  const banks = overviewAccounts.reduce<
     Record<string, { count: number; total: number }>
   >((result, account) => {
     const current = result[account.bank] ?? { count: 0, total: 0 };
@@ -770,11 +800,10 @@ export const AccountOverview = component$(() => {
                 </h2>
 
                 <span class="soft-badge">
-                  {accounts.length}{" "}
-                  {accounts.length === 1 ? "account" : "accounts"}
+                  {overviewAccounts.length}{" "}
+                  {overviewAccounts.length === 1 ? "account" : "accounts"}
                   {" · "}
-                  {Object.keys(banks).length}{" "}
-                  {Object.keys(banks).length === 1 ? "bank" : "banks"}
+                  {connectedBanks} {connectedBanks === 1 ? "bank" : "banks"}
                 </span>
               </div>
 
@@ -900,7 +929,7 @@ export const AccountOverview = component$(() => {
                   </div>
 
                   <div class="allocation-list">
-                    {accounts.map((account) => (
+                    {overviewAccounts.map((account) => (
                       <button
                         type="button"
                         key={account.id}
@@ -975,7 +1004,9 @@ export const AccountOverview = component$(() => {
                 <div>
                   <h2 id="accounts-title">
                     Your accounts{" "}
-                    <span>{String(accounts.length).padStart(2, "0")}</span>
+                    <span>
+                      {String(overviewAccounts.length).padStart(2, "0")}
+                    </span>
                   </h2>
 
                   <p>Balances and share of your total.</p>
@@ -985,7 +1016,7 @@ export const AccountOverview = component$(() => {
               </div>
 
               <div class="accounts-grid">
-                {accounts.map((account, index) => (
+                {overviewAccounts.map((account, index) => (
                   <article
                     key={account.id}
                     class={{
@@ -1013,7 +1044,8 @@ export const AccountOverview = component$(() => {
                       </span>
                     </div>
 
-                    {rename.id === account.backendId ? (
+                    {account.kind === "connected" &&
+                    rename.id === account.backendId ? (
                       <form
                         class="account-rename cal-shell"
                         preventdefault:submit
@@ -1073,19 +1105,21 @@ export const AccountOverview = component$(() => {
                     ) : (
                       <div class="account-name-row">
                         <h3>{account.name}</h3>
-                        <button
-                          type="button"
-                          class="account-rename-button"
-                          title="Rename"
-                          aria-label={`Rename ${account.name}`}
-                          onClick$={() => {
-                            rename.id = account.backendId;
-                            rename.value = account.alias ?? "";
-                            rename.error = null;
-                          }}
-                        >
-                          <Icon name="pencil" />
-                        </button>
+                        {account.kind === "connected" && (
+                          <button
+                            type="button"
+                            class="account-rename-button"
+                            title="Rename"
+                            aria-label={`Rename ${account.name}`}
+                            onClick$={() => {
+                              rename.id = account.backendId;
+                              rename.value = account.alias ?? "";
+                              rename.error = null;
+                            }}
+                          >
+                            <Icon name="pencil" />
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1104,21 +1138,17 @@ export const AccountOverview = component$(() => {
                       </p>
                     )}
 
-                    {sharedByTarget.has(accountShareKey(account.backendId)) && (
+                    {sharedByTarget.has(account.shareKey) && (
                       <p
                         class="account-shared"
                         title={sharedWithLabel(
-                          sharedByTarget.get(
-                            accountShareKey(account.backendId),
-                          )!,
+                          sharedByTarget.get(account.shareKey)!,
                         )}
                       >
                         <Icon name="users" />
                         <span>
                           {sharedWithLabel(
-                            sharedByTarget.get(
-                              accountShareKey(account.backendId),
-                            )!,
+                            sharedByTarget.get(account.shareKey)!,
                           )}
                         </span>
                       </p>

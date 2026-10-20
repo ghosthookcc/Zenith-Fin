@@ -4,6 +4,7 @@ using Npgsql;
 
 using ZenithFin.Api.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Dtos;
+using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Repositories;
 using ZenithFin.Utility;
 
@@ -19,6 +20,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly UserRepository _userRepository;
 
         private const int MaxNameLength = 40;
+
+        private const decimal MaxBalance = 1_000_000_000_000m;
 
         private static readonly string[] Countings = { "NEUTRAL", "IN", "OUT", "FLOW" };
 
@@ -39,9 +42,29 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (userId == null) return null;
 
+            VirtualAccountDto.VirtualAccount[] accounts = await _virtualAccountRepository.GetVirtualAccountsForUserAsync(userId.Value);
+            VirtualAccountDto.VirtualAccount[] tracked = accounts.Where(account => account.Balance != null && account.BalanceSetAt != null)
+                                                                 .ToArray();
+
+            if (tracked.Length > 0)
+            {
+                VirtualBalanceTransactionRow[] transactions = await _virtualAccountRepository.GetTransactionsSinceAsync(userId.Value,
+                                                                                                                        tracked.Min(account => account.BalanceSetAt!.Value));
+
+                foreach (VirtualAccountDto.VirtualAccount account in tracked)
+                {
+                    string[] keys = VirtualAccountMatcher.Keys(account.AccountNumber, account.ClearingNumber, account.Iban);
+
+                    account.CurrentBalance = account.Balance!.Value -
+                                             transactions.Where(transaction => transaction.FirstSeenAt > account.BalanceSetAt!.Value &&
+                                                                               VirtualAccountMatcher.Matches(transaction.CounterpartyAccount, keys))
+                                                         .Sum(transaction => transaction.Amount);
+                }
+            }
+
             return new VirtualAccountDto.VirtualAccountsResponse
             {
-                VirtualAccounts = await _virtualAccountRepository.GetVirtualAccountsForUserAsync(userId.Value)
+                VirtualAccounts = accounts
             };
         }
 
@@ -91,7 +114,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             try
             {
-                if (!await _virtualAccountRepository.UpdateVirtualAccountAsync(userId.Value, virtualAccountId, valid)) return NotFound();
+                if (!await _virtualAccountRepository.UpdateVirtualAccountAsync(userId.Value, virtualAccountId, valid, request.SetBalance)) return NotFound();
             }
             catch (PostgresException errno) when (errno.SqlState == PostgresErrorCodes.UniqueViolation)
             {
@@ -147,13 +170,20 @@ namespace ZenithFin.PostgreSQL.Models.Services
             if (!Countings.Contains(counting))
                 return (null, BadRequest("Choose whether the account counts as neutral, money in, money out, or money in and out"));
 
+            decimal? balance = request.SetBalance ? request.Balance : null;
+
+            if (balance is decimal amount && Math.Abs(amount) > MaxBalance)
+                return (null, BadRequest("That balance is too large"));
+
             return (new VirtualAccountDto.VirtualAccount
             {
                 Name = name,
                 AccountNumber = accountNumber,
                 ClearingNumber = clearingNumber.Length == 0 ? null : clearingNumber,
                 Iban = iban.Length == 0 ? null : iban,
-                Counting = counting
+                Counting = counting,
+                Balance = balance,
+                CurrentBalance = balance
             }, null);
         }
 

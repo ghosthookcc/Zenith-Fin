@@ -10,6 +10,9 @@ namespace ZenithFin.Api.Models.Dtos
             public string? ClearingNumber { get; set; }
             public string? Iban { get; set; }
             public string Counting { get; set; } = string.Empty;
+            public decimal? Balance { get; set; }
+            public DateTime? BalanceSetAt { get; set; }
+            public decimal? CurrentBalance { get; set; }
         }
 
         public sealed class SaveVirtualAccountRequest
@@ -19,6 +22,8 @@ namespace ZenithFin.Api.Models.Dtos
             public string? ClearingNumber { get; set; }
             public string? Iban { get; set; }
             public string? Counting { get; set; }
+            public decimal? Balance { get; set; }
+            public bool SetBalance { get; set; }
         }
 
         public sealed class VirtualAccountsResponse
