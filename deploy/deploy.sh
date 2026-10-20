@@ -95,9 +95,25 @@ WantedBy=default.target
 EOF
 
 cat > "$site" <<EOF
+# Reject unknown HTTP hostnames
 server {
-    listen 80;
-    listen [::]:80;
+    listen 192.168.1.178:80 default_server;
+    server_name _;
+
+    return 444;
+}
+
+# Reject unknown HTTPS hostnames and missing SNI
+server {
+    listen 192.168.1.178:443 ssl http2 default_server;
+    server_name _;
+
+    ssl_reject_handshake on;
+    return 444;
+}
+
+server {
+    listen 192.168.1.178:80;
     server_name $domain;
 
     location = /zenith-ca.crt {
@@ -111,8 +127,7 @@ server {
 }
 
 server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 192.168.1.178:443 ssl http2;
     server_name $domain;
 
     ssl_certificate /etc/nginx/ssl/$domain.pem;
@@ -129,10 +144,12 @@ server {
     location / {
         proxy_pass https://127.0.0.1:$web_port;
         proxy_http_version 1.1;
+
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto \$scheme;
+
         proxy_read_timeout 300s;
     }
 }

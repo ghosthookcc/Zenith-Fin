@@ -755,15 +755,6 @@ export const AccountOverview = component$(() => {
           </div>
 
           <div class="page-actions">
-            <button
-              class="visibility-button"
-              type="button"
-              onClick$={() => openManualTransaction()}
-            >
-              <Icon name="plus" />
-              New transaction
-            </button>
-
             <ReconnectMenu
               connections={connections.value}
               reconnectingId={reconnectingId.value}
@@ -781,6 +772,15 @@ export const AccountOverview = component$(() => {
               <Icon name={hidden.value ? "eyeoff" : "eye"} />
 
               {hidden.value ? "Show balances" : "Hide balances"}
+            </button>
+
+            <button
+              class="visibility-button"
+              type="button"
+              onClick$={() => openManualTransaction()}
+            >
+              <Icon name="plus" />
+              New transaction
             </button>
           </div>
         </section>
