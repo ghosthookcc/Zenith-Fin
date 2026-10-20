@@ -1168,6 +1168,8 @@
 
   .cal-detail-list {
     padding: 4px 9px 14px;
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 }
 
