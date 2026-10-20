@@ -435,3 +435,18 @@
     flex-wrap: nowrap;
   }
 }
+
+.account-stale {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: #f3c98b;
+}
+
+.account-stale svg {
+  flex: none;
+  width: 14px;
+  height: 14px;
+}

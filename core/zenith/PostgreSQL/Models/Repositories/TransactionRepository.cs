@@ -18,6 +18,22 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             _connectionFactory = connectionFactory;
         }
 
+        public async Task<long[]> GetUserIdsWithActiveAccountsAsync()
+        {
+            const string sql = """
+                               SELECT DISTINCT bc.user_id
+                               FROM "BankConnection" bc
+                               INNER JOIN "Account" a
+                                   ON a.bank_connection_id = bc.id
+                               WHERE bc.status = 'ACTIVE'::"BankStatus"
+                                 AND a.in_consent
+                               ORDER BY bc.user_id;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return (await connection.QueryAsync<long>(sql)).ToArray();
+        }
+
         public async Task<TransactionAccountRow[]> GetAccountsForUserAsync(long userId)
         {
             const string sql = """

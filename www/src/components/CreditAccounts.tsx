@@ -24,6 +24,7 @@ export interface CreditAccountOption {
   iban?: string | null;
   currency: string;
   color: string;
+  inConsent: boolean;
 }
 
 interface CreditAccountsResponse {
@@ -404,7 +405,9 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
                       {`${accountLabel(account)}${
                         linkedElsewhere.includes(account.id)
                           ? " (already a credit account)"
-                          : ""
+                          : account.inConsent
+                            ? ""
+                            : " (not shared by the bank)"
                       }`}
                     </option>
                   ))}
@@ -550,6 +553,13 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
                 <p class="account-purpose" title={accountLabel(account)}>
                   {`Linked to ${accountLabel(account)}`}
                 </p>
+
+                {account && !account.inConsent && (
+                  <p class="credit-note credit-stale" role="note">
+                    <Icon name="info" />
+                    {`${account.bank} no longer shares this account with Zenith, so new transactions aren't counted. Reconnect ${account.bank} and tick the account ending ${(account.iban ?? "").replace(/\s+/g, "").slice(-4)}.`}
+                  </p>
+                )}
 
                 {used === null ? (
                   <p class="credit-note">

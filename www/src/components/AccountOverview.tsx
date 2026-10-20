@@ -56,6 +56,7 @@ interface BackendAccount {
   originalName?: string | null;
   alias?: string | null;
   currency: string;
+  inConsent?: boolean;
   balances: Balance[];
 }
 
@@ -75,6 +76,7 @@ interface DisplayAccount {
   bank: string;
   iban?: string | null;
   currency: string;
+  inConsent: boolean;
   balance: number;
   color: string;
   purpose: string;
@@ -155,6 +157,7 @@ function makeDisplayAccount(
     bank: account.bankName || "Unknown bank",
     iban: account.iban,
     currency: account.currency,
+    inConsent: account.inConsent !== false,
     balance: getMainBalance(account),
     color: colors[index % colors.length],
     purpose: account.iban ? `IBAN ${account.iban}` : "Connected bank account",
@@ -1094,6 +1097,13 @@ export const AccountOverview = component$(() => {
                         </p>
                       )}
 
+                    {!account.inConsent && (
+                      <p class="account-stale" role="note">
+                        <Icon name="info" />
+                        <span>{`${account.bank} no longer shares this account`}</span>
+                      </p>
+                    )}
+
                     {sharedByTarget.has(accountShareKey(account.backendId)) && (
                       <p
                         class="account-shared"
@@ -1143,6 +1153,7 @@ export const AccountOverview = component$(() => {
                 iban: account.iban,
                 currency: account.currency,
                 color: account.color,
+                inConsent: account.inConsent,
               }))}
               hidden={hidden.value}
               monthTransactions={monthTransactions.value}

@@ -105,3 +105,12 @@
   font-weight: 400;
   color: var(--cal-muted);
 }
+
+.credit-stale {
+  align-items: flex-start;
+  color: #f3c98b;
+}
+
+.credit-stale svg {
+  margin-top: 2px;
+}

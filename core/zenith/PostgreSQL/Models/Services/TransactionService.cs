@@ -132,9 +132,51 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (userId == null) return null;
 
-            TransactionAccountRow[] accounts = (await _transactionRepository.GetAccountsForUserAsync(userId.Value))
+            TransactionDto.SyncResult[] results = await SyncUserAccountsAsync(userId.Value, force ? ForcedSyncInterval : SyncInterval);
+
+            await CategorizeAsync(userId.Value, reviewRuleTags: true);
+            await _aiCategorizationService.CategorizeAsync(userId.Value);
+
+            return new TransactionDto.SyncResponse
+            {
+                Accounts = results
+            };
+        }
+
+        public async Task<int> SyncInBackgroundAsync(TimeSpan interval)
+        {
+            int synced = 0;
+
+            foreach (long userId in await _transactionRepository.GetUserIdsWithActiveAccountsAsync())
+            {
+                try
+                {
+                    int userSynced = (await SyncUserAccountsAsync(userId, interval)).Count(result => result.Status == TransactionDto.SyncStatus.Synced);
+
+                    if (userSynced == 0) continue;
+
+                    await CategorizeAsync(userId, reviewRuleTags: true);
+                    await _aiCategorizationService.CategorizeAsync(userId);
+
+                    synced += userSynced;
+                }
+                catch (Exception errno)
+                {
+                    Console.WriteLine($"Background sync failed for user {userId}: {errno.Message}");
+                }
+            }
+
+            return synced;
+        }
+
+        private async Task<TransactionDto.SyncResult[]> SyncUserAccountsAsync(long userId,
+                                                                               TimeSpan interval)
+        {
+            TransactionAccountRow[] accounts = (await _transactionRepository.GetAccountsForUserAsync(userId))
                                                .Where(account => account.IsActive)
                                                .ToArray();
+
+            if (accounts.Length == 0) return Array.Empty<TransactionDto.SyncResult>();
 
             _workspace.Authenticator.GetToken();
 
@@ -145,25 +187,19 @@ namespace ZenithFin.PostgreSQL.Models.Services
                             List<TransactionDto.SyncResult> connectionResults = new();
 
                             foreach (TransactionAccountRow account in connection)
-                                connectionResults.Add(await SyncAccountAsync(userId.Value, account, force));
+                                connectionResults.Add(await SyncAccountAsync(userId, account, interval));
 
                             return connectionResults.ToArray();
                         }));
 
-            await CategorizeAsync(userId.Value, reviewRuleTags: true);
-            await _aiCategorizationService.CategorizeAsync(userId.Value);
-
-            return new TransactionDto.SyncResponse
-            {
-                Accounts = results.SelectMany(result => result)
-                                  .OrderBy(result => result.AccountId)
-                                  .ToArray()
-            };
+            return results.SelectMany(result => result)
+                          .OrderBy(result => result.AccountId)
+                          .ToArray();
         }
 
         private async Task<TransactionDto.SyncResult> SyncAccountAsync(long userId,
                                                                        TransactionAccountRow account,
-                                                                       bool force)
+                                                                       TimeSpan interval)
         {
             int lockIndex = (int)((ulong)account.Id % (ulong)SyncLocks.Length);
 
@@ -179,7 +215,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
                 DateTime now = DateTime.UtcNow;
 
-                if (!IsDue(syncedAt, now, force ? ForcedSyncInterval : SyncInterval))
+                if (!IsDue(syncedAt, now, interval))
                 {
                     return new TransactionDto.SyncResult
                     {

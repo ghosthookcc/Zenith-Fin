@@ -30,6 +30,7 @@ namespace ZenithFin.Api
 
             builder.Services.AddSingleton<TransactionRepository>();
             builder.Services.AddSingleton<TransactionService>();
+            builder.Services.AddHostedService<TransactionSyncJob>();
 
             builder.Services.AddSingleton<CreditAccountRepository>();
             builder.Services.AddSingleton<CreditAccountService>();
