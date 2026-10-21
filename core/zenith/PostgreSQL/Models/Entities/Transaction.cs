@@ -18,6 +18,7 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public long? TagId { get; set; }
         public string? TagSource { get; set; }
         public string? Counting { get; set; }
+        public string? TypeOverride { get; set; }
         public string CreditDebitIndicator { get; set; } = "";
         public decimal Amount { get; set; }
         public string Currency { get; set; } = "";

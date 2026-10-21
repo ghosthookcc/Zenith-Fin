@@ -8,8 +8,8 @@ import {
 
 import { Icon } from "./Icon";
 import {
-  countingChoices,
-  countingLabel,
+  creditModeChoices,
+  creditModeLabel,
   creditUsed,
   currentMonthRange,
   formatKr,
@@ -36,7 +36,7 @@ interface Editor {
   id: number | null;
   name: string;
   accountId: string;
-  counting: string;
+  mode: string;
   creditLimit: string;
   saving: boolean;
   error: string | null;
@@ -114,7 +114,7 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
     id: null,
     name: "",
     accountId: "",
-    counting: "OUT",
+    mode: "MIRROR",
     creditLimit: "",
     saving: false,
     error: null,
@@ -161,7 +161,7 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
     editor.id = creditAccount?.id ?? null;
     editor.name = creditAccount?.name ?? "";
     editor.accountId = creditAccount ? String(creditAccount.accountId) : "";
-    editor.counting = creditAccount?.counting ?? "OUT";
+    editor.mode = creditAccount?.mode ?? "MIRROR";
     editor.creditLimit =
       creditAccount?.creditLimit != null
         ? String(creditAccount.creditLimit)
@@ -207,7 +207,7 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
           body: JSON.stringify({
             name: editor.name,
             accountId: editor.accountId ? Number(editor.accountId) : null,
-            counting: editor.counting,
+            mode: editor.mode,
             creditLimit,
           }),
         },
@@ -290,8 +290,8 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
   const linkedElsewhere = creditAccounts
     .filter((creditAccount) => creditAccount.id !== editor.id)
     .map((creditAccount) => creditAccount.accountId);
-  const selectedCounting = countingChoices.find(
-    (choice) => choice.value === editor.counting,
+  const selectedMode = creditModeChoices.find(
+    (choice) => choice.value === editor.mode,
   );
   const kr = (minor: number) => (props.hidden ? maskedAmount : formatKr(minor));
 
@@ -307,8 +307,9 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
             <span>{String(creditAccounts.length).padStart(2, "0")}</span>
           </h2>
           <p>
-            Link one of your accounts. Everything on it counts toward the credit
-            account.
+            Link the account where the card shows up. Card purchases count
+            toward it and its limit; paying the card bill doesn't count a second
+            time.
           </p>
           <p class="credit-sync" aria-live="polite">
             {props.syncing ? "Checking your banks for new transactions…" : ""}
@@ -355,7 +356,7 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
                 </h2>
                 <p>
                   {editor.name.trim() || "Untitled"} ·{" "}
-                  {countingLabel(editor.counting)}
+                  {creditModeLabel(editor.mode)}
                 </p>
               </div>
             </div>
@@ -419,32 +420,32 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
               </div>
 
               <fieldset class="cat-field cat-field-wide">
-                <legend class="cat-label">Counts as</legend>
+                <legend class="cat-label">
+                  How the card shows up on the linked account
+                </legend>
                 <div class="cat-kind-row">
-                  {countingChoices.map((choice) => (
+                  {creditModeChoices.map((choice) => (
                     <label
                       key={choice.value}
                       class={{
                         "cat-kind-option": true,
-                        "cat-option-selected": editor.counting === choice.value,
+                        "cat-option-selected": editor.mode === choice.value,
                       }}
                     >
                       <input
                         type="radio"
-                        name="credit-counting"
+                        name="credit-mode"
                         value={choice.value}
-                        checked={editor.counting === choice.value}
+                        checked={editor.mode === choice.value}
                         onChange$={() => {
-                          editor.counting = choice.value;
+                          editor.mode = choice.value;
                         }}
                       />
                       {choice.label}
                     </label>
                   ))}
                 </div>
-                {selectedCounting && (
-                  <p class="cat-hint">{selectedCounting.hint}</p>
-                )}
+                {selectedMode && <p class="cat-hint">{selectedMode.hint}</p>}
               </fieldset>
 
               <div class="cat-field">
@@ -523,7 +524,6 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
                       transaction.accountId === creditAccount.accountId &&
                       transaction.currency === (account?.currency ?? "SEK"),
                   ),
-                  creditAccount.counting,
                 )
               : null;
             const limit =
@@ -544,7 +544,7 @@ export const CreditAccounts = component$<CreditAccountsProps>((props) => {
                   </span>
                   <span class="card-bank">Credit account</span>
                   <span class="credit-counting">
-                    {countingLabel(creditAccount.counting)}
+                    {creditModeLabel(creditAccount.mode)}
                   </span>
                 </div>
 

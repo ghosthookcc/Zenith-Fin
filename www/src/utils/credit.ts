@@ -2,8 +2,27 @@ export interface CreditAccountRule {
   id: number;
   name: string;
   accountId: number;
-  counting: string;
+  mode: string;
   creditLimit?: number | null;
+}
+
+export const creditModeChoices = [
+  {
+    value: "MIRROR",
+    label: "Purchases copied in",
+    hint: "Each card purchase is copied into the linked account as a deposit, and the card bill is paid from it. The copies count as spending, the bill does not, so nothing is counted twice.",
+  },
+  {
+    value: "CARD",
+    label: "It is the card account",
+    hint: "The linked account is the card itself: purchases leave it and bill payments come into it. Purchases count as spending, payments do not.",
+  },
+];
+
+export function creditModeLabel(mode: string): string {
+  return (
+    creditModeChoices.find((choice) => choice.value === mode)?.label ?? mode
+  );
 }
 
 export const uncountedStatuses = ["CNCL", "RJCT", "SCHD", "MTCH"];
@@ -59,36 +78,23 @@ export function countedAmount(amount: number, counting: string): number | null {
   }
 }
 
-export function creditUsed(
-  transactions: { amount: number; status: string; counting?: string | null }[],
-  counting: string,
-): number {
-  let out = 0;
-  let incoming = 0;
+export function creditUsed(transactions: MonthTransaction[]): number {
+  let used = 0;
 
   for (const transaction of transactions) {
     if (
+      !transaction.counted ||
       uncountedStatuses.includes(transaction.status) ||
-      transaction.counting === "NEUTRAL"
+      (transaction.subtype !== "CARD_PURCHASE" &&
+        transaction.subtype !== "REFUND")
     ) {
       continue;
     }
 
-    const minor = Math.round(Math.abs(transaction.amount) * 100);
-    const outgoing = transaction.counting
-      ? transaction.counting === "OUT"
-      : transaction.amount < 0;
-
-    if (outgoing) {
-      out += minor;
-    } else {
-      incoming += minor;
-    }
+    used -= Math.round((transaction.countedAmount ?? 0) * 100);
   }
 
-  return counting === "OUT" || counting === "IN"
-    ? out + incoming
-    : Math.max(0, out - incoming);
+  return Math.max(0, used);
 }
 
 export interface VirtualAccountRule {
@@ -150,6 +156,11 @@ export interface MonthTransaction {
   counterpartyAccount?: string | null;
   counting?: string | null;
   virtualAccountId?: number;
+  type?: string;
+  subtype?: string;
+  effect?: string;
+  countedAmount?: number;
+  counted?: boolean;
 }
 
 export interface MonthRange {

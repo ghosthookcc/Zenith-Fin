@@ -175,6 +175,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          name = @Name,
                                          currency = @Currency,
                                          identification_hash = @IdentificationHash,
+                                         bank_account_type = COALESCE(@BankAccountType, bank_account_type),
+                                         bank_product = COALESCE(@BankProduct, bank_product),
                                          in_consent = true
                                      WHERE id = @Id;
                                      """;
@@ -188,6 +190,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          currency,
                                          bank_connection_id,
                                          identification_hash,
+                                         bank_account_type,
+                                         bank_product,
                                          in_consent
                                      )
                                      VALUES
@@ -198,6 +202,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          @Currency,
                                          @BankConnectionId,
                                          @IdentificationHash,
+                                         @BankAccountType,
+                                         @BankProduct,
                                          true
                                      )
                                      ON CONFLICT (enable_banking_uid)
@@ -207,6 +213,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          currency = EXCLUDED.currency,
                                          bank_connection_id = EXCLUDED.bank_connection_id,
                                          identification_hash = EXCLUDED.identification_hash,
+                                         bank_account_type = COALESCE(EXCLUDED.bank_account_type, "Account".bank_account_type),
+                                         bank_product = COALESCE(EXCLUDED.bank_product, "Account".bank_product),
                                          in_consent = true
                                      RETURNING id;
                                      """;
@@ -231,7 +239,9 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                     Name = account.name,
                     Currency = account.currency,
                     BankConnectionId = bankConnectionId,
-                    IdentificationHash = hash
+                    IdentificationHash = hash,
+                    BankAccountType = string.IsNullOrWhiteSpace(account.cashAccountType) ? null : account.cashAccountType.Trim().ToUpperInvariant(),
+                    BankProduct = string.IsNullOrWhiteSpace(account.product) ? null : account.product.Trim()
                 };
 
                 if (match != null)

@@ -29,6 +29,8 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<BankingService>();
 
             builder.Services.AddSingleton<TransactionRepository>();
+            builder.Services.AddSingleton<LedgerRepository>();
+            builder.Services.AddSingleton<LedgerService>();
             builder.Services.AddSingleton<TransactionService>();
             builder.Services.AddHostedService<TransactionSyncJob>();
 

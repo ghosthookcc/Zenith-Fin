@@ -4,6 +4,7 @@ model CreditAccount {
   account_id   BigInt         @unique
   name         String
   counting     CreditCounting @default(NEUTRAL)
+  mode         CreditMode     @default(MIRROR)
   credit_limit Decimal?       @db.Decimal(24, 8)
   created_at   DateTime       @default(now()) @db.Timestamptz(3)
 

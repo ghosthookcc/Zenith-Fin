@@ -106,7 +106,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (candidates.Length == 0) return (0, null);
 
-            AiCategory[] categories = tags.Select(tag => new AiCategory(tag.Id, tag.Name, tag.Kind, tag.Key, tag.Keywords))
+            AiCategory[] categories = tags.Where(tag => tag.Kind != TransferKind)
+                                          .Select(tag => new AiCategory(tag.Id, tag.Name, tag.Kind, tag.Key, tag.Keywords))
                                           .ToArray();
 
             Dictionary<string, long> tagIds = categories.ToDictionary(category => category.Name,
@@ -205,5 +206,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private static readonly TimeSpan MaxRateLimitWaitPerRun = TimeSpan.FromSeconds(60);
 
         private const int MaxExamples = 30;
+
+        private const string TransferKind = "TRANSFER";
     }
 }

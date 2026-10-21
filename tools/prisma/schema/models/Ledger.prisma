@@ -1,0 +1,20 @@
+enum TransactionType {
+  INCOME
+  EXPENSE
+  TRANSFER
+  CREDIT
+  INVESTMENT
+}
+
+enum AccountRole {
+  EVERYDAY
+  SAVINGS
+  CREDIT_CARD
+  LOAN
+  INVESTMENT
+}
+
+enum CreditMode {
+  MIRROR
+  CARD
+}

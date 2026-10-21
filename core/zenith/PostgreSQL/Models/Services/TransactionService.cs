@@ -5,6 +5,7 @@ using System.Text;
 using ZenithFin.Api.Models.Dtos;
 using ZenithFin.Categorization;
 using ZenithFin.EnableBanking;
+using ZenithFin.Ledger;
 using ZenithFin.PostgreSQL.Models.Dtos;
 using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Repositories;
@@ -16,6 +17,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                         string? Message,
                                         string? Counting = null);
 
+    public sealed record TypeResult(int StatusCode,
+                                    string? Message,
+                                    string? Type = null);
+
     public sealed class TransactionService
     {
         private readonly TransactionRepository _transactionRepository;
@@ -26,6 +31,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly VirtualAccountRepository _virtualAccountRepository;
 
         private readonly ManualTransactionService _manualTransactionService;
+        private readonly LedgerService _ledgerService;
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
         private readonly RecurringService _recurringService;
@@ -39,6 +45,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   ExpectedSalaryRepository expectedSalaryRepository,
                                   VirtualAccountRepository virtualAccountRepository,
                                   ManualTransactionService manualTransactionService,
+                                  LedgerService ledgerService,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
                                   RecurringService recurringService,
@@ -52,6 +59,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _virtualAccountRepository = virtualAccountRepository;
 
             _manualTransactionService = manualTransactionService;
+            _ledgerService = ledgerService;
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
             _recurringService = recurringService;
@@ -101,6 +109,28 @@ namespace ZenithFin.PostgreSQL.Models.Services
                         Manual = series.Manual
                     };
                 }
+            }
+
+            LedgerResult ledger = await _ledgerService.ClassifyAsync(userId.Value, from, to);
+            Dictionary<long, LedgerEntry> entries = ledger.Entries.ToDictionary(entry => entry.TransactionId);
+
+            foreach (TransactionDto.Transaction transaction in transactions)
+            {
+                if (!entries.TryGetValue(transaction.Id, out LedgerEntry? entry)) continue;
+
+                transaction.Type = entry.Type;
+                transaction.Subtype = entry.Subtype;
+                transaction.TypeSource = entry.TypeSource;
+                transaction.TypeReason = entry.Reason;
+                transaction.Effect = entry.Effect;
+                transaction.EffectSource = entry.EffectSource;
+                transaction.CountedAmount = entry.CountedAmount;
+                transaction.Counted = entry.Counted;
+                transaction.MatchedTransactionId = entry.CounterTransactionId;
+                transaction.AutomaticType = entry.AutomaticType;
+                transaction.AutomaticSubtype = entry.AutomaticSubtype;
+                transaction.AutomaticReason = entry.AutomaticReason;
+                transaction.AutomaticEffect = entry.AutomaticEffect;
             }
 
             DateTime now = DateTime.UtcNow;
@@ -451,6 +481,12 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                                                          .ToArray();
 
             if (countings.Length > 0) await _transactionRepository.RestoreCountingAsync(userId, accountId, countings);
+
+            (string ExternalId, string Type)[] types = successors.Where(entry => entry.Released.TypeOverride != null)
+                                                                 .Select(entry => (entry.ExternalId, entry.Released.TypeOverride!))
+                                                                 .ToArray();
+
+            if (types.Length > 0) await _transactionRepository.RestoreTypesAsync(userId, accountId, types);
         }
 
         private static (string ExternalId, ReleasedTransactionRow Released)[] FindSuccessors(IReadOnlyList<ReleasedTransactionRow> released,
@@ -529,6 +565,25 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 return new CountingResult(StatusCodes.Status404NotFound, "Transaction not found");
 
             return new CountingResult(StatusCodes.Status200OK, null, counting);
+        }
+
+        public async Task<TypeResult> SetTypeAsync(string sessionId,
+                                                   long transactionId,
+                                                   TransactionDto.SetTypeRequest request)
+        {
+            long? userId = await GetUserIdAsync(sessionId);
+
+            if (userId == null) return new TypeResult(StatusCodes.Status401Unauthorized, "No user found for session");
+
+            string? type = string.IsNullOrWhiteSpace(request.Type) ? null : request.Type.Trim().ToUpperInvariant();
+
+            if (type != null && !TransactionTypes.All.Contains(type))
+                return new TypeResult(StatusCodes.Status400BadRequest, "Choose income, expense, transfer, debt or credit, or investment");
+
+            if (!await _transactionRepository.SetTypeOverrideAsync(userId.Value, transactionId, type))
+                return new TypeResult(StatusCodes.Status404NotFound, "Transaction not found");
+
+            return new TypeResult(StatusCodes.Status200OK, null, type);
         }
 
         private async Task<long?> GetUserIdAsync(string sessionId)

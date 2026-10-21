@@ -19,7 +19,8 @@ namespace ZenithFin.Categorization
 
         public static CategoryMatch Categorize(CategorizationInput input,
                                                OwnerProfile owner,
-                                               IReadOnlyList<UserTagRule> userRules)
+                                               IReadOnlyList<UserTagRule> userRules,
+                                               bool describesPurchase = false)
         {
             List<string> text = Text(input);
             string[] code = TextTokens.Tokenize(input.BankTransactionCode);
@@ -43,7 +44,7 @@ namespace ZenithFin.Categorization
 
             if (userTagId != null) return new CategoryMatch(userTagId, null);
 
-            return new CategoryMatch(null, CategorizeBuiltIn(input, owner, text, code, textAndCode));
+            return new CategoryMatch(null, CategorizeBuiltIn(input, owner, text, code, textAndCode, describesPurchase));
         }
 
         public static bool IsOwnTransfer(CategorizationInput input,
@@ -79,9 +80,10 @@ namespace ZenithFin.Categorization
                                                 OwnerProfile owner,
                                                 IReadOnlyList<string> text,
                                                 IReadOnlyList<string> code,
-                                                IReadOnlyList<string> textAndCode)
+                                                IReadOnlyList<string> textAndCode,
+                                                bool describesPurchase)
         {
-            if (IsOwnTransfer(input, owner, text, code)) return CategoryRules.Transfers;
+            if (!describesPurchase && IsOwnTransfer(input, owner, text, code)) return CategoryRules.Transfers;
 
             if (input.CreditDebitIndicator == "CRDT" &&
                 CategoryRules.IncomeKeywords.Any(pattern => pattern.Matches(textAndCode)))

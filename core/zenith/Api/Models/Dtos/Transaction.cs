@@ -32,6 +32,21 @@ namespace ZenithFin.Api.Models.Dtos
             public long? TagId { get; set; }
             public string? TagSource { get; set; }
             public string? Counting { get; set; }
+            public string? TypeOverride { get; set; }
+
+            public string Type { get; set; } = string.Empty;
+            public string Subtype { get; set; } = string.Empty;
+            public string TypeSource { get; set; } = string.Empty;
+            public string TypeReason { get; set; } = string.Empty;
+            public string Effect { get; set; } = string.Empty;
+            public string EffectSource { get; set; } = string.Empty;
+            public decimal CountedAmount { get; set; }
+            public bool Counted { get; set; }
+            public long? MatchedTransactionId { get; set; }
+            public string AutomaticType { get; set; } = string.Empty;
+            public string AutomaticSubtype { get; set; } = string.Empty;
+            public string AutomaticReason { get; set; } = string.Empty;
+            public string AutomaticEffect { get; set; } = string.Empty;
 
             public RecurringInfo? Recurring { get; set; }
         }
@@ -53,6 +68,11 @@ namespace ZenithFin.Api.Models.Dtos
         public sealed class SetCountingRequest
         {
             public string? Counting { get; set; }
+        }
+
+        public sealed class SetTypeRequest
+        {
+            public string? Type { get; set; }
         }
 
         public sealed class CorrectTagRequest

@@ -80,10 +80,12 @@ function monthSummary(
     count += 1;
     moved += Math.round(Math.abs(transaction.amount) * 100);
     counted += Math.round(
-      (countedAmount(
-        transaction.amount,
-        transaction.counting ?? account.counting,
-      ) ?? 0) * 100,
+      (transaction.countedAmount ??
+        countedAmount(
+          transaction.amount,
+          transaction.counting ?? account.counting,
+        ) ??
+        0) * 100,
     );
   }
 

@@ -2,6 +2,7 @@ using System.Globalization;
 
 using ZenithFin.Api.Models.Dtos;
 using ZenithFin.Categorization;
+using ZenithFin.Ledger;
 using ZenithFin.PostgreSQL.Models.Entities;
 using ZenithFin.PostgreSQL.Models.Repositories;
 
@@ -13,6 +14,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly TagRepository _tagRepository;
         private readonly UserRepository _userRepository;
         private readonly CorrectionRepository _correctionRepository;
+        private readonly CreditAccountRepository _creditAccountRepository;
 
         public const string RuleSource = "RULE";
         public const string AiSource = "AI";
@@ -26,12 +28,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
         public CategorizationService(TransactionRepository transactionRepository,
                                      TagRepository tagRepository,
                                      UserRepository userRepository,
-                                     CorrectionRepository correctionRepository)
+                                     CorrectionRepository correctionRepository,
+                                     CreditAccountRepository creditAccountRepository)
         {
             _transactionRepository = transactionRepository;
             _tagRepository = tagRepository;
             _userRepository = userRepository;
             _correctionRepository = correctionRepository;
+            _creditAccountRepository = creditAccountRepository;
         }
 
         public async Task<IReadOnlyList<TagChange>> CategorizeAsync(long userId,
@@ -55,6 +59,11 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                           .ToArray();
 
             OwnerProfile owner = await GetOwnerAsync(userId);
+
+            HashSet<long> mirrorAccountIds = (await _creditAccountRepository.GetCreditAccountsForUserAsync(userId))
+                                             .Where(creditAccount => creditAccount.Mode == CreditModes.Mirror)
+                                             .Select(creditAccount => creditAccount.AccountId)
+                                             .ToHashSet();
 
             long? transfersTagId = systemTagIds.TryGetValue(CategoryRules.Transfers, out long systemTransfersId) ? systemTransfersId : null;
             HashSet<long> transferTagIds = tags.Where(tag => tag.Kind == TransferKind).Select(tag => tag.Id).ToHashSet();
@@ -87,13 +96,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 }
                 else
                 {
-                    CategoryMatch match = RuleCategorizer.Categorize(input, owner, userRules);
+                    bool mirrored = mirrorAccountIds.Contains(candidate.AccountId);
+                    CategoryMatch match = RuleCategorizer.Categorize(input, owner, userRules, describesPurchase: mirrored);
                     long? ruleTagId = match.UserTagId ??
                                       (match.Key != null && systemTagIds.TryGetValue(match.Key, out long systemTagId) ? systemTagId : null);
 
                     source = RuleSource;
 
-                    if (paired.Contains(candidate.Id) && transfersTagId != null && (ruleTagId == null || !transferTagIds.Contains(ruleTagId.Value)))
+                    if (!mirrored && paired.Contains(candidate.Id) && transfersTagId != null && (ruleTagId == null || !transferTagIds.Contains(ruleTagId.Value)))
                         ruleTagId = transfersTagId;
                     else if (match.UserTagId == null && match.Key == CategoryRules.Other && candidate.TagSource == AiSource)
                         continue;

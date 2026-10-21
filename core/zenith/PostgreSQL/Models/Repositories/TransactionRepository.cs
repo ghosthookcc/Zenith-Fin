@@ -105,7 +105,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    t.note AS "Note",
                                    t.tag_id AS "TagId",
                                    t.tag_source::text AS "TagSource",
-                                   t.counting_override::text AS "Counting"
+                                   t.counting_override::text AS "Counting",
+                                   t.type_override::text AS "TypeOverride"
                                FROM "Transaction" t
                                INNER JOIN "Account" a
                                    ON a.id = t.account_id
@@ -203,6 +204,30 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 UserId = userId,
                 TransactionId = transactionId
             });
+        }
+
+        public async Task<bool> SetTypeOverrideAsync(long userId,
+                                                     long transactionId,
+                                                     string? type)
+        {
+            const string sql = """
+                               UPDATE "Transaction" t
+                               SET type_override = CAST(@Type AS "TransactionType")
+                               FROM "Account" a
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               WHERE t.id = @TransactionId
+                                 AND a.id = t.account_id
+                                 AND bc.user_id = @UserId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.ExecuteAsync(sql, new
+            {
+                UserId = userId,
+                TransactionId = transactionId,
+                Type = type
+            }) > 0;
         }
 
         public async Task<bool> SetCountingOverrideAsync(long userId,
@@ -427,6 +452,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          RETURNING tag_id,
                                                    tag_source,
                                                    counting_override,
+                                                   type_override,
                                                    credit_debit_indicator,
                                                    amount,
                                                    currency,
@@ -438,6 +464,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          tag_id AS "TagId",
                                          tag_source::text AS "TagSource",
                                          counting_override::text AS "Counting",
+                                         type_override::text AS "TypeOverride",
                                          credit_debit_indicator AS "CreditDebitIndicator",
                                          amount AS "Amount",
                                          currency AS "Currency",
@@ -446,7 +473,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                          to_char(occurred_on, 'YYYY-MM-DD') AS "OccurredOn"
                                      FROM released
                                      WHERE (tag_source IN ('USER'::"TagSource", 'AI'::"TagSource") AND tag_id IS NOT NULL)
-                                        OR counting_override IS NOT NULL;
+                                        OR counting_override IS NOT NULL
+                                        OR type_override IS NOT NULL;
                                      """;
 
             ReleasedTransactionRow[] released = (await connection.QueryAsync<ReleasedTransactionRow>(
@@ -647,6 +675,34 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 AccountId = accountId,
                 ExternalIds = countings.Select(counting => counting.ExternalId).ToArray(),
                 Countings = countings.Select(counting => counting.Counting).ToArray()
+            });
+        }
+
+        public async Task RestoreTypesAsync(long userId,
+                                            long accountId,
+                                            IReadOnlyList<(string ExternalId, string Type)> types)
+        {
+            const string sql = """
+                               UPDATE "Transaction" AS t
+                               SET type_override = CAST(restored.type AS "TransactionType")
+                               FROM unnest(@ExternalIds, @Types) AS restored(external_id, type),
+                                    "Account" a,
+                                    "BankConnection" bc
+                               WHERE t.account_id = @AccountId
+                                 AND t.external_id = restored.external_id
+                                 AND a.id = t.account_id
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId
+                                 AND t.type_override IS NULL;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            await connection.ExecuteAsync(sql, new
+            {
+                UserId = userId,
+                AccountId = accountId,
+                ExternalIds = types.Select(type => type.ExternalId).ToArray(),
+                Types = types.Select(type => type.Type).ToArray()
             });
         }
 
