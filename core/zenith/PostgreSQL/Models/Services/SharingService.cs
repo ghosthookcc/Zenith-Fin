@@ -16,17 +16,91 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly SharingRepository _sharingRepository;
         private readonly LedgerRepository _ledgerRepository;
         private readonly UserRepository _userRepository;
+        private readonly TransactionRepository _transactionRepository;
 
         private static readonly SharingResult Ok = new(StatusCodes.Status200OK, null);
         private static readonly SharingResult Unauthorized = new(StatusCodes.Status401Unauthorized, "No user found for session");
 
         public SharingService(SharingRepository sharingRepository,
                               LedgerRepository ledgerRepository,
-                              UserRepository userRepository)
+                              UserRepository userRepository,
+                              TransactionRepository transactionRepository)
         {
             _sharingRepository = sharingRepository;
             _ledgerRepository = ledgerRepository;
             _userRepository = userRepository;
+            _transactionRepository = transactionRepository;
+        }
+
+        public async Task<SharingResult> ProposeArrangementAsync(string sessionId,
+                                                                 long transactionId)
+        {
+            long? userId = await GetUserIdAsync(sessionId);
+
+            if (userId == null) return Unauthorized;
+
+            PartnershipRow? partnership = await _sharingRepository.GetPartnershipAsync(userId.Value);
+
+            if (partnership?.Status != "ACCEPTED") return BadRequest("Start sharing your economy with your partner first");
+
+            CategorizationCandidate? transaction = await _transactionRepository.GetCategorizationCandidateAsync(userId.Value, transactionId);
+
+            if (transaction == null) return NotFound("Only payments from your own accounts can be shared this way");
+            if (transaction.Amount >= 0) return BadRequest("Only money going out can be shared as a cost");
+
+            string? description = Utility.TransactionText.Describe(transaction.CounterpartyName, transaction.RemittanceInformation);
+            string? signature = Categorization.CorrectionKey.SignatureOf(description);
+
+            if (signature == null || description == null) return BadRequest("This payment has no name or message to recognise it by");
+
+            string me = await _sharingRepository.GetUserNameAsync(userId.Value);
+            DateOnly validFrom = DateOnly.ParseExact(transaction.OccurredOn, "yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+            string? error = await _sharingRepository.ProposeArrangementAsync(userId.Value,
+                                                                             partnership.Id,
+                                                                             partnership.PartnerOf(userId.Value),
+                                                                             transaction.AccountId,
+                                                                             signature,
+                                                                             transaction.CreditDebitIndicator,
+                                                                             description,
+                                                                             validFrom,
+                                                                             $"{me} wants to share the payment \"{description}\" from {validFrom:yyyy-MM-dd} on, split like your other shared costs.");
+
+            return error == null ? Ok : new SharingResult(StatusCodes.Status409Conflict, error);
+        }
+
+        public async Task<SharingResult> RespondArrangementAsync(string sessionId,
+                                                                 long arrangementId,
+                                                                 bool accept)
+        {
+            long? userId = await GetUserIdAsync(sessionId);
+
+            if (userId == null) return Unauthorized;
+
+            string me = await _sharingRepository.GetUserNameAsync(userId.Value);
+
+            return await _sharingRepository.RespondArrangementAsync(userId.Value,
+                                                                    arrangementId,
+                                                                    accept,
+                                                                    accept ? $"{me} agreed to share your payment." : $"{me} declined sharing your payment.") == null
+                ? NotFound("That suggestion is no longer waiting for you")
+                : Ok;
+        }
+
+        public async Task<SharingResult> EndArrangementAsync(string sessionId,
+                                                             long arrangementId)
+        {
+            long? userId = await GetUserIdAsync(sessionId);
+
+            if (userId == null) return Unauthorized;
+
+            string me = await _sharingRepository.GetUserNameAsync(userId.Value);
+
+            return await _sharingRepository.EndArrangementAsync(userId.Value,
+                                                                arrangementId,
+                                                                $"{me} stopped sharing a payment. Later payments are private again.") == null
+                ? NotFound("That payment isn't shared")
+                : Ok;
         }
 
         public async Task<SharingDto.State?> GetStateAsync(string sessionId)
@@ -107,6 +181,17 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                            Text = $"{partnerName} wants to share the account {sharing.Name} ({sharing.BankName}) with you.",
                                            CreatedAt = sharing.CreatedAt
                                        }));
+
+                if (partnership.Status == "ACCEPTED")
+                    inbox.AddRange((await _sharingRepository.GetArrangementsAsync(partnership.Id))
+                                   .Where(arrangement => arrangement.Status == "PENDING" && arrangement.ProposedBy != me)
+                                   .Select(arrangement => new SharingDto.InboxItem
+                                   {
+                                       Kind = "arrangement",
+                                       Id = arrangement.Id,
+                                       Text = $"{partnerName} wants to share the payment \"{arrangement.Label}\" from {arrangement.AccountName}, from {arrangement.ValidFrom} on.",
+                                       CreatedAt = arrangement.CreatedAt
+                                   }));
 
                 if (partnership.Status == "ACCEPTED")
                     inbox.AddRange(state.SplitRules.Where(rule => rule.Status == "PENDING" && !rule.ProposedByMe)

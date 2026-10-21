@@ -50,6 +50,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string TypeEffect { get; set; } = string.Empty;
             public bool Editable { get; set; } = true;
             public string? SharedBy { get; set; }
+            public EconomyDto.SharedStatus? Shared { get; set; }
 
             public RecurringInfo? Recurring { get; set; }
         }

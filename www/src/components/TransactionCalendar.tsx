@@ -90,6 +90,13 @@ interface CalendarTransaction {
   typeEffect: string;
   editable?: boolean;
   sharedBy?: string | null;
+  shared?: {
+    status: string;
+    reason: string;
+    myShare?: number | null;
+    partnerShare?: number | null;
+    paidBy?: string | null;
+  } | null;
   recurring?: Recurring | null;
   manual?: ManualTransaction | null;
 }
@@ -1175,6 +1182,47 @@ export const TransactionCalendar = component$(() => {
       }
     },
   );
+
+  const proposeShare = $(async (transaction: CalendarTransaction) => {
+    if (picker.saving) {
+      return;
+    }
+
+    picker.saving = true;
+    picker.error = null;
+
+    try {
+      const response = await fetch("/api/sharing/arrangements", {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ transactionId: transaction.id }),
+      });
+
+      const payload = await readJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          messageFrom(payload) ??
+            `Could not suggest sharing it (${response.status})`,
+        );
+      }
+
+      notice.value = {
+        id: transaction.id,
+        text: "Suggested to your partner. It counts as shared once they accept.",
+      };
+      picker.id = null;
+    } catch (err) {
+      picker.error =
+        err instanceof Error ? err.message : "Could not suggest sharing it.";
+    } finally {
+      picker.saving = false;
+    }
+  });
 
   const setRecurring = $(
     async (transaction: CalendarTransaction, recurring: boolean) => {
@@ -2290,6 +2338,15 @@ export const TransactionCalendar = component$(() => {
                                         }
                                       </span>
                                     )}
+                                    {transaction.shared?.status ===
+                                      "SHARED" && (
+                                      <span
+                                        class="cal-ai-badge cal-origin-user"
+                                        title={transaction.shared.reason}
+                                      >
+                                        Shared
+                                      </span>
+                                    )}
                                     {transaction.recurring && (
                                       <span
                                         class="cal-ai-badge cal-recurring-badge"
@@ -2496,7 +2553,41 @@ export const TransactionCalendar = component$(() => {
                                         </small>
                                       </dd>
                                     </div>
+                                    {transaction.shared && (
+                                      <div>
+                                        <dt>Shared</dt>
+                                        <dd>
+                                          {transaction.shared.status ===
+                                          "SHARED"
+                                            ? `Yes, paid by ${transaction.shared.paidBy ?? "you"}`
+                                            : "Not verified as shared"}
+                                          <small>
+                                            {transaction.shared.status ===
+                                              "SHARED" &&
+                                            transaction.shared.myShare != null
+                                              ? `${transaction.shared.reason}. Your share is ${formatMoney(transaction.shared.myShare, transaction.currency)}.`
+                                              : `${transaction.shared.reason}.`}
+                                          </small>
+                                        </dd>
+                                      </div>
+                                    )}
                                   </dl>
+
+                                  {transaction.shared?.status ===
+                                    "NOT_VERIFIED" &&
+                                    transaction.editable !== false && (
+                                      <button
+                                        type="button"
+                                        class="cal-chip"
+                                        disabled={picker.saving}
+                                        onClick$={() =>
+                                          proposeShare(transaction)
+                                        }
+                                      >
+                                        Share this payment with your partner
+                                        from now on
+                                      </button>
+                                    )}
 
                                   {transaction.editable === false ? (
                                     <p class="cal-manual-note">

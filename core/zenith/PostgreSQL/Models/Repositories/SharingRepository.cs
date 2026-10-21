@@ -412,6 +412,158 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             return (await connection.QueryAsync<AccountSharingRow>(sql, new { PartnershipId = partnershipId })).ToArray();
         }
 
+        public async Task<ArrangementRow[]> GetArrangementsAsync(long partnershipId)
+        {
+            const string sql = """
+                               SELECT
+                                   s.id AS "Id",
+                                   s.account_id AS "AccountId",
+                                   s.payer_id AS "PayerId",
+                                   s.signature AS "Signature",
+                                   s.credit_debit_indicator AS "CreditDebitIndicator",
+                                   s.label AS "Label",
+                                   to_char(s.valid_from, 'YYYY-MM-DD') AS "ValidFrom",
+                                   s.status::text AS "Status",
+                                   s.proposed_by AS "ProposedBy",
+                                   s.created_at AS "CreatedAt",
+                                   s.ended_at AS "EndedAt",
+                                   COALESCE(aa.bank_name_alias, a.name, bc.aspsp_name) AS "AccountName"
+                               FROM "SharedArrangement" s
+                               INNER JOIN "Account" a
+                                   ON a.id = s.account_id
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               LEFT JOIN "AccountAlias" aa
+                                   ON aa.account_id = a.id
+                               WHERE s.partnership_id = @PartnershipId
+                               ORDER BY s.id;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return (await connection.QueryAsync<ArrangementRow>(sql, new { PartnershipId = partnershipId })).ToArray();
+        }
+
+        public async Task<string?> ProposeArrangementAsync(long userId,
+                                                           long partnershipId,
+                                                           long partnerId,
+                                                           long accountId,
+                                                           string signature,
+                                                           string creditDebitIndicator,
+                                                           string label,
+                                                           DateOnly validFrom,
+                                                           string notification)
+        {
+            using var connection = (NpgsqlConnection)_connectionFactory.Create();
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+
+            const string sql = """
+                               INSERT INTO "SharedArrangement"
+                               (partnership_id, account_id, payer_id, signature, credit_debit_indicator, label, valid_from, status, proposed_by)
+                               SELECT @PartnershipId, a.id, @UserId, @Signature, @CreditDebitIndicator, @Label, CAST(@ValidFrom AS date), 'PENDING', @UserId
+                               FROM "Account" a
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               WHERE a.id = @AccountId
+                                 AND bc.user_id = @UserId
+                                 AND EXISTS (SELECT 1 FROM "Partnership" p WHERE p.id = @PartnershipId AND p.status = 'ACCEPTED')
+                               RETURNING id;
+                               """;
+
+            try
+            {
+                long? id = await connection.QuerySingleOrDefaultAsync<long?>(sql, new
+                {
+                    UserId = userId,
+                    PartnershipId = partnershipId,
+                    AccountId = accountId,
+                    Signature = signature,
+                    CreditDebitIndicator = creditDebitIndicator,
+                    Label = label,
+                    ValidFrom = validFrom.ToString("yyyy-MM-dd")
+                }, transaction);
+
+                if (id == null) return "Only payments from your own accounts can be shared this way";
+            }
+            catch (PostgresException errno) when (errno.SqlState == PostgresErrorCodes.UniqueViolation)
+            {
+                return "This payment is already shared or waiting for an answer";
+            }
+
+            await NotifyAsync(connection, transaction, partnerId, notification);
+            await transaction.CommitAsync();
+
+            return null;
+        }
+
+        public async Task<long?> RespondArrangementAsync(long userId,
+                                                         long arrangementId,
+                                                         bool accept,
+                                                         string notification)
+        {
+            using var connection = (NpgsqlConnection)_connectionFactory.Create();
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+
+            const string sql = """
+                               UPDATE "SharedArrangement" s
+                               SET status = CAST(@Status AS "ShareStatus"),
+                                   responded_at = now()
+                               FROM "Partnership" p
+                               WHERE s.id = @ArrangementId
+                                 AND p.id = s.partnership_id
+                                 AND p.status = 'ACCEPTED'
+                                 AND s.status = 'PENDING'
+                                 AND s.proposed_by <> @UserId
+                                 AND (p.inviter_id = @UserId OR p.invitee_id = @UserId)
+                               RETURNING s.proposed_by;
+                               """;
+
+            long? proposer = await connection.QuerySingleOrDefaultAsync<long?>(sql, new
+            {
+                UserId = userId,
+                ArrangementId = arrangementId,
+                Status = accept ? "ACCEPTED" : "DECLINED"
+            }, transaction);
+
+            if (proposer == null) return null;
+
+            await NotifyAsync(connection, transaction, proposer.Value, notification);
+            await transaction.CommitAsync();
+
+            return proposer;
+        }
+
+        public async Task<long?> EndArrangementAsync(long userId,
+                                                     long arrangementId,
+                                                     string notification)
+        {
+            using var connection = (NpgsqlConnection)_connectionFactory.Create();
+            await connection.OpenAsync();
+            await using var transaction = await connection.BeginTransactionAsync();
+
+            const string sql = """
+                               UPDATE "SharedArrangement" s
+                               SET status = CASE WHEN s.status = 'PENDING' THEN 'CANCELLED'::"ShareStatus" ELSE 'ENDED'::"ShareStatus" END,
+                                   ended_at = now()
+                               FROM "Partnership" p
+                               WHERE s.id = @ArrangementId
+                                 AND p.id = s.partnership_id
+                                 AND (p.inviter_id = @UserId OR p.invitee_id = @UserId)
+                                 AND (s.status = 'ACCEPTED' OR (s.status = 'PENDING' AND s.proposed_by = @UserId))
+                               RETURNING CASE WHEN p.inviter_id = @UserId THEN p.invitee_id ELSE p.inviter_id END;
+                               """;
+
+            long? otherId = await connection.QuerySingleOrDefaultAsync<long?>(sql, new { UserId = userId, ArrangementId = arrangementId }, transaction);
+
+            if (otherId == null) return null;
+
+            await NotifyAsync(connection, transaction, otherId.Value, notification);
+            await transaction.CommitAsync();
+
+            return otherId;
+        }
+
         public async Task<NotificationRow[]> GetNotificationsAsync(long userId)
         {
             const string sql = """
@@ -442,6 +594,11 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                     FROM "AccountSharing" s
                                     INNER JOIN "Partnership" p ON p.id = s.partnership_id
                                     WHERE s.status = 'PENDING' AND s.owner_id <> @UserId AND p.status = 'ACCEPTED'
+                                      AND (p.inviter_id = @UserId OR p.invitee_id = @UserId))
+                                 + (SELECT count(*)
+                                    FROM "SharedArrangement" s
+                                    INNER JOIN "Partnership" p ON p.id = s.partnership_id
+                                    WHERE s.status = 'PENDING' AND s.proposed_by <> @UserId AND p.status = 'ACCEPTED'
                                       AND (p.inviter_id = @UserId OR p.invitee_id = @UserId))
                                  + (SELECT count(*)
                                     FROM "SplitRule" r

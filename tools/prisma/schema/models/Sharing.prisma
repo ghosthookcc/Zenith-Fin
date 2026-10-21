@@ -19,6 +19,7 @@ model Partnership {
   invitee        User             @relation("PartnershipInvitee", fields: [invitee_id], references: [id], onDelete: Cascade)
   split_rules    SplitRule[]
   account_shares AccountSharing[]
+  arrangements   SharedArrangement[]
 
   @@index([inviter_id])
   @@index([invitee_id])
@@ -66,4 +67,26 @@ model Notification {
   user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id, created_at])
+}
+
+model SharedArrangement {
+  id                     BigInt      @id @default(autoincrement())
+  partnership_id         BigInt
+  account_id             BigInt
+  payer_id               BigInt
+  signature              String
+  credit_debit_indicator String
+  label                  String
+  valid_from             DateTime    @db.Date
+  status                 ShareStatus
+  proposed_by            BigInt
+  created_at             DateTime    @default(now()) @db.Timestamptz(3)
+  responded_at           DateTime?   @db.Timestamptz(3)
+  ended_at               DateTime?   @db.Timestamptz(3)
+
+  partnership Partnership @relation(fields: [partnership_id], references: [id], onDelete: Cascade)
+  account     Account     @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([partnership_id])
+  @@index([account_id])
 }

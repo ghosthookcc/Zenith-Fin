@@ -90,6 +90,24 @@ namespace ZenithFin.Api.v1
 
         [HttpPost]
         [ResourceGuard]
+        [Route("arrangements")]
+        public Task<IActionResult> ProposeArrangement([FromBody] EconomyDto.ProposeArrangementRequest request) =>
+            Run(sessionId => _sharingService.ProposeArrangementAsync(sessionId, request.TransactionId));
+
+        [HttpPost]
+        [ResourceGuard]
+        [Route("arrangements/{id:long}/respond")]
+        public Task<IActionResult> RespondArrangement(long id, [FromBody] SharingDto.RespondRequest request) =>
+            Run(sessionId => _sharingService.RespondArrangementAsync(sessionId, id, request.Accept));
+
+        [HttpPost]
+        [ResourceGuard]
+        [Route("arrangements/{id:long}/end")]
+        public Task<IActionResult> EndArrangement(long id) =>
+            Run(sessionId => _sharingService.EndArrangementAsync(sessionId, id));
+
+        [HttpPost]
+        [ResourceGuard]
         [Route("notifications/read")]
         public Task<IActionResult> MarkRead() =>
             Run(sessionId => _sharingService.MarkReadAsync(sessionId));

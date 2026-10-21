@@ -33,6 +33,7 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<LedgerService>();
             builder.Services.AddSingleton<SharingRepository>();
             builder.Services.AddSingleton<SharingService>();
+            builder.Services.AddSingleton<EconomyService>();
             builder.Services.AddSingleton<TransactionService>();
             builder.Services.AddHostedService<TransactionSyncJob>();
 

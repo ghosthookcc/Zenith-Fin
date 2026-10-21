@@ -72,6 +72,66 @@ interface SharingState {
   unread: number;
 }
 
+interface EconomySummary {
+  partnerName?: string | null;
+  mySharePercent?: number | null;
+  shared: Record<string, number>;
+  private: Record<string, number>;
+  combined: Record<string, number>;
+  transactions: {
+    id: number;
+    date: string;
+    description?: string | null;
+    amount: number;
+    paidBy: string;
+    reason: string;
+    myShare: number;
+    partnerShare: number;
+  }[];
+  arrangements: {
+    id: number;
+    label: string;
+    accountName: string;
+    validFrom: string;
+    status: string;
+    paidByMe: boolean;
+    proposedByMe: boolean;
+  }[];
+  jointAccounts: { name: string; balance?: number | null }[];
+}
+
+function kr(value: number | null | undefined, signed = false): string {
+  return new Intl.NumberFormat("sv-SE", {
+    style: "currency",
+    currency: "SEK",
+    signDisplay: signed ? "exceptZero" : "auto",
+  }).format(value ?? 0);
+}
+
+function monthRange(offset: number): {
+  from: string;
+  to: string;
+  name: string;
+} {
+  const now = new Date();
+  const first = new Date(
+    Date.UTC(now.getFullYear(), now.getMonth() + offset, 1),
+  );
+  const last = new Date(
+    Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0),
+  );
+
+  return {
+    from: first.toISOString().slice(0, 10),
+    to: last.toISOString().slice(0, 10),
+    name: new Intl.DateTimeFormat("en-GB", {
+      month: "long",
+      year: "numeric",
+      timeZone: "UTC",
+    }).format(first),
+  };
+}
+
 interface Forms {
   email: string;
   myShare: string;
@@ -110,6 +170,9 @@ async function message(response: Response): Promise<string> {
 
 export const SharedEconomy = component$(() => {
   const state = useSignal<SharingState | null>(null);
+  const economy = useSignal<EconomySummary | null>(null);
+  const monthOffset = useSignal(0);
+  const view = useSignal<"shared" | "private" | "combined">("shared");
   const loadError = useSignal<string | null>(null);
   const forms = useStore<Forms>({
     email: "",
@@ -135,6 +198,20 @@ export const SharedEconomy = component$(() => {
 
       state.value = (await response.json()) as SharingState;
       loadError.value = null;
+
+      const range = monthRange(monthOffset.value);
+      const economyResponse = await fetch(
+        `/api/economy?from=${range.from}&to=${range.to}`,
+        {
+          headers: { Accept: "application/json" },
+          credentials: "same-origin",
+          cache: "no-store",
+        },
+      );
+
+      economy.value = economyResponse.ok
+        ? ((await economyResponse.json()) as EconomySummary)
+        : null;
       window.dispatchEvent(new CustomEvent(inboxChangedEvent));
     } catch (err) {
       loadError.value =
@@ -261,7 +338,7 @@ export const SharedEconomy = component$(() => {
                     disabled={forms.busy}
                     onClick$={() =>
                       act(
-                        `${item.kind === "partnership" ? "partner" : item.kind === "account" ? "shares" : "split"}/${item.id}/respond`,
+                        `${item.kind === "partnership" ? "partner" : item.kind === "account" ? "shares" : item.kind === "arrangement" ? "arrangements" : "split"}/${item.id}/respond`,
                         { accept: true },
                         "Accepted.",
                       )
@@ -275,7 +352,7 @@ export const SharedEconomy = component$(() => {
                     disabled={forms.busy}
                     onClick$={() =>
                       act(
-                        `${item.kind === "partnership" ? "partner" : item.kind === "account" ? "shares" : "split"}/${item.id}/respond`,
+                        `${item.kind === "partnership" ? "partner" : item.kind === "account" ? "shares" : item.kind === "arrangement" ? "arrangements" : "split"}/${item.id}/respond`,
                         { accept: false },
                         "Declined.",
                       )
@@ -298,6 +375,227 @@ export const SharedEconomy = component$(() => {
         </section>
       )}
 
+      {current && economy.value && (
+        <section
+          class="overview-panel economy-panel"
+          aria-labelledby="economy-title"
+        >
+          <div class="economy-panel-head">
+            <h2 id="economy-title">{monthRange(monthOffset.value).name}</h2>
+            <span class="economy-actions">
+              <button
+                type="button"
+                class="cal-icon-button"
+                aria-label="Previous month"
+                onClick$={async () => {
+                  monthOffset.value -= 1;
+                  await load();
+                }}
+              >
+                <Icon name="chevronLeft" />
+              </button>
+              <button
+                type="button"
+                class="cal-icon-button"
+                aria-label="Next month"
+                onClick$={async () => {
+                  monthOffset.value += 1;
+                  await load();
+                }}
+              >
+                <Icon name="chevronRight" />
+              </button>
+            </span>
+          </div>
+
+          <div class="economy-tabs" role="tablist">
+            {(
+              [
+                ["shared", "Shared"],
+                ["private", "Private"],
+                ["combined", "Combined"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                class="cal-chip"
+                aria-selected={view.value === value}
+                onClick$={() => {
+                  view.value = value;
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {view.value === "shared" &&
+            (economy.value.partnerName ? (
+              <>
+                <dl class="economy-figures">
+                  <div>
+                    <dt>Verified shared costs</dt>
+                    <dd>{kr(economy.value.shared.total)}</dd>
+                  </div>
+                  <div>
+                    <dt>{`Your share (${economy.value.mySharePercent ?? 50} %)`}</dt>
+                    <dd>{kr(economy.value.shared.myShare)}</dd>
+                  </div>
+                  <div>
+                    <dt>{`${economy.value.partnerName}'s share`}</dt>
+                    <dd>{kr(economy.value.shared.partnerShare)}</dd>
+                  </div>
+                  <div>
+                    <dt>Paid from shared accounts</dt>
+                    <dd>{kr(economy.value.shared.paidFromShared)}</dd>
+                  </div>
+                  <div>
+                    <dt>Paid by you privately</dt>
+                    <dd>{kr(economy.value.shared.paidByMe)}</dd>
+                  </div>
+                  <div>
+                    <dt>{`Paid by ${economy.value.partnerName} privately`}</dt>
+                    <dd>{kr(economy.value.shared.paidByPartner)}</dd>
+                  </div>
+                  <div>
+                    <dt>You put into shared accounts</dt>
+                    <dd>{kr(economy.value.shared.myFunding)}</dd>
+                  </div>
+                  <div>
+                    <dt>{`${economy.value.partnerName} put into shared accounts`}</dt>
+                    <dd>{kr(economy.value.shared.partnerFunding)}</dd>
+                  </div>
+                </dl>
+                <p class="economy-settlement">
+                  {economy.value.shared.owedToMe > 0
+                    ? `${economy.value.partnerName} owes you ${kr(economy.value.shared.owedToMe)} for shared costs you paid from your own account.`
+                    : economy.value.shared.owedToMe < 0
+                      ? `You owe ${economy.value.partnerName} ${kr(-economy.value.shared.owedToMe)} for shared costs they paid from their own account.`
+                      : "Nothing to settle for costs paid from private accounts."}
+                </p>
+                <p class="cat-hint">
+                  {`Money put into shared accounts is a contribution, not spending. Of what the shared accounts paid, your share was ${kr(economy.value.shared.myShareOfSharedAccounts)} and you put in ${kr(economy.value.shared.myFunding)}; the rest stays in the accounts, so it is not counted as a debt.`}
+                </p>
+                {economy.value.jointAccounts.length > 0 && (
+                  <ul class="economy-list">
+                    {economy.value.jointAccounts.map((account) => (
+                      <li key={account.name} class="economy-note">
+                        <Icon name="wallet" />
+                        <span>
+                          {account.balance == null
+                            ? `${account.name}: no balance from the bank yet`
+                            : `${account.name}: ${kr(account.balance)} right now`}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <h3 class="economy-subhead">Shared costs and why</h3>
+                {economy.value.transactions.length === 0 ? (
+                  <p class="cat-hint">No verified shared costs this month.</p>
+                ) : (
+                  <ul class="economy-list">
+                    {economy.value.transactions.map((transaction) => (
+                      <li key={transaction.id} class="economy-row">
+                        <span>
+                          <strong>
+                            {transaction.description ?? "Payment"}
+                          </strong>
+                          <small class="economy-reason">{`${transaction.date} · paid by ${transaction.paidBy} · ${transaction.reason}`}</small>
+                        </span>
+                        <span class="economy-amounts">
+                          <span>{kr(transaction.amount)}</span>
+                          <small>{`you ${kr(transaction.myShare)}`}</small>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {economy.value.arrangements.length > 0 && (
+                  <>
+                    <h3 class="economy-subhead">
+                      Payments you agreed to share
+                    </h3>
+                    <ul class="economy-list">
+                      {economy.value.arrangements.map((arrangement) => (
+                        <li key={arrangement.id} class="economy-row">
+                          <span>
+                            <strong>{arrangement.label}</strong>
+                            <small class="economy-reason">{`${arrangement.accountName} · from ${arrangement.validFrom} · ${arrangement.status === "PENDING" ? "waiting for an answer" : "shared"}`}</small>
+                          </span>
+                          <button
+                            type="button"
+                            class="cal-chip"
+                            disabled={forms.busy}
+                            onClick$={() =>
+                              act(
+                                `arrangements/${arrangement.id}/end`,
+                                {},
+                                "Later payments are private again.",
+                              )
+                            }
+                          >
+                            Stop
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+              </>
+            ) : (
+              <p class="cat-hint">
+                Invite your partner below to see shared costs.
+              </p>
+            ))}
+
+          {view.value === "private" && (
+            <dl class="economy-figures">
+              <div>
+                <dt>Income</dt>
+                <dd>{kr(economy.value.private.income)}</dd>
+              </div>
+              <div>
+                <dt>Private spending</dt>
+                <dd>{kr(economy.value.private.spending)}</dd>
+              </div>
+              <div>
+                <dt>Your share of shared costs</dt>
+                <dd>{kr(economy.value.private.myShareOfShared)}</dd>
+              </div>
+              <div>
+                <dt>Private accounts now</dt>
+                <dd>{kr(economy.value.private.balance)}</dd>
+              </div>
+            </dl>
+          )}
+
+          {view.value === "combined" && (
+            <>
+              <dl class="economy-figures">
+                <div>
+                  <dt>Income</dt>
+                  <dd>{kr(economy.value.combined.income)}</dd>
+                </div>
+                <div>
+                  <dt>Spending (private + your share)</dt>
+                  <dd>{kr(economy.value.combined.spending)}</dd>
+                </div>
+                <div>
+                  <dt>Left over</dt>
+                  <dd>{kr(economy.value.combined.net, true)}</dd>
+                </div>
+              </dl>
+              <p class="cat-hint">
+                Each payment counts once: shared costs only with your share, and
+                transfers or contributions to shared accounts not at all.
+              </p>
+            </>
+          )}
+        </section>
+      )}
       {current && (
         <section
           class="overview-panel economy-panel"

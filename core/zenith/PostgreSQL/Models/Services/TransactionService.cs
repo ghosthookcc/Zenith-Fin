@@ -32,6 +32,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private readonly ManualTransactionService _manualTransactionService;
         private readonly LedgerService _ledgerService;
+        private readonly EconomyService _economyService;
         private readonly CategorizationService _categorizationService;
         private readonly AiCategorizationService _aiCategorizationService;
         private readonly RecurringService _recurringService;
@@ -46,6 +47,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                   VirtualAccountRepository virtualAccountRepository,
                                   ManualTransactionService manualTransactionService,
                                   LedgerService ledgerService,
+                                  EconomyService economyService,
                                   CategorizationService categorizationService,
                                   AiCategorizationService aiCategorizationService,
                                   RecurringService recurringService,
@@ -60,6 +62,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             _manualTransactionService = manualTransactionService;
             _ledgerService = ledgerService;
+            _economyService = economyService;
             _categorizationService = categorizationService;
             _aiCategorizationService = aiCategorizationService;
             _recurringService = recurringService;
@@ -134,6 +137,11 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 if (ownByKey.TryGetValue(LedgerService.PhysicalKey(shared.Id, shared.IdentificationHash, shared.Iban), out long ownAccountId))
                     transaction.AccountId = ownAccountId;
             }
+
+            Dictionary<long, EconomyDto.SharedStatus> sharedStatuses = await _economyService.GetSharedStatusesAsync(userId.Value, from, to);
+
+            foreach (TransactionDto.Transaction transaction in transactions)
+                transaction.Shared = sharedStatuses.GetValueOrDefault(transaction.Id);
 
             TransactionAccountRow[] accounts = ownAccounts.Concat(sharedAccounts.Where(account => !ownByKey.ContainsKey(LedgerService.PhysicalKey(account.Id,
                                                                                                                                                     account.IdentificationHash,

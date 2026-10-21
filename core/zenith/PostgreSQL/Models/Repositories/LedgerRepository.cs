@@ -46,6 +46,23 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             return (await connection.QueryAsync<LedgerAccountRow>(sql, new { UserIds = userIds.ToArray() })).ToArray();
         }
 
+        public async Task<BalanceRow[]> GetBalancesAsync(IReadOnlyCollection<long> accountIds)
+        {
+            const string sql = """
+                               SELECT DISTINCT ON (b.account_id)
+                                   b.account_id AS "AccountId",
+                                   b.amount AS "Amount"
+                               FROM "Balance" b
+                               WHERE b.account_id = ANY(@AccountIds)
+                               ORDER BY b.account_id,
+                                        CASE b.balance_type WHEN 'ITAV' THEN 0 WHEN 'CLBD' THEN 1 WHEN 'ITBD' THEN 2 ELSE 3 END,
+                                        b.fetched_at DESC;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return (await connection.QueryAsync<BalanceRow>(sql, new { AccountIds = accountIds.ToArray() })).ToArray();
+        }
+
         public async Task<LedgerTransactionRow[]> GetTransactionsAsync(IReadOnlyCollection<long> accountIds,
                                                                       DateOnly from,
                                                                       DateOnly to)
@@ -67,7 +84,9 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    tg.name AS "TagName",
                                    t.tag_source::text AS "TagSource",
                                    t.counting_override::text AS "CountingOverride",
-                                   t.type_override::text AS "TypeOverride"
+                                   t.type_override::text AS "TypeOverride",
+                                   t.credit_debit_indicator AS "CreditDebitIndicator",
+                                   COALESCE(t.remittance_information, ARRAY[]::text[]) AS "RemittanceInformation"
                                FROM "Transaction" t
                                LEFT JOIN "Tag" tg
                                    ON tg.id = t.tag_id

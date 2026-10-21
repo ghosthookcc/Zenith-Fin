@@ -34,5 +34,29 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public string? TagSource { get; set; }
         public string? CountingOverride { get; set; }
         public string? TypeOverride { get; set; }
+        public string CreditDebitIndicator { get; set; } = "";
+        public string[] RemittanceInformation { get; set; } = Array.Empty<string>();
+    }
+
+    public sealed class ArrangementRow
+    {
+        public long Id { get; set; }
+        public long AccountId { get; set; }
+        public long PayerId { get; set; }
+        public string Signature { get; set; } = "";
+        public string CreditDebitIndicator { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string ValidFrom { get; set; } = "";
+        public string Status { get; set; } = "";
+        public long ProposedBy { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime? EndedAt { get; set; }
+        public string AccountName { get; set; } = "";
+    }
+
+    public sealed class BalanceRow
+    {
+        public long AccountId { get; set; }
+        public decimal Amount { get; set; }
     }
 }
