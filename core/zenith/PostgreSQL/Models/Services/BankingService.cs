@@ -294,6 +294,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                         Alias = account.Alias,
                         Currency = account.Currency,
                         InConsent = account.InConsent,
+                        Role = account.Role,
+                        RoleSource = account.RoleSource,
                         Balances = balances
                     });
                 }

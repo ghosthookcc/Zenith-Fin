@@ -398,6 +398,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    a.currency AS Currency,
                                    a.bank_connection_id AS BankConnectionId,
                                    a.in_consent AS InConsent,
+                                   a.role::text AS StoredRole,
+                                   a.bank_account_type AS BankAccountType,
                                    bc.aspsp_name AS BankName
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc

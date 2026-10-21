@@ -18,6 +18,10 @@ namespace ZenithFin.Api.Models.Dtos
             public string Currency { get; set; } = string.Empty;
             public long BankConnectionId { get; set; }
             public bool InConsent { get; set; }
+            public string? StoredRole { get; set; }
+            public string? BankAccountType { get; set; }
+            public string Role => StoredRole ?? Ledger.AccountRoles.FromBankType(BankAccountType);
+            public string RoleSource => StoredRole != null ? "USER" : BankAccountType != null ? "BANK" : "DEFAULT";
         }
         
         public sealed class Balance
@@ -31,12 +35,19 @@ namespace ZenithFin.Api.Models.Dtos
             public string? Alias { get; set; }
             public string Currency { get; set; } = string.Empty;
             public bool InConsent { get; set; }
+            public string Role { get; set; } = string.Empty;
+            public string RoleSource { get; set; } = string.Empty;
             public IReadOnlyList<EnableBankingEntities.Balance> Balances { get; set; } = Array.Empty<EnableBankingEntities.Balance>();
         }
 
         public sealed class RenameAccountRequest
         {
             public string? Alias { get; set; }
+        }
+
+        public sealed class SetAccountRoleRequest
+        {
+            public string? Role { get; set; }
         }
 
         public sealed class AccountAlias

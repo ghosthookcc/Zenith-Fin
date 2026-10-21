@@ -266,6 +266,24 @@ namespace ZenithFin.Api.v1
             return Ok(result.AccountAlias);
         }
 
+        [HttpPut]
+        [ResourceGuard]
+        [Route("accounts/{id:long}/role")]
+        public async Task<IActionResult> SetAccountRole(long id,
+                                                        [FromBody] AccountDto.SetAccountRoleRequest request)
+        {
+            string? sessionId = HttpContext.Items["SessionId"] as string;
+
+            if (string.IsNullOrEmpty(sessionId)) return Unauthorized("No session ID found");
+
+            AccountAliasResult result = await _accountAliasService.SetRoleAsync(sessionId, id, request);
+
+            if (result.StatusCode != StatusCodes.Status200OK)
+                return StatusCode(result.StatusCode, new { message = result.Message, success = false });
+
+            return Ok(new { success = true });
+        }
+
         [HttpGet]
         [ResourceGuard]
         [Route("accounts/balances")]

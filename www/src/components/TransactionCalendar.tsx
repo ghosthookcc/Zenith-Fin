@@ -24,10 +24,15 @@ import {
   type VirtualAccountRule,
 } from "../utils/credit";
 import {
+  accountKind,
+  categoryOrigin,
   effectLabel,
+  effectOrigin,
   manualLedger,
   subtypeLabel,
+  typeChoices,
   typeLabel,
+  typeOrigin,
 } from "../utils/ledger";
 import {
   type ManualTransaction,
@@ -45,6 +50,10 @@ interface CalendarAccount {
   isActive: boolean;
   transactionsSyncedAt?: string | null;
   isStale: boolean;
+  role: string;
+  roleSource: string;
+  creditName?: string | null;
+  creditMode?: string | null;
 }
 
 interface CalendarTransaction {
@@ -77,6 +86,7 @@ interface CalendarTransaction {
   automaticSubtype: string;
   automaticReason: string;
   automaticEffect: string;
+  typeEffect: string;
   recurring?: Recurring | null;
   manual?: ManualTransaction | null;
 }
@@ -1047,32 +1057,13 @@ export const TransactionCalendar = component$(() => {
           throw new Error("Unexpected response from the transaction API.");
         }
 
-        const updates = new Map(
-          payload.transactions.map((update) => [update.id, update]),
-        );
-
-        if (data.value) {
-          data.value = {
-            ...data.value,
-            transactions: data.value.transactions.map((item) => {
-              const update = updates.get(item.id);
-
-              return update
-                ? {
-                    ...item,
-                    tagId: update.tagId ?? null,
-                    tagSource: update.tagSource ?? null,
-                  }
-                : item;
-            }),
-          };
-        }
-
         notice.value = {
           id: transaction.id,
           text: correctionNotice(tag, transaction.tagId !== tag.id, payload),
         };
         picker.id = null;
+
+        await load();
 
         document
           .querySelector<HTMLButtonElement>(
@@ -1082,6 +1073,100 @@ export const TransactionCalendar = component$(() => {
       } catch (err) {
         picker.error =
           err instanceof Error ? err.message : "Could not change the category.";
+      } finally {
+        picker.saving = false;
+      }
+    },
+  );
+
+  const resetCategory = $(async (transaction: CalendarTransaction) => {
+    if (picker.saving) {
+      return;
+    }
+
+    picker.saving = true;
+    picker.error = null;
+
+    try {
+      const response = await fetch(`/api/transactions/${transaction.id}/tag`, {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ tagId: null, remember: false }),
+      });
+
+      const payload = await readJson(response);
+
+      if (!response.ok) {
+        throw new Error(
+          messageFrom(payload) ??
+            `Could not go back to the automatic category (${response.status})`,
+        );
+      }
+
+      notice.value = {
+        id: transaction.id,
+        text: "Back to the automatic category.",
+      };
+
+      await load();
+    } catch (err) {
+      picker.error =
+        err instanceof Error
+          ? err.message
+          : "Could not go back to the automatic category.";
+    } finally {
+      picker.saving = false;
+    }
+  });
+
+  const setType = $(
+    async (transaction: CalendarTransaction, type: string | null) => {
+      if (picker.saving || (transaction.typeOverride ?? null) === type) {
+        return;
+      }
+
+      picker.saving = true;
+      picker.error = null;
+
+      try {
+        const response = await fetch(
+          `/api/transactions/${transaction.id}/type`,
+          {
+            method: "PUT",
+            headers: {
+              Accept: "application/json",
+              "Content-Type": "application/json",
+            },
+            credentials: "same-origin",
+            body: JSON.stringify({ type }),
+          },
+        );
+
+        const payload = await readJson(response);
+
+        if (!response.ok) {
+          throw new Error(
+            messageFrom(payload) ??
+              `Could not change the type (${response.status})`,
+          );
+        }
+
+        notice.value = {
+          id: transaction.id,
+          text:
+            type === null
+              ? "Back to the automatic type."
+              : `Now a${type === "INCOME" || type === "EXPENSE" || type === "INVESTMENT" ? "n" : ""} ${typeLabel(type).toLowerCase()}.`,
+        };
+
+        await load();
+      } catch (err) {
+        picker.error =
+          err instanceof Error ? err.message : "Could not change the type.";
       } finally {
         picker.saving = false;
       }
@@ -2169,21 +2254,29 @@ export const TransactionCalendar = component$(() => {
                                   </span>
                                 ) : (
                                   <span class="cal-tx-meta">
+                                    <span
+                                      class="cal-account-dot"
+                                      style={{
+                                        backgroundColor:
+                                          colors[transaction.accountId] ??
+                                          inactiveAccountColor,
+                                      }}
+                                    />
+                                    {`${accountKind(account)} / ${accountName(account)}`}
+                                    {" · "}
                                     {tag.name}
-                                    {transaction.tagSource === "AI" && (
+                                    {categoryOrigin(transaction.tagSource) && (
                                       <span
-                                        class="cal-ai-badge"
-                                        title="Sorted by AI"
+                                        class={`cal-ai-badge cal-origin-badge cal-origin-${(transaction.tagSource ?? "").toLowerCase()}`}
+                                        title={
+                                          categoryOrigin(transaction.tagSource)!
+                                            .long
+                                        }
                                       >
-                                        AI
-                                      </span>
-                                    )}
-                                    {transaction.tagSource === "LEARNED" && (
-                                      <span
-                                        class="cal-ai-badge cal-learned-badge"
-                                        title="Sorted like a transaction you changed"
-                                      >
-                                        Learned
+                                        {
+                                          categoryOrigin(transaction.tagSource)!
+                                            .short
+                                        }
                                       </span>
                                     )}
                                     {transaction.recurring && (
@@ -2199,24 +2292,10 @@ export const TransactionCalendar = component$(() => {
                                     )}
                                     <span
                                       class={`cal-ai-badge cal-type-badge cal-type-${transaction.effect.toLowerCase()}`}
-                                      title={`${typeLabel(transaction.type)} · ${effectLabel(transaction.effect)}. ${transaction.typeReason}.`}
+                                      title={`${typeLabel(transaction.type)} · ${effectLabel(transaction.effect)}. ${typeOrigin(transaction.typeSource)}: ${transaction.typeReason}.`}
                                     >
                                       {subtypeLabel(transaction.subtype)}
                                     </span>
-                                    {" · "}
-                                    <span
-                                      class="cal-account-dot"
-                                      style={{
-                                        backgroundColor:
-                                          colors[transaction.accountId] ??
-                                          inactiveAccountColor,
-                                      }}
-                                    />
-                                    {accountName(account)}
-                                    {transaction.bankTransactionCode &&
-                                      transaction.bankTransactionCode !==
-                                        title &&
-                                      ` · ${transaction.bankTransactionCode}`}
                                   </span>
                                 )}
                                 {detail && (
@@ -2245,9 +2324,16 @@ export const TransactionCalendar = component$(() => {
                                         true,
                                       )}
                                 </span>
-                                {status ? (
-                                  <span class="cal-tx-status">{status}</span>
-                                ) : (
+                                <span
+                                  class={`cal-tx-effect cal-tx-effect-${transaction.effect.toLowerCase()}`}
+                                >
+                                  {status && !transaction.counted
+                                    ? status
+                                    : status
+                                      ? `${effectLabel(transaction.effect)} · ${status}`
+                                      : effectLabel(transaction.effect)}
+                                </span>
+                                {!status &&
                                   transaction.originalAmount != null &&
                                   transaction.originalCurrency &&
                                   !hidden.value && (
@@ -2257,8 +2343,7 @@ export const TransactionCalendar = component$(() => {
                                         transaction.originalCurrency,
                                       )}
                                     </span>
-                                  )
-                                )}
+                                  )}
                               </span>
 
                               {pickerOpen && manual && (
@@ -2354,6 +2439,70 @@ export const TransactionCalendar = component$(() => {
                                     </button>
                                   </div>
 
+                                  <dl class="cal-classification">
+                                    <div>
+                                      <dt>Account</dt>
+                                      <dd>
+                                        {`${accountKind(account)} / ${accountName(account)}`}
+                                        <small>
+                                          {account?.creditName
+                                            ? `Linked to the credit account ${account.creditName}`
+                                            : account?.roleSource === "USER"
+                                              ? "Account type set by you"
+                                              : account?.roleSource === "BANK"
+                                                ? "Account type from your bank"
+                                                : "No account type set, so it is treated as an everyday account"}
+                                        </small>
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>Category</dt>
+                                      <dd>
+                                        {tag.name}
+                                        <small>
+                                          {categoryOrigin(transaction.tagSource)
+                                            ?.long ?? "Not sorted yet"}
+                                        </small>
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>Type</dt>
+                                      <dd>
+                                        {`${typeLabel(transaction.type)} · ${subtypeLabel(transaction.subtype)}`}
+                                        <small>
+                                          {`${typeOrigin(transaction.typeSource)}: ${transaction.typeReason}.`}
+                                        </small>
+                                      </dd>
+                                    </div>
+                                    <div>
+                                      <dt>Counts as</dt>
+                                      <dd>
+                                        {effectLabel(transaction.effect)}
+                                        <small>
+                                          {effectOrigin(
+                                            transaction.effectSource,
+                                          )}
+                                        </small>
+                                      </dd>
+                                    </div>
+                                  </dl>
+
+                                  <div class="cal-picker-section-head">
+                                    <span>Category</span>
+                                    {transaction.tagSource === "USER" && (
+                                      <button
+                                        type="button"
+                                        class="cal-chip"
+                                        disabled={picker.saving}
+                                        onClick$={() =>
+                                          resetCategory(transaction)
+                                        }
+                                      >
+                                        Back to automatic
+                                      </button>
+                                    )}
+                                  </div>
+
                                   {transaction.description && (
                                     <label class="cal-picker-remember">
                                       <input
@@ -2434,6 +2583,54 @@ export const TransactionCalendar = component$(() => {
                                   <div
                                     class="cal-picker-counting"
                                     role="group"
+                                    aria-labelledby={`cal-type-${transaction.id}`}
+                                  >
+                                    <span
+                                      id={`cal-type-${transaction.id}`}
+                                      class="cal-picker-counting-label"
+                                    >
+                                      Type
+                                      <small>
+                                        {transaction.typeOverride
+                                          ? `Set by you. Automatic would make it ${subtypeLabel(transaction.automaticSubtype).toLowerCase()} (${typeLabel(transaction.automaticType).toLowerCase()}): ${transaction.automaticReason}.`
+                                          : `Automatic: ${transaction.automaticReason}.`}
+                                      </small>
+                                    </span>
+                                    <div class="cal-picker-counting-options">
+                                      <button
+                                        type="button"
+                                        class="cal-picker-counting-option"
+                                        aria-pressed={!transaction.typeOverride}
+                                        disabled={picker.saving}
+                                        onClick$={() =>
+                                          setType(transaction, null)
+                                        }
+                                      >
+                                        {`Automatic (${typeLabel(transaction.automaticType)})`}
+                                      </button>
+                                      {typeChoices.map((choice) => (
+                                        <button
+                                          key={choice.value}
+                                          type="button"
+                                          class="cal-picker-counting-option"
+                                          aria-pressed={
+                                            transaction.typeOverride ===
+                                            choice.value
+                                          }
+                                          disabled={picker.saving}
+                                          onClick$={() =>
+                                            setType(transaction, choice.value)
+                                          }
+                                        >
+                                          {choice.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+
+                                  <div
+                                    class="cal-picker-counting"
+                                    role="group"
                                     aria-labelledby={`cal-counting-${transaction.id}`}
                                   >
                                     <span
@@ -2443,8 +2640,8 @@ export const TransactionCalendar = component$(() => {
                                       Counts as
                                       <small>
                                         {transaction.counting
-                                          ? `Set by you. Automatic would count it as ${effectLabel(transaction.automaticEffect).toLowerCase()}: ${transaction.automaticReason}.`
-                                          : `Automatic counts it as ${effectLabel(transaction.automaticEffect).toLowerCase()}: ${transaction.automaticReason}.`}
+                                          ? `Set by you. Automatic would count it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`
+                                          : `Automatic counts it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`}
                                       </small>
                                     </span>
                                     <div class="cal-picker-counting-options">
@@ -2465,7 +2662,9 @@ export const TransactionCalendar = component$(() => {
                                             )
                                           }
                                         >
-                                          {choice.label}
+                                          {choice.value === null
+                                            ? `Automatic (${effectLabel(transaction.typeEffect)})`
+                                            : choice.label}
                                         </button>
                                       ))}
                                     </div>

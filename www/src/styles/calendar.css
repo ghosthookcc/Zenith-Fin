@@ -653,6 +653,7 @@
   color: #b8c4e6;
 }
 
+.cal-origin-learned,
 .cal-learned-badge {
   border-color: #4c7a55;
   color: #9fd8aa;
@@ -694,6 +695,65 @@
 .cal-manual-badge {
   border-color: #5d7356;
   color: var(--cal-mint);
+}
+
+.cal-origin-rule {
+  border-color: #4a5466;
+  color: var(--cal-muted);
+}
+
+.cal-origin-user {
+  border-color: #5d7356;
+  color: var(--cal-mint);
+}
+
+.cal-classification {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--cal-line);
+  border-radius: 10px;
+  background: #171c27;
+}
+
+.cal-classification div {
+  display: grid;
+  grid-template-columns: 6.5em minmax(0, 1fr);
+  gap: 10px;
+}
+
+.cal-classification dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cal-muted);
+}
+
+.cal-classification dd {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--cal-ink);
+  overflow-wrap: anywhere;
+}
+
+.cal-classification small {
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--cal-muted);
+}
+
+.cal-picker-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cal-ink-2);
 }
 
 .cal-type-badge {
@@ -1084,6 +1144,22 @@
   border-radius: 999px;
   font-size: 0.75rem;
   color: var(--cal-ink-2);
+}
+
+.cal-tx-effect {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+  color: var(--cal-muted);
+}
+
+.cal-tx-effect-out {
+  color: #f0b39f;
+}
+
+.cal-tx-effect-in {
+  color: var(--cal-income);
 }
 
 .cal-tx-original {

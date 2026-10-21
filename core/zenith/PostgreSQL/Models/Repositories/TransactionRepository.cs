@@ -46,12 +46,18 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    a.bank_connection_id AS "BankConnectionId",
                                    bc.aspsp_name AS "BankName",
                                    (bc.status = 'ACTIVE'::"BankStatus" AND a.in_consent) AS "IsActive",
-                                   a.transactions_synced_at AS "TransactionsSyncedAt"
+                                   a.transactions_synced_at AS "TransactionsSyncedAt",
+                                   a.role::text AS "Role",
+                                   a.bank_account_type AS "BankAccountType",
+                                   ca.name AS "CreditName",
+                                   ca.mode::text AS "CreditMode"
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc
                                    ON bc.id = a.bank_connection_id
                                LEFT JOIN "AccountAlias" aa
                                    ON aa.account_id = a.id
+                               LEFT JOIN "CreditAccount" ca
+                                   ON ca.account_id = a.id
                                WHERE bc.user_id = @UserId
                                ORDER BY a.id;
                                """;
@@ -252,6 +258,27 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 TransactionId = transactionId,
                 Counting = counting
             }) > 0;
+        }
+
+        public async Task<bool> ClearUserTagAsync(long userId,
+                                                  long transactionId)
+        {
+            const string sql = """
+                               UPDATE "Transaction" AS t
+                               SET tag_id = NULL,
+                                   tag_source = NULL,
+                                   tagged_at = NULL
+                               FROM "Account" a,
+                                    "BankConnection" bc
+                               WHERE t.id = @TransactionId
+                                 AND t.tag_source = 'USER'::"TagSource"
+                                 AND a.id = t.account_id
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.ExecuteAsync(sql, new { UserId = userId, TransactionId = transactionId }) > 0;
         }
 
         public async Task<bool> SetUserTagAsync(long userId,

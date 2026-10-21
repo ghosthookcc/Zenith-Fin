@@ -90,5 +90,87 @@ export function manualLedger(transaction: ManualTransaction, amount: number) {
     automaticSubtype: subtype,
     automaticReason: reason,
     automaticEffect: effect,
+    typeEffect: effect,
   };
+}
+
+const roleLabels: Record<string, string> = {
+  EVERYDAY: "Everyday",
+  SAVINGS: "Savings",
+  CREDIT_CARD: "Credit card",
+  LOAN: "Loan",
+  INVESTMENT: "Investment",
+};
+
+export const roleChoices = Object.entries(roleLabels).map(([value, label]) => ({
+  value,
+  label,
+}));
+
+export function roleLabel(role: string | null | undefined): string {
+  return roleLabels[role ?? "EVERYDAY"] ?? "Everyday";
+}
+
+export function accountKind(
+  account: { role?: string | null; creditName?: string | null } | undefined,
+): string {
+  if (!account) {
+    return "Account";
+  }
+
+  return account.creditName ? "Credit" : roleLabel(account.role);
+}
+
+export function categoryOrigin(
+  source: string | null | undefined,
+): { short: string; long: string } | null {
+  switch (source) {
+    case "AI":
+      return { short: "AI", long: "Automatic (AI)" };
+    case "LEARNED":
+      return {
+        short: "Learned",
+        long: "Automatic (learned from your changes)",
+      };
+    case "USER":
+      return { short: "You", long: "Set by you" };
+    case "RULE":
+      return { short: "Rule", long: "Automatic (rule)" };
+    default:
+      return null;
+  }
+}
+
+export function typeOrigin(source: string): string {
+  switch (source) {
+    case "USER":
+      return "Set by you";
+    case "CREDIT_ACCOUNT":
+      return "Automatic (credit account setup)";
+    case "TRANSFER_MATCH":
+      return "Automatic (matched transfer)";
+    case "ACCOUNT_NUMBER":
+      return "Automatic (known account number)";
+    case "VIRTUAL_ACCOUNT":
+      return "Automatic (virtual account)";
+    case "BANK_CODE":
+      return "Automatic (the bank's transfer code)";
+    case "CATEGORY":
+      return "Automatic (category)";
+    default:
+      return "Automatic (direction of the money)";
+  }
+}
+
+export function effectOrigin(source: string): string {
+  switch (source) {
+    case "USER":
+      return "Set by you";
+    case "STATUS":
+      return "Not counted because of its status";
+    case "VIRTUAL_ACCOUNT":
+      return "Automatic (virtual account setup)";
+    default:
+      return "Automatic (from the type)";
+  }
 }

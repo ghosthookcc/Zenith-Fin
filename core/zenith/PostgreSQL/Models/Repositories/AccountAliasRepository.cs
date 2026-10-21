@@ -38,6 +38,23 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             }) != null;
         }
 
+        public async Task<bool> SetRoleAsync(long userId,
+                                             long accountId,
+                                             string? role)
+        {
+            const string sql = """
+                               UPDATE "Account" a
+                               SET role = CAST(@Role AS "AccountRole")
+                               FROM "BankConnection" bc
+                               WHERE a.id = @AccountId
+                                 AND bc.id = a.bank_connection_id
+                                 AND bc.user_id = @UserId;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return await connection.ExecuteAsync(sql, new { UserId = userId, AccountId = accountId, Role = role }) > 0;
+        }
+
         public async Task<bool> ClearAliasAsync(long userId,
                                                 long accountId)
         {

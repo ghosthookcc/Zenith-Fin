@@ -47,5 +47,26 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 ? new AccountAliasResult(StatusCodes.Status200OK, null, new AccountDto.AccountAlias { AccountId = accountId, Alias = alias })
                 : new AccountAliasResult(StatusCodes.Status404NotFound, "Account not found");
         }
+
+        public async Task<AccountAliasResult> SetRoleAsync(string sessionId,
+                                                           long accountId,
+                                                           AccountDto.SetAccountRoleRequest request)
+        {
+            if (!Guid.TryParse(sessionId, out Guid activeSessionId))
+                return new AccountAliasResult(StatusCodes.Status401Unauthorized, "No user found for session");
+
+            UserEssentials? essentials = await _userRepository.GetUserIdBySessionId(activeSessionId);
+
+            if (essentials == null) return new AccountAliasResult(StatusCodes.Status401Unauthorized, "No user found for session");
+
+            string? role = string.IsNullOrWhiteSpace(request.Role) ? null : request.Role.Trim().ToUpperInvariant();
+
+            if (role != null && !Ledger.AccountRoles.All.Contains(role))
+                return new AccountAliasResult(StatusCodes.Status400BadRequest, "Choose everyday, savings, credit card, loan or investment");
+
+            return await _accountAliasRepository.SetRoleAsync(essentials.UserId, accountId, role)
+                ? new AccountAliasResult(StatusCodes.Status200OK, null)
+                : new AccountAliasResult(StatusCodes.Status404NotFound, "Account not found");
+        }
     }
 }

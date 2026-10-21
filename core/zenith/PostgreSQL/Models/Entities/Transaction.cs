@@ -11,6 +11,10 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public string BankName { get; set; } = "";
         public bool IsActive { get; set; }
         public DateTime? TransactionsSyncedAt { get; set; }
+        public string? Role { get; set; }
+        public string? BankAccountType { get; set; }
+        public string? CreditName { get; set; }
+        public string? CreditMode { get; set; }
     }
 
     public sealed class ReleasedTransactionRow

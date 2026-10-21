@@ -120,6 +120,7 @@ namespace ZenithFin.Ledger
                 }
 
                 decimal automaticAmount = counted ? DefaultCounted(transaction, automatic) : 0;
+                decimal typeAmount = counted ? DefaultCounted(transaction, decision) : 0;
 
                 entries.Add(new LedgerEntry(transaction.Id,
                                             transaction.AccountId,
@@ -141,7 +142,8 @@ namespace ZenithFin.Ledger
                                             automatic.Type,
                                             automatic.Subtype,
                                             automatic.Reason,
-                                            EffectOf(automaticAmount)));
+                                            EffectOf(automaticAmount),
+                                            EffectOf(typeAmount)));
             }
 
             return new LedgerResult(entries, duplicateOf);

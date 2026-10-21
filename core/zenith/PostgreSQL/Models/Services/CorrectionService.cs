@@ -36,6 +36,24 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _categorizationService = categorizationService;
         }
 
+        private async Task<CorrectionResult> ResetToAutomaticAsync(long userId,
+                                                                   long transactionId)
+        {
+            if (!await _transactionRepository.ClearUserTagAsync(userId, transactionId))
+                return new CorrectionResult(StatusCodes.Status404NotFound, "Transaction not found or not sorted by you");
+
+            IReadOnlyList<TagChange> changes = await _categorizationService.CategorizeAsync(userId, reviewRuleTags: false);
+            TagChange? change = changes.FirstOrDefault(candidate => candidate.TransactionId == transactionId);
+
+            return new CorrectionResult(StatusCodes.Status200OK, null, new TransactionDto.CorrectTagResponse
+            {
+                Transactions = new[]
+                {
+                    new TransactionDto.TransactionTag { Id = transactionId, TagId = change?.TagId, TagSource = change?.Source }
+                }
+            });
+        }
+
         public async Task<CorrectionResult> CorrectAsync(string sessionId,
                                                          long transactionId,
                                                          TransactionDto.CorrectTagRequest request)
@@ -43,6 +61,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
             long? userId = await GetUserIdAsync(sessionId);
 
             if (userId == null) return new CorrectionResult(StatusCodes.Status401Unauthorized, NoUser);
+
+            if (request.TagId == null) return await ResetToAutomaticAsync(userId.Value, transactionId);
 
             TagDto.Tag? tag = (await _tagRepository.GetTagsForUserAsync(userId.Value))
                               .FirstOrDefault(candidate => candidate.Id == request.TagId);

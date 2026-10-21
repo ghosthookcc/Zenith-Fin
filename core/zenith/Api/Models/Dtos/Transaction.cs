@@ -47,6 +47,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string AutomaticSubtype { get; set; } = string.Empty;
             public string AutomaticReason { get; set; } = string.Empty;
             public string AutomaticEffect { get; set; } = string.Empty;
+            public string TypeEffect { get; set; } = string.Empty;
 
             public RecurringInfo? Recurring { get; set; }
         }
@@ -105,6 +106,10 @@ namespace ZenithFin.Api.Models.Dtos
             public bool IsActive { get; set; }
             public DateTime? TransactionsSyncedAt { get; set; }
             public bool IsStale { get; set; }
+            public string Role { get; set; } = string.Empty;
+            public string RoleSource { get; set; } = string.Empty;
+            public string? CreditName { get; set; }
+            public string? CreditMode { get; set; }
         }
 
         public sealed class TransactionsResponse

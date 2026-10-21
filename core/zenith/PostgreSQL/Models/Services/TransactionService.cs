@@ -131,6 +131,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 transaction.AutomaticSubtype = entry.AutomaticSubtype;
                 transaction.AutomaticReason = entry.AutomaticReason;
                 transaction.AutomaticEffect = entry.AutomaticEffect;
+                transaction.TypeEffect = entry.TypeEffect;
             }
 
             DateTime now = DateTime.UtcNow;
@@ -156,7 +157,11 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     Currency = account.Currency,
                     IsActive = account.IsActive,
                     TransactionsSyncedAt = account.TransactionsSyncedAt,
-                    IsStale = account.IsActive && IsDue(account.TransactionsSyncedAt, now, SyncInterval)
+                    IsStale = account.IsActive && IsDue(account.TransactionsSyncedAt, now, SyncInterval),
+                    Role = account.Role ?? AccountRoles.FromBankType(account.BankAccountType),
+                    RoleSource = account.Role != null ? "USER" : account.BankAccountType != null ? "BANK" : "DEFAULT",
+                    CreditName = account.CreditName,
+                    CreditMode = account.CreditMode
                 }).ToArray(),
                 Tags = tags,
                 CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),

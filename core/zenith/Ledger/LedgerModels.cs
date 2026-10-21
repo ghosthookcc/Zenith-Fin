@@ -157,7 +157,8 @@ namespace ZenithFin.Ledger
                                      string AutomaticType,
                                      string AutomaticSubtype,
                                      string AutomaticReason,
-                                     string AutomaticEffect);
+                                     string AutomaticEffect,
+                                     string TypeEffect);
 
     public sealed record LedgerResult(IReadOnlyList<LedgerEntry> Entries,
                                       IReadOnlyDictionary<long, long> DuplicateOf);

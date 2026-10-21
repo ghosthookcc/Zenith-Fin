@@ -39,6 +39,7 @@ import {
 } from "../utils/manual";
 import { Icon } from "./Icon";
 import { accountColors as colors } from "../utils/accounts";
+import { roleChoices, roleLabel } from "../utils/ledger";
 
 interface BalanceAmount {
   currency: string;
@@ -64,6 +65,8 @@ interface BackendAccount {
   alias?: string | null;
   currency: string;
   inConsent?: boolean;
+  role?: string | null;
+  roleSource?: string | null;
   balances: Balance[];
 }
 
@@ -84,6 +87,8 @@ interface DisplayAccount {
   iban?: string | null;
   currency: string;
   inConsent: boolean;
+  role: string;
+  roleSource: string;
   balance: number;
   color: string;
   purpose: string;
@@ -167,6 +172,8 @@ function makeDisplayAccount(
     iban: account.iban,
     currency: account.currency,
     inConsent: account.inConsent !== false,
+    role: account.role ?? "EVERYDAY",
+    roleSource: account.roleSource ?? "DEFAULT",
     balance: getMainBalance(account),
     color: colors[index % colors.length],
     purpose: account.iban ? `IBAN ${account.iban}` : "Connected bank account",
@@ -444,6 +451,49 @@ export const AccountOverview = component$(() => {
     error: null,
   });
 
+  const saveRole = $(async (id: number, role: string) => {
+    if (rename.saving) {
+      return;
+    }
+
+    rename.saving = true;
+    rename.error = null;
+
+    try {
+      const response = await fetch(`/api/accounts/${id}/role`, {
+        method: "PUT",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        credentials: "same-origin",
+        body: JSON.stringify({ role }),
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          message?: string;
+        } | null;
+
+        throw new Error(
+          payload?.message ??
+            `Could not change the account type (${response.status})`,
+        );
+      }
+
+      backendAccounts.value = backendAccounts.value.map((account) =>
+        account.id === id ? { ...account, role, roleSource: "USER" } : account,
+      );
+    } catch (err) {
+      rename.error =
+        err instanceof Error
+          ? err.message
+          : "Could not change the account type.";
+    } finally {
+      rename.saving = false;
+    }
+  });
+
   const saveName = $(async (id: number, useBankName: boolean) => {
     if (rename.saving) {
       return;
@@ -675,6 +725,8 @@ export const AccountOverview = component$(() => {
       iban: account.iban ?? null,
       currency: "SEK",
       inConsent: true,
+      role: "EVERYDAY",
+      roleSource: "DEFAULT",
       balance: account.currentBalance ?? 0,
       color: colors[(accounts.length + index) % colors.length],
       purpose: `Account ${account.accountNumber}`,
@@ -1067,7 +1119,11 @@ export const AccountOverview = component$(() => {
                         <Icon name={account.icon} />
                       </span>
 
-                      <span class="card-bank">{account.bank}</span>
+                      <span class="card-bank">
+                        {account.kind === "connected"
+                          ? `${account.bank} · ${roleLabel(account.role)}`
+                          : account.bank}
+                      </span>
 
                       <span class="account-index">
                         {String(index + 1).padStart(2, "0")}
@@ -1098,6 +1154,30 @@ export const AccountOverview = component$(() => {
                             rename.value = element.value;
                           }}
                         />
+                        <label
+                          class="account-rename-label"
+                          for={`account-role-${account.backendId}`}
+                        >
+                          Account type
+                        </label>
+                        <select
+                          id={`account-role-${account.backendId}`}
+                          class="account-rename-input"
+                          disabled={rename.saving}
+                          onChange$={(_, element) =>
+                            saveRole(account.backendId, element.value)
+                          }
+                        >
+                          {roleChoices.map((choice) => (
+                            <option
+                              key={choice.value}
+                              value={choice.value}
+                              selected={account.role === choice.value}
+                            >
+                              {choice.label}
+                            </option>
+                          ))}
+                        </select>
                         <div class="account-rename-actions">
                           <button
                             type="submit"
