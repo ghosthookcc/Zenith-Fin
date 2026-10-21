@@ -2,7 +2,7 @@ namespace ZenithFin.Ledger
 {
     public sealed class AccountNumberIndex
     {
-        private const int MinimumDigits = 7;
+        private const int MinimumDigits = 6;
         private const int SwedishIbanPrefixDigits = 5;
 
         private readonly List<(string Key, string Digits, string? Local)> _numbers = new();

@@ -194,6 +194,21 @@ namespace ZenithFin.Ledger
 
             if (own.CreditMode == CreditModes.Mirror)
             {
+                bool partnersOwn = other != null &&
+                                   scope.PartnerUserId != null &&
+                                   other.Owners.Count == 1 &&
+                                   other.Owners[0] == scope.PartnerUserId &&
+                                   !scope.IsJoint(other.Key, transaction.Date);
+
+                if (partnersOwn)
+                    return new Decision(TransactionTypes.Expense,
+                                        outgoing ? Subtypes.Refund : Subtypes.CardPurchase,
+                                        TypeSources.CreditAccount,
+                                        outgoing
+                                            ? $"A {own.CreditName} refund sent back to {Label(other!)}, your partner's own account, so it is their money, not yours"
+                                            : $"A {own.CreditName} purchase your partner copied in from {Label(other!)}, so it is their cost and isn't counted for you",
+                                        0);
+
                 if (!outgoing)
                     return new Decision(TransactionTypes.Expense,
                                         Subtypes.CardPurchase,
@@ -319,6 +334,19 @@ namespace ZenithFin.Ledger
                                                  string evidence,
                                                  LedgerScope scope)
         {
+            if (other.CreditMode == CreditModes.Mirror && source == TypeSources.AccountNumber)
+                return outgoing
+                    ? new Decision(TransactionTypes.Expense,
+                                   Subtypes.CardPurchase,
+                                   source,
+                                   $"Covers a {other.CreditName} card purchase. The copy on {Label(other)} isn't visible to you, so this payment counts as the purchase",
+                                   -Math.Abs(transaction.Amount))
+                    : new Decision(TransactionTypes.Expense,
+                                   Subtypes.Refund,
+                                   source,
+                                   $"A {other.CreditName} refund from {Label(other)}, whose transactions aren't visible to you, so it lowers your spending here",
+                                   Math.Abs(transaction.Amount));
+
             if (other.CreditMode == CreditModes.Mirror)
                 return new Decision(TransactionTypes.Transfer,
                                     TransferSubtype(own, other, transaction.Date, outgoing, scope),

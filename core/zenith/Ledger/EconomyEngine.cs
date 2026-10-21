@@ -69,6 +69,7 @@ namespace ZenithFin.Ledger
         public IReadOnlyList<SharedItem> Items { get; init; } = Array.Empty<SharedItem>();
         public IReadOnlyList<FundingItem> FundingItems { get; init; } = Array.Empty<FundingItem>();
         public IReadOnlyList<SettlementItem> Settlements { get; init; } = Array.Empty<SettlementItem>();
+        public Dictionary<long, long> PrivateCardSpending { get; init; } = new();
     }
 
     public static class EconomyEngine
@@ -102,6 +103,7 @@ namespace ZenithFin.Ledger
             List<SharedItem> items = new();
             List<FundingItem> funding = new();
             List<SettlementItem> settlements = new();
+            Dictionary<long, long> privateCard = new() { [viewer] = 0, [partner] = 0 };
             long unattributed = 0;
 
             foreach (LedgerEntry entry in input.Entries.Where(entry => entry.Date >= input.From && entry.Date <= input.To && entry.Counted))
@@ -114,6 +116,15 @@ namespace ZenithFin.Ledger
                 {
                     bool otherJoint = entry.CounterPhysicalKey != null && input.IsJoint(entry.CounterPhysicalKey, entry.Date);
                     long? person = otherJoint ? null : PrivateOwner(entry.CounterPhysicalKey);
+
+                    if (entry.Type == TransactionTypes.Expense &&
+                        entry.Subtype is Subtypes.CardPurchase or Subtypes.Refund &&
+                        person != null &&
+                        (person == viewer || person == partner))
+                    {
+                        privateCard[person.Value] += amount;
+                        continue;
+                    }
 
                     if (person != null && (person == viewer || person == partner))
                         funding.Add(new FundingItem(entry.TransactionId, entry.Date, person.Value, amount, entry.PhysicalKey));
@@ -192,6 +203,7 @@ namespace ZenithFin.Ledger
                 SettlementsPaid = settled,
                 OwedToViewer = owedToViewer,
                 Items = items.OrderBy(item => item.Date).ThenBy(item => item.TransactionId).ToArray(),
+                PrivateCardSpending = privateCard,
                 FundingItems = funding,
                 Settlements = settlements
             };

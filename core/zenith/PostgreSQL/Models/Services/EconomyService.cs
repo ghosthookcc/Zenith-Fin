@@ -147,6 +147,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                            .Sum(entry => EconomyEngine.ToMinor(entry.CountedAmount));
             long myShare = economy?.Share.GetValueOrDefault(me) ?? 0;
 
+            spending += economy?.PrivateCardSpending.GetValueOrDefault(me) ?? 0;
+
             string[] jointKeys = byKey.Keys.Where(key => computation.IsJoint(key, to)).ToArray();
             string[] privateKeys = byKey.Keys.Where(key => !computation.IsJoint(key, to) && byKey[key].OwnerUserId == me).ToArray();
             Dictionary<long, decimal> balances = (await _ledgerRepository.GetBalancesAsync(byKey.Values.Select(account => account.Id).ToArray()))
