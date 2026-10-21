@@ -15,6 +15,8 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public string? BankAccountType { get; set; }
         public string? CreditName { get; set; }
         public string? CreditMode { get; set; }
+        public string? IdentificationHash { get; set; }
+        public string? SharedBy { get; set; }
     }
 
     public sealed class ReleasedTransactionRow

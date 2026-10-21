@@ -77,9 +77,13 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             await CategorizeAsync(userId.Value, reviewRuleTags: false);
 
-            TransactionAccountRow[] accounts = await _transactionRepository.GetAccountsForUserAsync(userId.Value);
+            TransactionAccountRow[] ownAccounts = await _transactionRepository.GetAccountsForUserAsync(userId.Value);
+            TransactionAccountRow[] sharedAccounts = await _transactionRepository.GetSharedAccountsForUserAsync(userId.Value);
             TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId.Value);
-            TransactionDto.Transaction[] transactions = await _transactionRepository.GetTransactionsForUserAsync(userId.Value, from, to);
+            TransactionDto.Transaction[] transactions = await _transactionRepository.GetTransactionsForUserAsync(userId.Value,
+                                                                                                                from,
+                                                                                                                to,
+                                                                                                                sharedAccounts.Select(account => account.Id).ToArray());
 
             OwnerProfile owner = await _categorizationService.GetOwnerAsync(userId.Value);
             Dictionary<CorrectionKey, RecurringSeries> recurring = await _recurringService.DetectAsync(userId.Value, owner);
@@ -113,6 +117,28 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             LedgerResult ledger = await _ledgerService.ClassifyAsync(userId.Value, from, to);
             Dictionary<long, LedgerEntry> entries = ledger.Entries.ToDictionary(entry => entry.TransactionId);
+
+            Dictionary<string, long> ownByKey = ownAccounts.GroupBy(account => LedgerService.PhysicalKey(account.Id, account.IdentificationHash, account.Iban))
+                                                           .ToDictionary(group => group.Key, group => group.Min(account => account.Id));
+            Dictionary<long, TransactionAccountRow> sharedById = sharedAccounts.ToDictionary(account => account.Id);
+
+            transactions = transactions.Where(transaction => !ledger.DuplicateOf.ContainsKey(transaction.Id)).ToArray();
+
+            foreach (TransactionDto.Transaction transaction in transactions)
+            {
+                if (!sharedById.TryGetValue(transaction.AccountId, out TransactionAccountRow? shared)) continue;
+
+                transaction.Editable = false;
+                transaction.SharedBy = shared.SharedBy;
+
+                if (ownByKey.TryGetValue(LedgerService.PhysicalKey(shared.Id, shared.IdentificationHash, shared.Iban), out long ownAccountId))
+                    transaction.AccountId = ownAccountId;
+            }
+
+            TransactionAccountRow[] accounts = ownAccounts.Concat(sharedAccounts.Where(account => !ownByKey.ContainsKey(LedgerService.PhysicalKey(account.Id,
+                                                                                                                                                    account.IdentificationHash,
+                                                                                                                                                    account.Iban))))
+                                                          .ToArray();
 
             foreach (TransactionDto.Transaction transaction in transactions)
             {
@@ -161,7 +187,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     Role = account.Role ?? AccountRoles.FromBankType(account.BankAccountType),
                     RoleSource = account.Role != null ? "USER" : account.BankAccountType != null ? "BANK" : "DEFAULT",
                     CreditName = account.CreditName,
-                    CreditMode = account.CreditMode
+                    CreditMode = account.CreditMode,
+                    SharedBy = account.SharedBy
                 }).ToArray(),
                 Tags = tags,
                 CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),

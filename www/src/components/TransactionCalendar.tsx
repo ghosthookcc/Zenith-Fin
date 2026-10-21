@@ -54,6 +54,7 @@ interface CalendarAccount {
   roleSource: string;
   creditName?: string | null;
   creditMode?: string | null;
+  sharedBy?: string | null;
 }
 
 interface CalendarTransaction {
@@ -87,6 +88,8 @@ interface CalendarTransaction {
   automaticReason: string;
   automaticEffect: string;
   typeEffect: string;
+  editable?: boolean;
+  sharedBy?: string | null;
   recurring?: Recurring | null;
   manual?: ManualTransaction | null;
 }
@@ -2263,6 +2266,14 @@ export const TransactionCalendar = component$(() => {
                                       }}
                                     />
                                     {`${accountKind(account)} / ${accountName(account)}`}
+                                    {transaction.sharedBy && (
+                                      <span
+                                        class="cal-ai-badge cal-origin-user"
+                                        title={`Shared with you by ${transaction.sharedBy}`}
+                                      >
+                                        {transaction.sharedBy.split(" ")[0]}
+                                      </span>
+                                    )}
                                     {" · "}
                                     {tag.name}
                                     {categoryOrigin(transaction.tagSource) && (
@@ -2487,188 +2498,204 @@ export const TransactionCalendar = component$(() => {
                                     </div>
                                   </dl>
 
-                                  <div class="cal-picker-section-head">
-                                    <span>Category</span>
-                                    {transaction.tagSource === "USER" && (
-                                      <button
-                                        type="button"
-                                        class="cal-chip"
-                                        disabled={picker.saving}
-                                        onClick$={() =>
-                                          resetCategory(transaction)
-                                        }
-                                      >
-                                        Back to automatic
-                                      </button>
-                                    )}
-                                  </div>
+                                  {transaction.editable === false ? (
+                                    <p class="cal-manual-note">
+                                      {`Shared with you by ${transaction.sharedBy ?? "your partner"}. Only they can change how it is sorted and counted.`}
+                                    </p>
+                                  ) : (
+                                    <>
+                                      <div class="cal-picker-section-head">
+                                        <span>Category</span>
+                                        {transaction.tagSource === "USER" && (
+                                          <button
+                                            type="button"
+                                            class="cal-chip"
+                                            disabled={picker.saving}
+                                            onClick$={() =>
+                                              resetCategory(transaction)
+                                            }
+                                          >
+                                            Back to automatic
+                                          </button>
+                                        )}
+                                      </div>
 
-                                  {transaction.description && (
-                                    <label class="cal-picker-remember">
-                                      <input
-                                        type="checkbox"
-                                        checked={picker.remember}
-                                        onChange$={(_, element) => {
-                                          picker.remember = element.checked;
-                                        }}
-                                      />
-                                      <span>
-                                        {`Remember for “${title}”`}
-                                        <small>
-                                          Similar transactions move too, now and
-                                          later, and the AI learns from it.
-                                        </small>
-                                      </span>
-                                    </label>
-                                  )}
+                                      {transaction.description && (
+                                        <label class="cal-picker-remember">
+                                          <input
+                                            type="checkbox"
+                                            checked={picker.remember}
+                                            onChange$={(_, element) => {
+                                              picker.remember = element.checked;
+                                            }}
+                                          />
+                                          <span>
+                                            {`Remember for “${title}”`}
+                                            <small>
+                                              Similar transactions move too, now
+                                              and later, and the AI learns from
+                                              it.
+                                            </small>
+                                          </span>
+                                        </label>
+                                      )}
 
-                                  <div class="cal-picker-options">
-                                    {tags.map((option) => (
-                                      <button
-                                        key={option.id}
-                                        type="button"
-                                        class="cal-picker-option"
-                                        aria-pressed={
-                                          option.id === transaction.tagId
-                                        }
-                                        disabled={picker.saving}
-                                        onClick$={() =>
-                                          changeTag(transaction, option)
-                                        }
+                                      <div class="cal-picker-options">
+                                        {tags.map((option) => (
+                                          <button
+                                            key={option.id}
+                                            type="button"
+                                            class="cal-picker-option"
+                                            aria-pressed={
+                                              option.id === transaction.tagId
+                                            }
+                                            disabled={picker.saving}
+                                            onClick$={() =>
+                                              changeTag(transaction, option)
+                                            }
+                                          >
+                                            <span
+                                              class="cal-picker-swatch"
+                                              style={{
+                                                "--tag-color": option.color,
+                                              }}
+                                              aria-hidden="true"
+                                            >
+                                              <Icon name={option.icon} />
+                                            </span>
+                                            <span class="cal-picker-name">
+                                              {option.name}
+                                            </span>
+                                          </button>
+                                        ))}
+                                      </div>
+
+                                      {transaction.description && (
+                                        <label class="cal-picker-remember cal-picker-recurring">
+                                          <input
+                                            type="checkbox"
+                                            checked={!!transaction.recurring}
+                                            disabled={picker.saving}
+                                            onChange$={(_, element) =>
+                                              setRecurring(
+                                                transaction,
+                                                element.checked,
+                                              )
+                                            }
+                                          />
+                                          <span>
+                                            Recurring payment
+                                            <small>
+                                              {transaction.recurring
+                                                ? `${transaction.recurring.label} · ${
+                                                    transaction.recurring.manual
+                                                      ? "marked by you"
+                                                      : "found from your history"
+                                                  }`
+                                                : "Tick it to follow these payments as recurring. With only one so far, Zenith assumes it repeats monthly."}
+                                            </small>
+                                          </span>
+                                        </label>
+                                      )}
+
+                                      <div
+                                        class="cal-picker-counting"
+                                        role="group"
+                                        aria-labelledby={`cal-type-${transaction.id}`}
                                       >
                                         <span
-                                          class="cal-picker-swatch"
-                                          style={{
-                                            "--tag-color": option.color,
-                                          }}
-                                          aria-hidden="true"
+                                          id={`cal-type-${transaction.id}`}
+                                          class="cal-picker-counting-label"
                                         >
-                                          <Icon name={option.icon} />
+                                          Type
+                                          <small>
+                                            {transaction.typeOverride
+                                              ? `Set by you. Automatic would make it ${subtypeLabel(transaction.automaticSubtype).toLowerCase()} (${typeLabel(transaction.automaticType).toLowerCase()}): ${transaction.automaticReason}.`
+                                              : `Automatic: ${transaction.automaticReason}.`}
+                                          </small>
                                         </span>
-                                        <span class="cal-picker-name">
-                                          {option.name}
-                                        </span>
-                                      </button>
-                                    ))}
-                                  </div>
+                                        <div class="cal-picker-counting-options">
+                                          <button
+                                            type="button"
+                                            class="cal-picker-counting-option"
+                                            aria-pressed={
+                                              !transaction.typeOverride
+                                            }
+                                            disabled={picker.saving}
+                                            onClick$={() =>
+                                              setType(transaction, null)
+                                            }
+                                          >
+                                            {`Automatic (${typeLabel(transaction.automaticType)})`}
+                                          </button>
+                                          {typeChoices.map((choice) => (
+                                            <button
+                                              key={choice.value}
+                                              type="button"
+                                              class="cal-picker-counting-option"
+                                              aria-pressed={
+                                                transaction.typeOverride ===
+                                                choice.value
+                                              }
+                                              disabled={picker.saving}
+                                              onClick$={() =>
+                                                setType(
+                                                  transaction,
+                                                  choice.value,
+                                                )
+                                              }
+                                            >
+                                              {choice.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
 
-                                  {transaction.description && (
-                                    <label class="cal-picker-remember cal-picker-recurring">
-                                      <input
-                                        type="checkbox"
-                                        checked={!!transaction.recurring}
-                                        disabled={picker.saving}
-                                        onChange$={(_, element) =>
-                                          setRecurring(
-                                            transaction,
-                                            element.checked,
-                                          )
-                                        }
-                                      />
-                                      <span>
-                                        Recurring payment
-                                        <small>
-                                          {transaction.recurring
-                                            ? `${transaction.recurring.label} · ${
-                                                transaction.recurring.manual
-                                                  ? "marked by you"
-                                                  : "found from your history"
-                                              }`
-                                            : "Tick it to follow these payments as recurring. With only one so far, Zenith assumes it repeats monthly."}
-                                        </small>
-                                      </span>
-                                    </label>
-                                  )}
-
-                                  <div
-                                    class="cal-picker-counting"
-                                    role="group"
-                                    aria-labelledby={`cal-type-${transaction.id}`}
-                                  >
-                                    <span
-                                      id={`cal-type-${transaction.id}`}
-                                      class="cal-picker-counting-label"
-                                    >
-                                      Type
-                                      <small>
-                                        {transaction.typeOverride
-                                          ? `Set by you. Automatic would make it ${subtypeLabel(transaction.automaticSubtype).toLowerCase()} (${typeLabel(transaction.automaticType).toLowerCase()}): ${transaction.automaticReason}.`
-                                          : `Automatic: ${transaction.automaticReason}.`}
-                                      </small>
-                                    </span>
-                                    <div class="cal-picker-counting-options">
-                                      <button
-                                        type="button"
-                                        class="cal-picker-counting-option"
-                                        aria-pressed={!transaction.typeOverride}
-                                        disabled={picker.saving}
-                                        onClick$={() =>
-                                          setType(transaction, null)
-                                        }
+                                      <div
+                                        class="cal-picker-counting"
+                                        role="group"
+                                        aria-labelledby={`cal-counting-${transaction.id}`}
                                       >
-                                        {`Automatic (${typeLabel(transaction.automaticType)})`}
-                                      </button>
-                                      {typeChoices.map((choice) => (
-                                        <button
-                                          key={choice.value}
-                                          type="button"
-                                          class="cal-picker-counting-option"
-                                          aria-pressed={
-                                            transaction.typeOverride ===
-                                            choice.value
-                                          }
-                                          disabled={picker.saving}
-                                          onClick$={() =>
-                                            setType(transaction, choice.value)
-                                          }
+                                        <span
+                                          id={`cal-counting-${transaction.id}`}
+                                          class="cal-picker-counting-label"
                                         >
-                                          {choice.label}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
-
-                                  <div
-                                    class="cal-picker-counting"
-                                    role="group"
-                                    aria-labelledby={`cal-counting-${transaction.id}`}
-                                  >
-                                    <span
-                                      id={`cal-counting-${transaction.id}`}
-                                      class="cal-picker-counting-label"
-                                    >
-                                      Counts as
-                                      <small>
-                                        {transaction.counting
-                                          ? `Set by you. Automatic would count it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`
-                                          : `Automatic counts it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`}
-                                      </small>
-                                    </span>
-                                    <div class="cal-picker-counting-options">
-                                      {manualCountingChoices.map((choice) => (
-                                        <button
-                                          key={choice.label}
-                                          type="button"
-                                          class="cal-picker-counting-option"
-                                          aria-pressed={
-                                            (transaction.counting ?? null) ===
-                                            choice.value
-                                          }
-                                          disabled={picker.saving}
-                                          onClick$={() =>
-                                            setCounting(
-                                              transaction,
-                                              choice.value,
-                                            )
-                                          }
-                                        >
-                                          {choice.value === null
-                                            ? `Automatic (${effectLabel(transaction.typeEffect)})`
-                                            : choice.label}
-                                        </button>
-                                      ))}
-                                    </div>
-                                  </div>
+                                          Counts as
+                                          <small>
+                                            {transaction.counting
+                                              ? `Set by you. Automatic would count it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`
+                                              : `Automatic counts it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`}
+                                          </small>
+                                        </span>
+                                        <div class="cal-picker-counting-options">
+                                          {manualCountingChoices.map(
+                                            (choice) => (
+                                              <button
+                                                key={choice.label}
+                                                type="button"
+                                                class="cal-picker-counting-option"
+                                                aria-pressed={
+                                                  (transaction.counting ??
+                                                    null) === choice.value
+                                                }
+                                                disabled={picker.saving}
+                                                onClick$={() =>
+                                                  setCounting(
+                                                    transaction,
+                                                    choice.value,
+                                                  )
+                                                }
+                                              >
+                                                {choice.value === null
+                                                  ? `Automatic (${effectLabel(transaction.typeEffect)})`
+                                                  : choice.label}
+                                              </button>
+                                            ),
+                                          )}
+                                        </div>
+                                      </div>
+                                    </>
+                                  )}
 
                                   {picker.error && (
                                     <p class="cal-picker-error" role="alert">

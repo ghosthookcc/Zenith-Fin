@@ -1,0 +1,69 @@
+enum ShareStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  ENDED
+}
+
+model Partnership {
+  id           BigInt      @id @default(autoincrement())
+  inviter_id   BigInt
+  invitee_id   BigInt
+  status       ShareStatus
+  created_at   DateTime    @default(now()) @db.Timestamptz(3)
+  responded_at DateTime?   @db.Timestamptz(3)
+  ended_at     DateTime?   @db.Timestamptz(3)
+
+  inviter        User             @relation("PartnershipInviter", fields: [inviter_id], references: [id], onDelete: Cascade)
+  invitee        User             @relation("PartnershipInvitee", fields: [invitee_id], references: [id], onDelete: Cascade)
+  split_rules    SplitRule[]
+  account_shares AccountSharing[]
+
+  @@index([inviter_id])
+  @@index([invitee_id])
+}
+
+model SplitRule {
+  id             BigInt      @id @default(autoincrement())
+  partnership_id BigInt
+  inviter_share  Int
+  valid_from     DateTime    @db.Date
+  status         ShareStatus
+  proposed_by    BigInt
+  created_at     DateTime    @default(now()) @db.Timestamptz(3)
+  responded_at   DateTime?   @db.Timestamptz(3)
+
+  partnership Partnership @relation(fields: [partnership_id], references: [id], onDelete: Cascade)
+
+  @@index([partnership_id])
+}
+
+model AccountSharing {
+  id             BigInt      @id @default(autoincrement())
+  partnership_id BigInt
+  account_id     BigInt
+  owner_id       BigInt
+  status         ShareStatus
+  created_at     DateTime    @default(now()) @db.Timestamptz(3)
+  responded_at   DateTime?   @db.Timestamptz(3)
+  ended_at       DateTime?   @db.Timestamptz(3)
+
+  partnership Partnership @relation(fields: [partnership_id], references: [id], onDelete: Cascade)
+  account     Account     @relation(fields: [account_id], references: [id], onDelete: Cascade)
+
+  @@index([partnership_id])
+  @@index([account_id])
+}
+
+model Notification {
+  id         BigInt    @id @default(autoincrement())
+  user_id    BigInt
+  text       String
+  created_at DateTime  @default(now()) @db.Timestamptz(3)
+  read_at    DateTime? @db.Timestamptz(3)
+
+  user User @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, created_at])
+}

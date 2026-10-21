@@ -16,6 +16,9 @@ model User {
   recurring_rules  RecurringRule[]
   virtual_accounts VirtualAccount[]
   manual_transactions ManualTransaction[]
+  partnerships_sent     Partnership[] @relation("PartnershipInviter")
+  partnerships_received Partnership[] @relation("PartnershipInvitee")
+  notifications         Notification[]
 
   @@index([email])
 }

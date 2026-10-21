@@ -48,6 +48,8 @@ namespace ZenithFin.Api.Models.Dtos
             public string AutomaticReason { get; set; } = string.Empty;
             public string AutomaticEffect { get; set; } = string.Empty;
             public string TypeEffect { get; set; } = string.Empty;
+            public bool Editable { get; set; } = true;
+            public string? SharedBy { get; set; }
 
             public RecurringInfo? Recurring { get; set; }
         }
@@ -110,6 +112,7 @@ namespace ZenithFin.Api.Models.Dtos
             public string RoleSource { get; set; } = string.Empty;
             public string? CreditName { get; set; }
             public string? CreditMode { get; set; }
+            public string? SharedBy { get; set; }
         }
 
         public sealed class TransactionsResponse

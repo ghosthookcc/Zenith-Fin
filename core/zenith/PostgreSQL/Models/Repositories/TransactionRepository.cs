@@ -50,7 +50,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    a.role::text AS "Role",
                                    a.bank_account_type AS "BankAccountType",
                                    ca.name AS "CreditName",
-                                   ca.mode::text AS "CreditMode"
+                                   ca.mode::text AS "CreditMode",
+                                   a.identification_hash AS "IdentificationHash"
                                FROM "Account" a
                                INNER JOIN "BankConnection" bc
                                    ON bc.id = a.bank_connection_id
@@ -66,6 +67,49 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             IEnumerable<TransactionAccountRow> accounts = await connection.QueryAsync<TransactionAccountRow>(sql, new { UserId = userId });
 
             return accounts.ToArray();
+        }
+
+        public async Task<TransactionAccountRow[]> GetSharedAccountsForUserAsync(long userId)
+        {
+            const string sql = """
+                               SELECT
+                                   a.id AS "Id",
+                                   a.enable_banking_uid AS "EnableBankingUid",
+                                   COALESCE(aa.bank_name_alias, a.name) AS "Name",
+                                   a.iban AS "Iban",
+                                   a.currency AS "Currency",
+                                   a.bank_connection_id AS "BankConnectionId",
+                                   bc.aspsp_name AS "BankName",
+                                   (bc.status = 'ACTIVE'::"BankStatus" AND a.in_consent) AS "IsActive",
+                                   a.transactions_synced_at AS "TransactionsSyncedAt",
+                                   a.role::text AS "Role",
+                                   a.bank_account_type AS "BankAccountType",
+                                   ca.name AS "CreditName",
+                                   ca.mode::text AS "CreditMode",
+                                   a.identification_hash AS "IdentificationHash",
+                                   owner.full_name AS "SharedBy"
+                               FROM "AccountSharing" s
+                               INNER JOIN "Partnership" p
+                                   ON p.id = s.partnership_id
+                               INNER JOIN "Account" a
+                                   ON a.id = s.account_id
+                               INNER JOIN "BankConnection" bc
+                                   ON bc.id = a.bank_connection_id
+                               INNER JOIN "User" owner
+                                   ON owner.id = s.owner_id
+                               LEFT JOIN "AccountAlias" aa
+                                   ON aa.account_id = a.id
+                               LEFT JOIN "CreditAccount" ca
+                                   ON ca.account_id = a.id
+                               WHERE s.status = 'ACCEPTED'
+                                 AND p.status = 'ACCEPTED'
+                                 AND s.owner_id <> @UserId
+                                 AND (p.inviter_id = @UserId OR p.invitee_id = @UserId)
+                               ORDER BY a.id;
+                               """;
+
+            using var connection = _connectionFactory.Create();
+            return (await connection.QueryAsync<TransactionAccountRow>(sql, new { UserId = userId })).ToArray();
         }
 
         public async Task<DateTime?> GetTransactionsSyncedAtAsync(long userId,
@@ -86,7 +130,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
 
         public async Task<TransactionDto.Transaction[]> GetTransactionsForUserAsync(long userId,
                                                                                    DateOnly from,
-                                                                                   DateOnly to)
+                                                                                   DateOnly to,
+                                                                                   IReadOnlyCollection<long>? sharedAccountIds = null)
         {
             const string sql = """
                                SELECT
@@ -118,7 +163,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    ON a.id = t.account_id
                                INNER JOIN "BankConnection" bc
                                    ON bc.id = a.bank_connection_id
-                               WHERE bc.user_id = @UserId
+                               WHERE (bc.user_id = @UserId OR t.account_id = ANY(@SharedAccountIds))
                                  AND t.occurred_on BETWEEN CAST(@From AS date) AND CAST(@To AS date)
                                ORDER BY t.occurred_on DESC, (t.status = 'BOOK'), t.id;
                                """;
@@ -128,7 +173,8 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
             {
                 UserId = userId,
                 From = FormatDate(from),
-                To = FormatDate(to)
+                To = FormatDate(to),
+                SharedAccountIds = (sharedAccountIds ?? Array.Empty<long>()).ToArray()
             });
 
             return transactions.ToArray();
@@ -217,18 +263,44 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                                      string? type)
         {
             const string sql = """
-                               UPDATE "Transaction" t
-                               SET type_override = CAST(@Type AS "TransactionType")
-                               FROM "Account" a
-                               INNER JOIN "BankConnection" bc
-                                   ON bc.id = a.bank_connection_id
-                               WHERE t.id = @TransactionId
-                                 AND a.id = t.account_id
-                                 AND bc.user_id = @UserId;
+                               WITH target AS (
+                                   UPDATE "Transaction" t
+                                   SET type_override = CAST(@Type AS "TransactionType")
+                                   FROM "Account" a
+                                   INNER JOIN "BankConnection" bc
+                                       ON bc.id = a.bank_connection_id
+                                   WHERE t.id = @TransactionId
+                                     AND a.id = t.account_id
+                                     AND bc.user_id = @UserId
+                                   RETURNING t.id, t.external_id, a.identification_hash
+                               ), synced AS (
+                                   UPDATE "Transaction" copy
+                                   SET type_override = CAST(@Type AS "TransactionType")
+                                   FROM target, "Account" copy_account
+                                   WHERE target.identification_hash IS NOT NULL
+                                     AND copy_account.identification_hash = target.identification_hash
+                                     AND copy.account_id = copy_account.id
+                                     AND copy.external_id = target.external_id
+                                     AND copy.id <> target.id
+                                     AND EXISTS (
+                                         SELECT 1
+                                         FROM "AccountSharing" s
+                                         INNER JOIN "Account" shared
+                                             ON shared.id = s.account_id
+                                         INNER JOIN "Partnership" p
+                                             ON p.id = s.partnership_id
+                                         WHERE shared.identification_hash = target.identification_hash
+                                           AND s.status = 'ACCEPTED'
+                                           AND p.status = 'ACCEPTED'
+                                           AND (p.inviter_id = @UserId OR p.invitee_id = @UserId)
+                                     )
+                                   RETURNING copy.id
+                               )
+                               SELECT count(*) FROM target;
                                """;
 
             using var connection = _connectionFactory.Create();
-            return await connection.ExecuteAsync(sql, new
+            return await connection.ExecuteScalarAsync<long>(sql, new
             {
                 UserId = userId,
                 TransactionId = transactionId,
@@ -241,18 +313,44 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                                          string? counting)
         {
             const string sql = """
-                               UPDATE "Transaction" t
-                               SET counting_override = CAST(@Counting AS "CreditCounting")
-                               FROM "Account" a
-                               INNER JOIN "BankConnection" bc
-                                   ON bc.id = a.bank_connection_id
-                               WHERE t.id = @TransactionId
-                                 AND a.id = t.account_id
-                                 AND bc.user_id = @UserId;
+                               WITH target AS (
+                                   UPDATE "Transaction" t
+                                   SET counting_override = CAST(@Counting AS "CreditCounting")
+                                   FROM "Account" a
+                                   INNER JOIN "BankConnection" bc
+                                       ON bc.id = a.bank_connection_id
+                                   WHERE t.id = @TransactionId
+                                     AND a.id = t.account_id
+                                     AND bc.user_id = @UserId
+                                   RETURNING t.id, t.external_id, a.identification_hash
+                               ), synced AS (
+                                   UPDATE "Transaction" copy
+                                   SET counting_override = CAST(@Counting AS "CreditCounting")
+                                   FROM target, "Account" copy_account
+                                   WHERE target.identification_hash IS NOT NULL
+                                     AND copy_account.identification_hash = target.identification_hash
+                                     AND copy.account_id = copy_account.id
+                                     AND copy.external_id = target.external_id
+                                     AND copy.id <> target.id
+                                     AND EXISTS (
+                                         SELECT 1
+                                         FROM "AccountSharing" s
+                                         INNER JOIN "Account" shared
+                                             ON shared.id = s.account_id
+                                         INNER JOIN "Partnership" p
+                                             ON p.id = s.partnership_id
+                                         WHERE shared.identification_hash = target.identification_hash
+                                           AND s.status = 'ACCEPTED'
+                                           AND p.status = 'ACCEPTED'
+                                           AND (p.inviter_id = @UserId OR p.invitee_id = @UserId)
+                                     )
+                                   RETURNING copy.id
+                               )
+                               SELECT count(*) FROM target;
                                """;
 
             using var connection = _connectionFactory.Create();
-            return await connection.ExecuteAsync(sql, new
+            return await connection.ExecuteScalarAsync<long>(sql, new
             {
                 UserId = userId,
                 TransactionId = transactionId,

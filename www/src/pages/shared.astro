@@ -1,0 +1,18 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+import SideMenu from "../components/SideMenu";
+import { SharedEconomy } from "../components/SharedEconomy";
+
+import "../styles/calendar.css";
+import "../styles/categories.css";
+import "../styles/accounts.css";
+import "../styles/economy.css";
+
+export const prerender = false;
+---
+
+<Layout title="Shared economy">
+    <SideMenu currentPath={Astro.url.pathname} />
+    <SharedEconomy />
+</Layout>

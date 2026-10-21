@@ -1,8 +1,17 @@
-import { component$, useId, useSignal, useStyles$ } from "@builder.io/qwik";
+import {
+  $,
+  component$,
+  useId,
+  useOnWindow,
+  useSignal,
+  useStyles$,
+  useVisibleTask$,
+} from "@builder.io/qwik";
 
 import { Icon } from "./Icon";
 import { NewTransaction } from "./NewTransaction";
 import { openManualTransaction } from "../utils/manual";
+import { inboxChangedEvent } from "../utils/sharing";
 
 interface MenuItem {
   label: string;
@@ -34,12 +43,45 @@ const items: MenuItem[] = [
     icon: "tag",
     hint: "Sort and train your categories",
   },
+  {
+    label: "Shared economy",
+    href: "/shared",
+    icon: "users",
+    hint: "Partner, shared accounts and inbox",
+  },
 ];
 
 export default component$<SideMenuProps>((props) => {
   const dialog = useSignal<HTMLDialogElement>();
   const isOpen = useSignal(false);
+  const inbox = useSignal(0);
   const id = useId();
+
+  const loadInbox = $(async () => {
+    try {
+      const response = await fetch("/api/sharing/inbox-count", {
+        headers: { Accept: "application/json" },
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      if (response.ok) {
+        inbox.value =
+          ((await response.json()) as { count?: number }).count ?? 0;
+      }
+    } catch {
+      inbox.value = 0;
+    }
+  });
+
+  useVisibleTask$(
+    async () => {
+      await loadInbox();
+    },
+    { strategy: "document-idle" },
+  );
+
+  useOnWindow(inboxChangedEvent, loadInbox);
 
   useStyles$(`
     .sm-trigger, .sm-panel {
@@ -71,6 +113,20 @@ export default component$<SideMenuProps>((props) => {
       transition: background 150ms ease, border-color 150ms ease;
     }
     .sm-trigger:hover { background: #1d2330; border-color: #3a4252; }
+    .sm-badge {
+      display: inline-grid;
+      place-items: center;
+      min-width: 20px;
+      height: 20px;
+      margin-left: 6px;
+      padding: 0 6px;
+      border-radius: 999px;
+      background: #c1d8b6;
+      color: #11151d;
+      font-size: 11.5px;
+      font-weight: 700;
+      vertical-align: 1px;
+    }
     .sm-panel {
       position: fixed;
       inset: 0 auto 0 0;
@@ -277,6 +333,14 @@ export default component$<SideMenuProps>((props) => {
           <path d="M4 7h16M4 12h11M4 17h16" />
         </svg>
         Menu
+        {inbox.value > 0 && (
+          <span
+            class="sm-badge"
+            aria-label={`${inbox.value} new in your inbox`}
+          >
+            {inbox.value}
+          </span>
+        )}
       </button>
 
       <dialog
@@ -374,7 +438,12 @@ export default component$<SideMenuProps>((props) => {
                       <Icon name={item.icon} />
                     </span>
                     <span class="sm-text">
-                      <span class="sm-label">{item.label}</span>
+                      <span class="sm-label">
+                        {item.label}
+                        {item.href === "/shared" && inbox.value > 0 && (
+                          <span class="sm-badge">{inbox.value}</span>
+                        )}
+                      </span>
                       <span class="sm-hint">{item.hint}</span>
                     </span>
                   </a>

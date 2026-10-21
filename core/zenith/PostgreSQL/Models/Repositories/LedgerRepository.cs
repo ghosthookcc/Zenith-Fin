@@ -24,6 +24,7 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                    a.identification_hash AS "IdentificationHash",
                                    a.iban AS "Iban",
                                    COALESCE(aa.bank_name_alias, a.name, bc.aspsp_name) AS "Name",
+                                   bc.aspsp_name AS "BankName",
                                    a.currency AS "Currency",
                                    a.role::text AS "Role",
                                    a.bank_account_type AS "BankAccountType",

@@ -394,12 +394,13 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
       <div class="section-heading">
         <div>
           <h2 id="shared-title">
-            Shared accounts{" "}
+            Account holders{" "}
             <span>{String(sharedTargets.length).padStart(2, "0")}</span>
           </h2>
           <p>
-            Connected or virtual accounts you share with someone else. Personal
-            numbers stay hidden until you choose to show them.
+            Notes on who holds an account, with personal numbers kept hidden
+            until you choose to show them. To really share an account with
+            another Zenith user, use Shared economy in the menu.
           </p>
         </div>
 
@@ -410,7 +411,7 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
             disabled={!props.shares || props.targets.length === 0}
             onClick$={() => openEditor(null, null)}
           >
-            Share an account
+            Add a holder
           </button>
         )}
       </div>
@@ -622,8 +623,8 @@ export const SharedAccounts = component$<SharedAccountsProps>((props) => {
         !editor.open && (
           <div class="overview-panel">
             <p class="cal-empty">
-              No shared accounts yet. Mark an account as shared to keep track of
-              who you share it with.
+              No holder notes yet. Add one to keep track of who else holds an
+              account.
             </p>
           </div>
         )

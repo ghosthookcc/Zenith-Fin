@@ -7,6 +7,7 @@ namespace ZenithFin.PostgreSQL.Models.Entities
         public string? IdentificationHash { get; set; }
         public string? Iban { get; set; }
         public string Name { get; set; } = "";
+        public string? BankName { get; set; }
         public string Currency { get; set; } = "";
         public string? Role { get; set; }
         public string? BankAccountType { get; set; }

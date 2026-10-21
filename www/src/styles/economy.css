@@ -1,0 +1,116 @@
+.economy-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.economy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  color: var(--cal-ink);
+}
+
+.economy-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.economy-panel-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.economy-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--cal-mint);
+  color: #11151d;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.economy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.economy-row,
+.economy-request {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cal-line);
+  border-radius: 10px;
+  font-size: 0.875rem;
+}
+
+.economy-row .cal-ai-badge {
+  margin-left: 8px;
+}
+
+.economy-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.economy-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.8125rem;
+  color: var(--cal-ink-2);
+}
+
+.economy-note svg {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.economy-form {
+  display: grid;
+  gap: 14px;
+  max-width: 460px;
+}
+
+.economy-inline {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  align-items: end;
+  max-width: 620px;
+}
+
+.economy-notice {
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .economy-panel {
+    padding: 18px 16px;
+  }
+
+  .economy-row,
+  .economy-request {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .economy-inline {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

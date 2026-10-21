@@ -24,6 +24,7 @@ model Account {
 
   manual_transactions_from ManualTransaction[] @relation("ManualTransactionFrom")
   manual_transactions_to   ManualTransaction[] @relation("ManualTransactionTo")
+  sharings                 AccountSharing[]
 
   balances           Balance[]
   transactions       Transaction[]
