@@ -1488,3 +1488,42 @@
     animation: none;
   }
 }
+
+.cal-flow-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cal-flow-title:focus-visible {
+  outline: 2px solid var(--cal-mint);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.cal-flow-badge {
+  margin-left: 0;
+  margin-right: 2px;
+  border-color: #56688a;
+  color: #b9c8e8;
+}
+
+.cal-flow-steps {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 2px;
+  padding: 0 0 0 12px;
+  border-left: 2px solid var(--cal-line);
+  list-style: none;
+}

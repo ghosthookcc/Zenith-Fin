@@ -404,6 +404,43 @@ function recurringTitle(recurring: Recurring): string {
   } so far · next around ${next}${recurring.manual ? " · marked by you" : ""}`;
 }
 
+interface TransactionFlow {
+  anchor: CalendarTransaction;
+  members: CalendarTransaction[];
+  net: number;
+  moved: number;
+}
+
+type DayItem =
+  | { kind: "single"; transaction: CalendarTransaction }
+  | { kind: "flow"; flow: TransactionFlow };
+
+function buildFlow(members: CalendarTransaction[]): TransactionFlow {
+  const ordered = [...members].sort(
+    (a, b) => a.date.localeCompare(b.date) || a.id - b.id,
+  );
+  const counted = ordered.filter((member) => flowAmount(member) !== null);
+  const anchor =
+    counted.length > 0
+      ? [...counted].sort(
+          (a, b) =>
+            Math.abs(flowAmount(b)!) - Math.abs(flowAmount(a)!) || a.id - b.id,
+        )[0]
+      : (ordered.find((member) => member.amount < 0 && !member.manual) ??
+        ordered[0]);
+  const netMinor = counted.reduce(
+    (sum, member) => sum + Math.round(flowAmount(member)! * 100),
+    0,
+  );
+
+  return {
+    anchor,
+    members: ordered,
+    net: netMinor / 100,
+    moved: Math.max(...ordered.map((member) => Math.abs(member.amount))),
+  };
+}
+
 function summarizeDays(
   transactions: CalendarTransaction[],
   currency: string,
@@ -676,6 +713,13 @@ export const TransactionCalendar = component$(() => {
     error: null,
   });
   const notice = useSignal<Notice | null>(null);
+  const openFlows = useStore<{ ids: number[] }>({ ids: [] });
+
+  const toggleFlow = $((id: number) => {
+    openFlows.ids = openFlows.ids.includes(id)
+      ? openFlows.ids.filter((open) => open !== id)
+      : [...openFlows.ids, id];
+  });
   const salaryEditor = useStore<SalaryEditor>({
     open: false,
     amount: "",
@@ -1624,6 +1668,89 @@ export const TransactionCalendar = component$(() => {
         ? today
         : `${monthPrefix}-01`;
 
+  const visibleById = new Map(
+    visible.map((transaction) => [transaction.id, transaction]),
+  );
+  const flowParent = new Map<number, number>();
+  const findFlow = (id: number): number => {
+    let root = id;
+
+    while (flowParent.has(root)) {
+      root = flowParent.get(root)!;
+    }
+
+    return root;
+  };
+
+  for (const transaction of visible) {
+    for (const partner of [
+      transaction.matchedTransactionId,
+      transaction.manual?.matchedTransactionId,
+    ]) {
+      if (partner == null || !visibleById.has(partner)) {
+        continue;
+      }
+
+      const a = findFlow(transaction.id);
+      const b = findFlow(partner);
+
+      if (a !== b) {
+        flowParent.set(Math.max(a, b), Math.min(a, b));
+      }
+    }
+  }
+
+  const flowMembers = new Map<number, CalendarTransaction[]>();
+
+  for (const transaction of visible) {
+    const root = findFlow(transaction.id);
+
+    flowMembers.set(root, [...(flowMembers.get(root) ?? []), transaction]);
+  }
+
+  const flowOf = new Map<number, TransactionFlow>();
+
+  for (const members of flowMembers.values()) {
+    if (members.length < 2) {
+      continue;
+    }
+
+    const flow = buildFlow(members);
+
+    for (const member of members) {
+      flowOf.set(member.id, flow);
+    }
+  }
+
+  const dayItems = (transactions: CalendarTransaction[]): DayItem[] => {
+    const shown = new Set<number>();
+    const ids = new Set(transactions.map((transaction) => transaction.id));
+    const items: DayItem[] = [];
+
+    for (const transaction of transactions) {
+      const flow = flowOf.get(transaction.id);
+
+      if (!flow) {
+        items.push({ kind: "single", transaction });
+        continue;
+      }
+
+      const anchorHere = ids.has(flow.anchor.id);
+
+      if (
+        shown.has(flow.anchor.id) ||
+        (anchorHere && transaction.id !== flow.anchor.id)
+      ) {
+        continue;
+      }
+
+      shown.add(flow.anchor.id);
+      items.push({ kind: "flow", flow });
+    }
+
+    return items;
+  };
+
   const detailDays = selectedDate.value
     ? [{ date: selectedDate.value, summary: days.get(selectedDate.value) }]
     : Array.from(days.entries())
@@ -1631,14 +1758,616 @@ export const TransactionCalendar = component$(() => {
         .sort(([a], [b]) => b.localeCompare(a))
         .map(([date, summary]) => ({ date, summary }));
   const detailCount = detailDays.reduce(
-    (count, day) => count + (day.summary?.transactions.length ?? 0),
+    (count, day) =>
+      count + (day.summary ? dayItems(day.summary.transactions).length : 0),
     0,
   );
+  const monthCount = dayItems(monthTransactions).length;
   const detailNet = detailDays.reduce(
     (sum, day) =>
       sum + (day.summary ? day.summary.income - day.summary.expenses : 0),
     0,
   );
+
+  const renderTransaction = (
+    transaction: CalendarTransaction,
+    asStep = false,
+  ) => {
+    const shownAmount = asStep
+      ? transaction.amount
+      : (flowAmount(transaction) ?? transaction.amount);
+    const title = transactionTitle(transaction);
+    const detail = transactionDetail(transaction, title);
+    const status = statusLabel(transaction.status);
+    const account = accountsById[transaction.accountId];
+    const manual = transaction.manual ?? null;
+    const tag = manual
+      ? addedByYou
+      : (tagsById[transaction.tagId ?? uncategorized.id] ?? uncategorized);
+    const pickerOpen = picker.id === transaction.id;
+    const rowNotice =
+      notice.value?.id === transaction.id ? notice.value.text : null;
+
+    return (
+      <li
+        key={transaction.id}
+        class={{
+          "cal-tx": true,
+          "cal-tx-open": pickerOpen,
+        }}
+        onKeyDown$={(event) => {
+          if (event.key === "Escape" && pickerOpen) {
+            closePicker(transaction.id);
+          }
+        }}
+      >
+        <button
+          type="button"
+          class="cal-tag-tile cal-tag-button"
+          style={{ "--tag-color": tag.color }}
+          data-tag-button={transaction.id}
+          title={manual ? "Show details" : "Change category"}
+          aria-label={
+            manual
+              ? `${tag.name}. Show details`
+              : `${tag.name}. Change category`
+          }
+          aria-expanded={pickerOpen}
+          aria-controls={
+            pickerOpen ? `cal-picker-${transaction.id}` : undefined
+          }
+          onClick$={() => openPicker(transaction.id)}
+        >
+          <Icon key={tag.icon} name={tag.icon} />
+        </button>
+
+        <span class="cal-tx-main">
+          <span class="cal-tx-title" title={title}>
+            {title}
+          </span>
+          {manual ? (
+            <span class="cal-tx-meta">
+              <span
+                class="cal-ai-badge cal-added-badge"
+                title="You added this transaction yourself"
+              >
+                Added by you
+              </span>
+              <span
+                class={`cal-ai-badge cal-type-badge cal-type-${transaction.effect.toLowerCase()}`}
+                title={`${typeLabel(transaction.type)} · ${effectLabel(transaction.effect)}. ${transaction.typeReason}.`}
+              >
+                {subtypeLabel(transaction.subtype)}
+              </span>
+              {" · "}
+              {manualFrom(manual)
+                ? `${manualFrom(manual)} → ${manualTo(manual)}`
+                : `To ${manualTo(manual)}`}
+            </span>
+          ) : (
+            <span class="cal-tx-meta">
+              <span
+                class="cal-account-dot"
+                style={{
+                  backgroundColor:
+                    colors[transaction.accountId] ?? inactiveAccountColor,
+                }}
+              />
+              {`${accountKind(account)} / ${accountName(account)}`}
+              {transaction.sharedBy && (
+                <span
+                  class="cal-ai-badge cal-origin-user"
+                  title={`Shared with you by ${transaction.sharedBy}`}
+                >
+                  {transaction.sharedBy.split(" ")[0]}
+                </span>
+              )}
+              {" · "}
+              {tag.name}
+              {categoryOrigin(transaction.tagSource) && (
+                <span
+                  class={`cal-ai-badge cal-origin-badge cal-origin-${(transaction.tagSource ?? "").toLowerCase()}`}
+                  title={categoryOrigin(transaction.tagSource)!.long}
+                >
+                  {categoryOrigin(transaction.tagSource)!.short}
+                </span>
+              )}
+              {transaction.shared?.status === "SHARED" && (
+                <span
+                  class="cal-ai-badge cal-origin-user"
+                  title={transaction.shared.reason}
+                >
+                  Shared
+                </span>
+              )}
+              {transaction.recurring && (
+                <span
+                  class="cal-ai-badge cal-recurring-badge"
+                  title={recurringTitle(transaction.recurring)}
+                >
+                  <Icon name="refresh" />
+                  {transaction.recurring.label}
+                </span>
+              )}
+              <span
+                class={`cal-ai-badge cal-type-badge cal-type-${transaction.effect.toLowerCase()}`}
+                title={`${typeLabel(transaction.type)} · ${effectLabel(transaction.effect)}. ${typeOrigin(transaction.typeSource)}: ${transaction.typeReason}.`}
+              >
+                {subtypeLabel(transaction.subtype)}
+              </span>
+            </span>
+          )}
+          {detail && (
+            <span class="cal-tx-detail" title={detail}>
+              {detail}
+            </span>
+          )}
+        </span>
+
+        <span class="cal-tx-side">
+          <span
+            class={{
+              "cal-tx-amount": true,
+              "cal-tx-income": shownAmount > 0,
+              "cal-tx-uncounted": !isCounted(transaction),
+              "cal-tx-void":
+                transaction.status === "CNCL" || transaction.status === "RJCT",
+            }}
+          >
+            {hidden.value
+              ? maskedAmount
+              : formatMoney(shownAmount, transaction.currency, true)}
+          </span>
+          <span
+            class={`cal-tx-effect cal-tx-effect-${transaction.effect.toLowerCase()}`}
+          >
+            {status && !transaction.counted
+              ? status
+              : status
+                ? `${effectLabel(transaction.effect)} · ${status}`
+                : effectLabel(transaction.effect)}
+          </span>
+          {!status &&
+            transaction.originalAmount != null &&
+            transaction.originalCurrency &&
+            !hidden.value && (
+              <span class="cal-tx-original">
+                {formatMoney(
+                  transaction.originalAmount,
+                  transaction.originalCurrency,
+                )}
+              </span>
+            )}
+        </span>
+
+        {pickerOpen && manual && (
+          <div
+            id={`cal-picker-${transaction.id}`}
+            class="cal-picker"
+            role="group"
+            aria-label={`Details for ${title}`}
+          >
+            <div class="cal-picker-head">
+              <span class="cal-picker-title">Added by you</span>
+              <button
+                type="button"
+                class="cal-icon-button cal-picker-close"
+                aria-label="Close"
+                onClick$={() => closePicker(transaction.id)}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+
+            <dl class="cal-manual-facts">
+              <div>
+                <dt>From</dt>
+                <dd>{manualFrom(manual) ?? "Not specified"}</dd>
+              </div>
+              <div>
+                <dt>To</dt>
+                <dd>{manualTo(manual)}</dd>
+              </div>
+              <div>
+                <dt>Counts as</dt>
+                <dd>{countingLabel(manual.counting)}</dd>
+              </div>
+            </dl>
+
+            <p class="cal-manual-note">
+              {manual.matchedTransactionId != null
+                ? "Your bank shows this payment now, so Zenith counts the bank's version and leaves this one out."
+                : manual.fromAccountId != null || manual.toAccountId != null
+                  ? "Counted until your bank shows the same payment. Then the bank's version takes over."
+                  : "None of your connected banks are involved, so this one keeps counting."}
+            </p>
+
+            {picker.error && (
+              <p class="cal-picker-error" role="alert">
+                {picker.error}
+              </p>
+            )}
+
+            <div class="cal-manual-actions">
+              <button
+                type="button"
+                class="cal-chip cal-manual-remove"
+                disabled={picker.saving}
+                onClick$={() => removeManual(manual.id)}
+              >
+                {picker.saving ? "Removing…" : "Remove transaction"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {pickerOpen && !manual && (
+          <div
+            id={`cal-picker-${transaction.id}`}
+            class="cal-picker"
+            role="group"
+            aria-label={`Edit ${title}`}
+          >
+            <div class="cal-picker-head">
+              <span class="cal-picker-title">Edit transaction</span>
+              <button
+                type="button"
+                class="cal-icon-button cal-picker-close"
+                aria-label="Close"
+                onClick$={() => closePicker(transaction.id)}
+              >
+                <Icon name="close" />
+              </button>
+            </div>
+
+            <dl class="cal-classification">
+              <div>
+                <dt>Account</dt>
+                <dd>
+                  {`${accountKind(account)} / ${accountName(account)}`}
+                  <small>
+                    {account?.creditName
+                      ? `Linked to the credit account ${account.creditName}`
+                      : account?.roleSource === "USER"
+                        ? "Account type set by you"
+                        : account?.roleSource === "BANK"
+                          ? "Account type from your bank"
+                          : "No account type set, so it is treated as an everyday account"}
+                  </small>
+                </dd>
+              </div>
+              <div>
+                <dt>Category</dt>
+                <dd>
+                  {tag.name}
+                  <small>
+                    {categoryOrigin(transaction.tagSource)?.long ??
+                      "Not sorted yet"}
+                  </small>
+                </dd>
+              </div>
+              <div>
+                <dt>Type</dt>
+                <dd>
+                  {`${typeLabel(transaction.type)} · ${subtypeLabel(transaction.subtype)}`}
+                  <small>
+                    {`${typeOrigin(transaction.typeSource)}: ${transaction.typeReason}.`}
+                  </small>
+                </dd>
+              </div>
+              <div>
+                <dt>Counts as</dt>
+                <dd>
+                  {effectLabel(transaction.effect)}
+                  <small>{effectOrigin(transaction.effectSource)}</small>
+                </dd>
+              </div>
+              {transaction.shared && (
+                <div>
+                  <dt>Shared</dt>
+                  <dd>
+                    {transaction.shared.status === "SHARED"
+                      ? `Yes, paid by ${transaction.shared.paidBy ?? "you"}`
+                      : "Not verified as shared"}
+                    <small>
+                      {transaction.shared.status === "SHARED" &&
+                      transaction.shared.myShare != null
+                        ? `${transaction.shared.reason}. Your share is ${formatMoney(transaction.shared.myShare, transaction.currency)}.`
+                        : `${transaction.shared.reason}.`}
+                    </small>
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            {transaction.shared?.status === "NOT_VERIFIED" &&
+              transaction.editable !== false && (
+                <button
+                  type="button"
+                  class="cal-chip"
+                  disabled={picker.saving}
+                  onClick$={() => proposeShare(transaction)}
+                >
+                  Share this payment with your partner from now on
+                </button>
+              )}
+
+            {transaction.editable === false ? (
+              <p class="cal-manual-note">
+                {`Shared with you by ${transaction.sharedBy ?? "your partner"}. Only they can change how it is sorted and counted.`}
+              </p>
+            ) : (
+              <>
+                <div class="cal-picker-section-head">
+                  <span>Category</span>
+                  {transaction.tagSource === "USER" && (
+                    <button
+                      type="button"
+                      class="cal-chip"
+                      disabled={picker.saving}
+                      onClick$={() => resetCategory(transaction)}
+                    >
+                      Back to automatic
+                    </button>
+                  )}
+                </div>
+
+                {transaction.description && (
+                  <label class="cal-picker-remember">
+                    <input
+                      type="checkbox"
+                      checked={picker.remember}
+                      onChange$={(_, element) => {
+                        picker.remember = element.checked;
+                      }}
+                    />
+                    <span>
+                      {`Remember for “${title}”`}
+                      <small>
+                        Similar transactions move too, now and later, and the AI
+                        learns from it.
+                      </small>
+                    </span>
+                  </label>
+                )}
+
+                <div class="cal-picker-options">
+                  {tags.map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      class="cal-picker-option"
+                      aria-pressed={option.id === transaction.tagId}
+                      disabled={picker.saving}
+                      onClick$={() => changeTag(transaction, option)}
+                    >
+                      <span
+                        class="cal-picker-swatch"
+                        style={{
+                          "--tag-color": option.color,
+                        }}
+                        aria-hidden="true"
+                      >
+                        <Icon name={option.icon} />
+                      </span>
+                      <span class="cal-picker-name">{option.name}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {transaction.description && (
+                  <label class="cal-picker-remember cal-picker-recurring">
+                    <input
+                      type="checkbox"
+                      checked={!!transaction.recurring}
+                      disabled={picker.saving}
+                      onChange$={(_, element) =>
+                        setRecurring(transaction, element.checked)
+                      }
+                    />
+                    <span>
+                      Recurring payment
+                      <small>
+                        {transaction.recurring
+                          ? `${transaction.recurring.label} · ${
+                              transaction.recurring.manual
+                                ? "marked by you"
+                                : "found from your history"
+                            }`
+                          : "Tick it to follow these payments as recurring. With only one so far, Zenith assumes it repeats monthly."}
+                      </small>
+                    </span>
+                  </label>
+                )}
+
+                <div
+                  class="cal-picker-counting"
+                  role="group"
+                  aria-labelledby={`cal-type-${transaction.id}`}
+                >
+                  <span
+                    id={`cal-type-${transaction.id}`}
+                    class="cal-picker-counting-label"
+                  >
+                    Type
+                    <small>
+                      {transaction.typeOverride
+                        ? `Set by you. Automatic would make it ${subtypeLabel(transaction.automaticSubtype).toLowerCase()} (${typeLabel(transaction.automaticType).toLowerCase()}): ${transaction.automaticReason}.`
+                        : `Automatic: ${transaction.automaticReason}.`}
+                    </small>
+                  </span>
+                  <div class="cal-picker-counting-options">
+                    <button
+                      type="button"
+                      class="cal-picker-counting-option"
+                      aria-pressed={!transaction.typeOverride}
+                      disabled={picker.saving}
+                      onClick$={() => setType(transaction, null)}
+                    >
+                      {`Automatic (${typeLabel(transaction.automaticType)})`}
+                    </button>
+                    {typeChoices.map((choice) => (
+                      <button
+                        key={choice.value}
+                        type="button"
+                        class="cal-picker-counting-option"
+                        aria-pressed={transaction.typeOverride === choice.value}
+                        disabled={picker.saving}
+                        onClick$={() => setType(transaction, choice.value)}
+                      >
+                        {choice.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div
+                  class="cal-picker-counting"
+                  role="group"
+                  aria-labelledby={`cal-counting-${transaction.id}`}
+                >
+                  <span
+                    id={`cal-counting-${transaction.id}`}
+                    class="cal-picker-counting-label"
+                  >
+                    Counts as
+                    <small>
+                      {transaction.counting
+                        ? `Set by you. Automatic would count it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`
+                        : `Automatic counts it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`}
+                    </small>
+                  </span>
+                  <div class="cal-picker-counting-options">
+                    {manualCountingChoices.map((choice) => (
+                      <button
+                        key={choice.label}
+                        type="button"
+                        class="cal-picker-counting-option"
+                        aria-pressed={
+                          (transaction.counting ?? null) === choice.value
+                        }
+                        disabled={picker.saving}
+                        onClick$={() => setCounting(transaction, choice.value)}
+                      >
+                        {choice.value === null
+                          ? `Automatic (${effectLabel(transaction.typeEffect)})`
+                          : choice.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {picker.error && (
+              <p class="cal-picker-error" role="alert">
+                {picker.error}
+              </p>
+            )}
+          </div>
+        )}
+
+        {rowNotice && (
+          <p class="cal-tx-notice">
+            <Icon name="check" />
+            {rowNotice}
+          </p>
+        )}
+      </li>
+    );
+  };
+
+  const renderFlow = (flow: TransactionFlow) => {
+    const anchor = flow.anchor;
+    const open = openFlows.ids.includes(anchor.id);
+    const tag = anchor.manual
+      ? addedByYou
+      : (tagsById[anchor.tagId ?? uncategorized.id] ?? uncategorized);
+    const title = transactionTitle(anchor);
+    const source = flow.members.find(
+      (member) => member.amount < 0 && !member.manual,
+    );
+    const target = flow.members.find(
+      (member) => member.amount > 0 && !member.manual,
+    );
+    const route =
+      source && target
+        ? `${accountName(accountsById[source.accountId])} → ${accountName(accountsById[target.accountId])}`
+        : flow.members.some((member) => member.manual)
+          ? "your own entry, matched by your bank"
+          : accountName(accountsById[anchor.accountId]);
+    const effect = flow.net < 0 ? "OUT" : flow.net > 0 ? "IN" : "NEUTRAL";
+
+    return (
+      <li
+        key={`flow-${anchor.id}`}
+        class={{ "cal-tx": true, "cal-flow": true, "cal-flow-open": open }}
+      >
+        <button
+          type="button"
+          class="cal-tag-tile cal-tag-button"
+          style={{ "--tag-color": tag.color }}
+          aria-expanded={open}
+          aria-label={`${title}. ${open ? "Hide" : "Show"} all ${flow.members.length} steps`}
+          title={open ? "Hide the steps" : "Show every step"}
+          onClick$={() => toggleFlow(anchor.id)}
+        >
+          <Icon key="transfer" name="transfer" />
+        </button>
+
+        <span class="cal-tx-main">
+          <button
+            type="button"
+            class="cal-flow-title"
+            aria-expanded={open}
+            onClick$={() => toggleFlow(anchor.id)}
+          >
+            <span class="cal-tx-title" title={title}>
+              {title}
+            </span>
+            <span class="cal-tx-meta">
+              <span class="cal-ai-badge cal-flow-badge">
+                {`${flow.members.length} steps`}
+              </span>
+              {` ${route} · ${tag.name}`}
+              <span
+                class={`cal-ai-badge cal-type-badge cal-type-${effect.toLowerCase()}`}
+              >
+                {subtypeLabel(anchor.subtype)}
+              </span>
+            </span>
+          </button>
+        </span>
+
+        <span class="cal-tx-side">
+          <span
+            class={{
+              "cal-tx-amount": true,
+              "cal-tx-income": flow.net > 0,
+              "cal-tx-uncounted": flow.net === 0,
+            }}
+          >
+            {hidden.value
+              ? maskedAmount
+              : formatMoney(
+                  flow.net !== 0 ? flow.net : flow.moved,
+                  anchor.currency,
+                  flow.net !== 0,
+                )}
+          </span>
+          <span class={`cal-tx-effect cal-tx-effect-${effect.toLowerCase()}`}>
+            {effectLabel(effect)}
+          </span>
+        </span>
+
+        {open && (
+          <ul class="cal-flow-steps" aria-label={`Steps of ${title}`}>
+            {flow.members.map((member) => renderTransaction(member, true))}
+          </ul>
+        )}
+      </li>
+    );
+  };
 
   const neverSynced = accounts.every(
     (account) => !account.transactionsSyncedAt,
@@ -1892,8 +2621,7 @@ export const TransactionCalendar = component$(() => {
           </div>
 
           <span class="soft-badge cal-count">
-            {monthTransactions.length}{" "}
-            {monthTransactions.length === 1 ? "transaction" : "transactions"}
+            {monthCount} {monthCount === 1 ? "transaction" : "transactions"}
           </span>
         </div>
 
@@ -2226,585 +2954,11 @@ export const TransactionCalendar = component$(() => {
                       )}
 
                       <ul class="cal-tx-list">
-                        {summary.transactions.map((transaction) => {
-                          const title = transactionTitle(transaction);
-                          const detail = transactionDetail(transaction, title);
-                          const status = statusLabel(transaction.status);
-                          const account = accountsById[transaction.accountId];
-                          const manual = transaction.manual ?? null;
-                          const tag = manual
-                            ? addedByYou
-                            : (tagsById[
-                                transaction.tagId ?? uncategorized.id
-                              ] ?? uncategorized);
-                          const pickerOpen = picker.id === transaction.id;
-                          const rowNotice =
-                            notice.value?.id === transaction.id
-                              ? notice.value.text
-                              : null;
-
-                          return (
-                            <li
-                              key={transaction.id}
-                              class={{
-                                "cal-tx": true,
-                                "cal-tx-open": pickerOpen,
-                              }}
-                              onKeyDown$={(event) => {
-                                if (event.key === "Escape" && pickerOpen) {
-                                  closePicker(transaction.id);
-                                }
-                              }}
-                            >
-                              <button
-                                type="button"
-                                class="cal-tag-tile cal-tag-button"
-                                style={{ "--tag-color": tag.color }}
-                                data-tag-button={transaction.id}
-                                title={
-                                  manual ? "Show details" : "Change category"
-                                }
-                                aria-label={
-                                  manual
-                                    ? `${tag.name}. Show details`
-                                    : `${tag.name}. Change category`
-                                }
-                                aria-expanded={pickerOpen}
-                                aria-controls={
-                                  pickerOpen
-                                    ? `cal-picker-${transaction.id}`
-                                    : undefined
-                                }
-                                onClick$={() => openPicker(transaction.id)}
-                              >
-                                <Icon key={tag.icon} name={tag.icon} />
-                              </button>
-
-                              <span class="cal-tx-main">
-                                <span class="cal-tx-title" title={title}>
-                                  {title}
-                                </span>
-                                {manual ? (
-                                  <span class="cal-tx-meta">
-                                    <span
-                                      class="cal-ai-badge cal-added-badge"
-                                      title="You added this transaction yourself"
-                                    >
-                                      Added by you
-                                    </span>
-                                    <span
-                                      class={`cal-ai-badge cal-type-badge cal-type-${transaction.effect.toLowerCase()}`}
-                                      title={`${typeLabel(transaction.type)} · ${effectLabel(transaction.effect)}. ${transaction.typeReason}.`}
-                                    >
-                                      {subtypeLabel(transaction.subtype)}
-                                    </span>
-                                    {" · "}
-                                    {manualFrom(manual)
-                                      ? `${manualFrom(manual)} → ${manualTo(manual)}`
-                                      : `To ${manualTo(manual)}`}
-                                  </span>
-                                ) : (
-                                  <span class="cal-tx-meta">
-                                    <span
-                                      class="cal-account-dot"
-                                      style={{
-                                        backgroundColor:
-                                          colors[transaction.accountId] ??
-                                          inactiveAccountColor,
-                                      }}
-                                    />
-                                    {`${accountKind(account)} / ${accountName(account)}`}
-                                    {transaction.sharedBy && (
-                                      <span
-                                        class="cal-ai-badge cal-origin-user"
-                                        title={`Shared with you by ${transaction.sharedBy}`}
-                                      >
-                                        {transaction.sharedBy.split(" ")[0]}
-                                      </span>
-                                    )}
-                                    {" · "}
-                                    {tag.name}
-                                    {categoryOrigin(transaction.tagSource) && (
-                                      <span
-                                        class={`cal-ai-badge cal-origin-badge cal-origin-${(transaction.tagSource ?? "").toLowerCase()}`}
-                                        title={
-                                          categoryOrigin(transaction.tagSource)!
-                                            .long
-                                        }
-                                      >
-                                        {
-                                          categoryOrigin(transaction.tagSource)!
-                                            .short
-                                        }
-                                      </span>
-                                    )}
-                                    {transaction.shared?.status ===
-                                      "SHARED" && (
-                                      <span
-                                        class="cal-ai-badge cal-origin-user"
-                                        title={transaction.shared.reason}
-                                      >
-                                        Shared
-                                      </span>
-                                    )}
-                                    {transaction.recurring && (
-                                      <span
-                                        class="cal-ai-badge cal-recurring-badge"
-                                        title={recurringTitle(
-                                          transaction.recurring,
-                                        )}
-                                      >
-                                        <Icon name="refresh" />
-                                        {transaction.recurring.label}
-                                      </span>
-                                    )}
-                                    <span
-                                      class={`cal-ai-badge cal-type-badge cal-type-${transaction.effect.toLowerCase()}`}
-                                      title={`${typeLabel(transaction.type)} · ${effectLabel(transaction.effect)}. ${typeOrigin(transaction.typeSource)}: ${transaction.typeReason}.`}
-                                    >
-                                      {subtypeLabel(transaction.subtype)}
-                                    </span>
-                                  </span>
-                                )}
-                                {detail && (
-                                  <span class="cal-tx-detail" title={detail}>
-                                    {detail}
-                                  </span>
-                                )}
-                              </span>
-
-                              <span class="cal-tx-side">
-                                <span
-                                  class={{
-                                    "cal-tx-amount": true,
-                                    "cal-tx-income": transaction.amount > 0,
-                                    "cal-tx-uncounted": !isCounted(transaction),
-                                    "cal-tx-void":
-                                      transaction.status === "CNCL" ||
-                                      transaction.status === "RJCT",
-                                  }}
-                                >
-                                  {hidden.value
-                                    ? maskedAmount
-                                    : formatMoney(
-                                        transaction.amount,
-                                        transaction.currency,
-                                        true,
-                                      )}
-                                </span>
-                                <span
-                                  class={`cal-tx-effect cal-tx-effect-${transaction.effect.toLowerCase()}`}
-                                >
-                                  {status && !transaction.counted
-                                    ? status
-                                    : status
-                                      ? `${effectLabel(transaction.effect)} · ${status}`
-                                      : effectLabel(transaction.effect)}
-                                </span>
-                                {!status &&
-                                  transaction.originalAmount != null &&
-                                  transaction.originalCurrency &&
-                                  !hidden.value && (
-                                    <span class="cal-tx-original">
-                                      {formatMoney(
-                                        transaction.originalAmount,
-                                        transaction.originalCurrency,
-                                      )}
-                                    </span>
-                                  )}
-                              </span>
-
-                              {pickerOpen && manual && (
-                                <div
-                                  id={`cal-picker-${transaction.id}`}
-                                  class="cal-picker"
-                                  role="group"
-                                  aria-label={`Details for ${title}`}
-                                >
-                                  <div class="cal-picker-head">
-                                    <span class="cal-picker-title">
-                                      Added by you
-                                    </span>
-                                    <button
-                                      type="button"
-                                      class="cal-icon-button cal-picker-close"
-                                      aria-label="Close"
-                                      onClick$={() =>
-                                        closePicker(transaction.id)
-                                      }
-                                    >
-                                      <Icon name="close" />
-                                    </button>
-                                  </div>
-
-                                  <dl class="cal-manual-facts">
-                                    <div>
-                                      <dt>From</dt>
-                                      <dd>
-                                        {manualFrom(manual) ?? "Not specified"}
-                                      </dd>
-                                    </div>
-                                    <div>
-                                      <dt>To</dt>
-                                      <dd>{manualTo(manual)}</dd>
-                                    </div>
-                                    <div>
-                                      <dt>Counts as</dt>
-                                      <dd>{countingLabel(manual.counting)}</dd>
-                                    </div>
-                                  </dl>
-
-                                  <p class="cal-manual-note">
-                                    {manual.matchedTransactionId != null
-                                      ? "Your bank shows this payment now, so Zenith counts the bank's version and leaves this one out."
-                                      : manual.fromAccountId != null ||
-                                          manual.toAccountId != null
-                                        ? "Counted until your bank shows the same payment. Then the bank's version takes over."
-                                        : "None of your connected banks are involved, so this one keeps counting."}
-                                  </p>
-
-                                  {picker.error && (
-                                    <p class="cal-picker-error" role="alert">
-                                      {picker.error}
-                                    </p>
-                                  )}
-
-                                  <div class="cal-manual-actions">
-                                    <button
-                                      type="button"
-                                      class="cal-chip cal-manual-remove"
-                                      disabled={picker.saving}
-                                      onClick$={() => removeManual(manual.id)}
-                                    >
-                                      {picker.saving
-                                        ? "Removing…"
-                                        : "Remove transaction"}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-
-                              {pickerOpen && !manual && (
-                                <div
-                                  id={`cal-picker-${transaction.id}`}
-                                  class="cal-picker"
-                                  role="group"
-                                  aria-label={`Edit ${title}`}
-                                >
-                                  <div class="cal-picker-head">
-                                    <span class="cal-picker-title">
-                                      Edit transaction
-                                    </span>
-                                    <button
-                                      type="button"
-                                      class="cal-icon-button cal-picker-close"
-                                      aria-label="Close"
-                                      onClick$={() =>
-                                        closePicker(transaction.id)
-                                      }
-                                    >
-                                      <Icon name="close" />
-                                    </button>
-                                  </div>
-
-                                  <dl class="cal-classification">
-                                    <div>
-                                      <dt>Account</dt>
-                                      <dd>
-                                        {`${accountKind(account)} / ${accountName(account)}`}
-                                        <small>
-                                          {account?.creditName
-                                            ? `Linked to the credit account ${account.creditName}`
-                                            : account?.roleSource === "USER"
-                                              ? "Account type set by you"
-                                              : account?.roleSource === "BANK"
-                                                ? "Account type from your bank"
-                                                : "No account type set, so it is treated as an everyday account"}
-                                        </small>
-                                      </dd>
-                                    </div>
-                                    <div>
-                                      <dt>Category</dt>
-                                      <dd>
-                                        {tag.name}
-                                        <small>
-                                          {categoryOrigin(transaction.tagSource)
-                                            ?.long ?? "Not sorted yet"}
-                                        </small>
-                                      </dd>
-                                    </div>
-                                    <div>
-                                      <dt>Type</dt>
-                                      <dd>
-                                        {`${typeLabel(transaction.type)} · ${subtypeLabel(transaction.subtype)}`}
-                                        <small>
-                                          {`${typeOrigin(transaction.typeSource)}: ${transaction.typeReason}.`}
-                                        </small>
-                                      </dd>
-                                    </div>
-                                    <div>
-                                      <dt>Counts as</dt>
-                                      <dd>
-                                        {effectLabel(transaction.effect)}
-                                        <small>
-                                          {effectOrigin(
-                                            transaction.effectSource,
-                                          )}
-                                        </small>
-                                      </dd>
-                                    </div>
-                                    {transaction.shared && (
-                                      <div>
-                                        <dt>Shared</dt>
-                                        <dd>
-                                          {transaction.shared.status ===
-                                          "SHARED"
-                                            ? `Yes, paid by ${transaction.shared.paidBy ?? "you"}`
-                                            : "Not verified as shared"}
-                                          <small>
-                                            {transaction.shared.status ===
-                                              "SHARED" &&
-                                            transaction.shared.myShare != null
-                                              ? `${transaction.shared.reason}. Your share is ${formatMoney(transaction.shared.myShare, transaction.currency)}.`
-                                              : `${transaction.shared.reason}.`}
-                                          </small>
-                                        </dd>
-                                      </div>
-                                    )}
-                                  </dl>
-
-                                  {transaction.shared?.status ===
-                                    "NOT_VERIFIED" &&
-                                    transaction.editable !== false && (
-                                      <button
-                                        type="button"
-                                        class="cal-chip"
-                                        disabled={picker.saving}
-                                        onClick$={() =>
-                                          proposeShare(transaction)
-                                        }
-                                      >
-                                        Share this payment with your partner
-                                        from now on
-                                      </button>
-                                    )}
-
-                                  {transaction.editable === false ? (
-                                    <p class="cal-manual-note">
-                                      {`Shared with you by ${transaction.sharedBy ?? "your partner"}. Only they can change how it is sorted and counted.`}
-                                    </p>
-                                  ) : (
-                                    <>
-                                      <div class="cal-picker-section-head">
-                                        <span>Category</span>
-                                        {transaction.tagSource === "USER" && (
-                                          <button
-                                            type="button"
-                                            class="cal-chip"
-                                            disabled={picker.saving}
-                                            onClick$={() =>
-                                              resetCategory(transaction)
-                                            }
-                                          >
-                                            Back to automatic
-                                          </button>
-                                        )}
-                                      </div>
-
-                                      {transaction.description && (
-                                        <label class="cal-picker-remember">
-                                          <input
-                                            type="checkbox"
-                                            checked={picker.remember}
-                                            onChange$={(_, element) => {
-                                              picker.remember = element.checked;
-                                            }}
-                                          />
-                                          <span>
-                                            {`Remember for “${title}”`}
-                                            <small>
-                                              Similar transactions move too, now
-                                              and later, and the AI learns from
-                                              it.
-                                            </small>
-                                          </span>
-                                        </label>
-                                      )}
-
-                                      <div class="cal-picker-options">
-                                        {tags.map((option) => (
-                                          <button
-                                            key={option.id}
-                                            type="button"
-                                            class="cal-picker-option"
-                                            aria-pressed={
-                                              option.id === transaction.tagId
-                                            }
-                                            disabled={picker.saving}
-                                            onClick$={() =>
-                                              changeTag(transaction, option)
-                                            }
-                                          >
-                                            <span
-                                              class="cal-picker-swatch"
-                                              style={{
-                                                "--tag-color": option.color,
-                                              }}
-                                              aria-hidden="true"
-                                            >
-                                              <Icon name={option.icon} />
-                                            </span>
-                                            <span class="cal-picker-name">
-                                              {option.name}
-                                            </span>
-                                          </button>
-                                        ))}
-                                      </div>
-
-                                      {transaction.description && (
-                                        <label class="cal-picker-remember cal-picker-recurring">
-                                          <input
-                                            type="checkbox"
-                                            checked={!!transaction.recurring}
-                                            disabled={picker.saving}
-                                            onChange$={(_, element) =>
-                                              setRecurring(
-                                                transaction,
-                                                element.checked,
-                                              )
-                                            }
-                                          />
-                                          <span>
-                                            Recurring payment
-                                            <small>
-                                              {transaction.recurring
-                                                ? `${transaction.recurring.label} · ${
-                                                    transaction.recurring.manual
-                                                      ? "marked by you"
-                                                      : "found from your history"
-                                                  }`
-                                                : "Tick it to follow these payments as recurring. With only one so far, Zenith assumes it repeats monthly."}
-                                            </small>
-                                          </span>
-                                        </label>
-                                      )}
-
-                                      <div
-                                        class="cal-picker-counting"
-                                        role="group"
-                                        aria-labelledby={`cal-type-${transaction.id}`}
-                                      >
-                                        <span
-                                          id={`cal-type-${transaction.id}`}
-                                          class="cal-picker-counting-label"
-                                        >
-                                          Type
-                                          <small>
-                                            {transaction.typeOverride
-                                              ? `Set by you. Automatic would make it ${subtypeLabel(transaction.automaticSubtype).toLowerCase()} (${typeLabel(transaction.automaticType).toLowerCase()}): ${transaction.automaticReason}.`
-                                              : `Automatic: ${transaction.automaticReason}.`}
-                                          </small>
-                                        </span>
-                                        <div class="cal-picker-counting-options">
-                                          <button
-                                            type="button"
-                                            class="cal-picker-counting-option"
-                                            aria-pressed={
-                                              !transaction.typeOverride
-                                            }
-                                            disabled={picker.saving}
-                                            onClick$={() =>
-                                              setType(transaction, null)
-                                            }
-                                          >
-                                            {`Automatic (${typeLabel(transaction.automaticType)})`}
-                                          </button>
-                                          {typeChoices.map((choice) => (
-                                            <button
-                                              key={choice.value}
-                                              type="button"
-                                              class="cal-picker-counting-option"
-                                              aria-pressed={
-                                                transaction.typeOverride ===
-                                                choice.value
-                                              }
-                                              disabled={picker.saving}
-                                              onClick$={() =>
-                                                setType(
-                                                  transaction,
-                                                  choice.value,
-                                                )
-                                              }
-                                            >
-                                              {choice.label}
-                                            </button>
-                                          ))}
-                                        </div>
-                                      </div>
-
-                                      <div
-                                        class="cal-picker-counting"
-                                        role="group"
-                                        aria-labelledby={`cal-counting-${transaction.id}`}
-                                      >
-                                        <span
-                                          id={`cal-counting-${transaction.id}`}
-                                          class="cal-picker-counting-label"
-                                        >
-                                          Counts as
-                                          <small>
-                                            {transaction.counting
-                                              ? `Set by you. Automatic would count it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`
-                                              : `Automatic counts it as ${effectLabel(transaction.typeEffect).toLowerCase()}, from its type (${typeLabel(transaction.type).toLowerCase()}).`}
-                                          </small>
-                                        </span>
-                                        <div class="cal-picker-counting-options">
-                                          {manualCountingChoices.map(
-                                            (choice) => (
-                                              <button
-                                                key={choice.label}
-                                                type="button"
-                                                class="cal-picker-counting-option"
-                                                aria-pressed={
-                                                  (transaction.counting ??
-                                                    null) === choice.value
-                                                }
-                                                disabled={picker.saving}
-                                                onClick$={() =>
-                                                  setCounting(
-                                                    transaction,
-                                                    choice.value,
-                                                  )
-                                                }
-                                              >
-                                                {choice.value === null
-                                                  ? `Automatic (${effectLabel(transaction.typeEffect)})`
-                                                  : choice.label}
-                                              </button>
-                                            ),
-                                          )}
-                                        </div>
-                                      </div>
-                                    </>
-                                  )}
-
-                                  {picker.error && (
-                                    <p class="cal-picker-error" role="alert">
-                                      {picker.error}
-                                    </p>
-                                  )}
-                                </div>
-                              )}
-
-                              {rowNotice && (
-                                <p class="cal-tx-notice">
-                                  <Icon name="check" />
-                                  {rowNotice}
-                                </p>
-                              )}
-                            </li>
-                          );
-                        })}
+                        {dayItems(summary.transactions).map((item) =>
+                          item.kind === "flow"
+                            ? renderFlow(item.flow)
+                            : renderTransaction(item.transaction),
+                        )}
                       </ul>
                     </section>
                   ) : null,
