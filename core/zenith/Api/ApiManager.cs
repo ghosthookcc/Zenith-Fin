@@ -130,25 +130,6 @@ namespace ZenithFin.Api
             _app.UseAuthentication();
             _app.UseAuthorization();
 
-            _app.Use(async (context, next) =>
-            {
-                Console.WriteLine("=== Incoming Request ===");
-                Console.WriteLine($"{context.Request.Method} {context.Request.Path}");
-                Console.WriteLine("Headers:");
-                foreach (var header in context.Request.Headers)
-                {
-                    Console.WriteLine($"{header.Key}: {header.Value}");
-                }
-                Console.WriteLine("Cookies:");
-                foreach (var cookie in context.Request.Cookies)
-                {
-                    Console.WriteLine($"{cookie.Key}: {cookie.Value}");
-                }
-                Console.WriteLine("=======================");
-
-                await next();
-            });
-
             _app.MapControllers();
 
             await _app!.RunAsync();
