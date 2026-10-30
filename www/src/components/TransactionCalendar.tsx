@@ -13,6 +13,7 @@ import {
   type CategoryBreakdownRow,
 } from "./CategoryBreakdown";
 import { Icon } from "./Icon";
+import { TransactionExport } from "./TransactionExport";
 import { accountColors } from "../utils/accounts";
 import {
   countingLabel,
@@ -2424,6 +2425,11 @@ export const TransactionCalendar = component$(() => {
             <Icon name="plus" />
             New transaction
           </button>
+
+          <TransactionExport
+            year={viewYear.value}
+            month={viewMonth.value + 1}
+          />
         </div>
       </section>
 

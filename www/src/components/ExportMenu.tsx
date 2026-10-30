@@ -11,7 +11,7 @@ export const csvFormats = [
   {
     value: "standard",
     label: "Standard CSV",
-    hint: "Commas and decimal points, for Google Sheets, Numbers, Python and R",
+    hint: "Commas and decimal points, for LibreOffice, Google Sheets, Numbers, Python and R",
   },
 ];
 

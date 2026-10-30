@@ -22,6 +22,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                              IReadOnlyList<ManualTransactionDto.ManualTransaction> ManualTransactions,
                                              IReadOnlyList<LedgerEntry> Entries);
 
+    public sealed record TransactionsExportInput(DateOnly From,
+                                                 DateOnly To,
+                                                 IReadOnlyList<TransactionDto.TransactionsResponse> Months);
+
     public sealed class ExportService
     {
         private readonly UserRepository _userRepository;
@@ -32,6 +36,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly VirtualAccountService _virtualAccountService;
         private readonly ManualTransactionService _manualTransactionService;
         private readonly LedgerService _ledgerService;
+        private readonly TransactionService _transactionService;
 
         private const int AverageMonths = 12;
 
@@ -50,6 +55,49 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private static readonly string[] BookedCodes = { "CLBD", "ITBD", "OPBD", "PRCD" };
         private static readonly string[] AvailableCodes = { "ITAV", "CLAV", "FWAV", "OPAV" };
+
+        private static readonly CsvColumn<TransactionLine>[] TransactionColumns =
+        {
+            new("Date", line => CsvCell.Date(line.Date)),
+            new("Year", line => CsvCell.Count(line.Date.Year)),
+            new("Month", line => CsvCell.Text(line.Date.ToString("yyyy-MM", CultureInfo.InvariantCulture))),
+            new("Weekday", line => CsvCell.Text(line.Date.DayOfWeek.ToString())),
+            new("Booking date", line => CsvCell.Date(line.BookingDate)),
+            new("Value date", line => CsvCell.Date(line.ValueDate)),
+            new("Status", line => CsvCell.Text(line.Status)),
+            new("Source", line => CsvCell.Text(line.Source)),
+            new("Transaction ID", line => CsvCell.Text(line.TransactionId)),
+            new("Account ID", line => CsvCell.Count(line.AccountId)),
+            new("Account", line => CsvCell.Text(line.Account)),
+            new("Bank", line => CsvCell.Text(line.Bank)),
+            new("Account type", line => CsvCell.Text(line.AccountType)),
+            new("Shared by", line => CsvCell.Text(line.SharedBy)),
+            new("Description", line => CsvCell.Text(line.Description)),
+            new("Counterparty", line => CsvCell.Text(line.Counterparty)),
+            new("Counterparty account", line => CsvCell.Text(line.CounterpartyAccount)),
+            new("Message", line => CsvCell.Text(line.Message)),
+            new("Bank code", line => CsvCell.Text(line.BankCode)),
+            new("Amount", line => CsvCell.Number(line.Amount)),
+            new("Currency", line => CsvCell.Text(line.Currency)),
+            new("Original amount", line => CsvCell.Number(line.OriginalAmount)),
+            new("Original currency", line => CsvCell.Text(line.OriginalCurrency)),
+            new("Category", line => CsvCell.Text(line.Category)),
+            new("Category kind", line => CsvCell.Text(line.CategoryKind)),
+            new("Category set by", line => CsvCell.Text(line.CategorySetBy)),
+            new("Type", line => CsvCell.Text(line.Type)),
+            new("Subtype", line => CsvCell.Text(line.Subtype)),
+            new("Type set by", line => CsvCell.Text(line.TypeSetBy)),
+            new("Counts as", line => CsvCell.Text(line.CountsAs)),
+            new("Counted amount", line => CsvCell.Number(line.CountedAmount)),
+            new("Counting set by", line => CsvCell.Text(line.CountingSetBy)),
+            new("Recurring", line => CsvCell.Text(line.Recurring)),
+            new("Credit account", line => CsvCell.Text(line.CreditAccount)),
+            new("Virtual account", line => CsvCell.Text(line.VirtualAccount)),
+            new("Shared cost", line => CsvCell.Text(line.SharedCost)),
+            new("Your share", line => CsvCell.Number(line.YourShare)),
+            new("Paid by", line => CsvCell.Text(line.PaidBy)),
+            new("Linked transaction ID", line => CsvCell.Count(line.LinkedTransactionId))
+        };
 
         private static readonly CsvColumn<AccountLine>[] AccountColumns =
         {
@@ -112,7 +160,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                              BankingService bankingService,
                              VirtualAccountService virtualAccountService,
                              ManualTransactionService manualTransactionService,
-                             LedgerService ledgerService)
+                             LedgerService ledgerService,
+                             TransactionService transactionService)
         {
             _userRepository = userRepository;
             _exportRepository = exportRepository;
@@ -122,6 +171,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _virtualAccountService = virtualAccountService;
             _manualTransactionService = manualTransactionService;
             _ledgerService = ledgerService;
+            _transactionService = transactionService;
         }
 
         public async Task<ExportFile?> ExportAccountsAsync(string sessionId,
@@ -328,6 +378,174 @@ namespace ZenithFin.PostgreSQL.Models.Services
             }
         }
 
+        public async Task<ExportFile?> ExportTransactionsAsync(string sessionId,
+                                                               DateOnly from,
+                                                               DateOnly to,
+                                                               CsvDialect dialect)
+        {
+            TransactionDto.TransactionsResponse[]? months = await _transactionService.GetTransactionsByMonthAsync(sessionId, from, to);
+
+            return months == null ? null : BuildTransactions(new TransactionsExportInput(from, to, months), dialect);
+        }
+
+        public static ExportFile BuildTransactions(TransactionsExportInput input,
+                                                   CsvDialect dialect)
+        {
+            List<TransactionLine> lines = new();
+
+            foreach (TransactionDto.TransactionsResponse month in input.Months)
+            {
+                Dictionary<long, TransactionDto.Account> accounts = month.Accounts.GroupBy(account => account.Id)
+                                                                                  .ToDictionary(group => group.Key, group => group.First());
+                Dictionary<long, TagDto.Tag> tags = month.Tags.GroupBy(tag => tag.Id)
+                                                              .ToDictionary(group => group.Key, group => group.First());
+                Dictionary<long, string> virtualNames = month.VirtualAccounts.ToDictionary(account => account.Id, account => account.Name);
+
+                foreach (TransactionDto.Transaction transaction in month.Transactions)
+                {
+                    if (ParseDate(transaction.Date) is not DateOnly date || date < input.From || date > input.To) continue;
+
+                    TransactionDto.Account? account = accounts.GetValueOrDefault(transaction.AccountId);
+                    TagDto.Tag? tag = transaction.TagId is long tagId ? tags.GetValueOrDefault(tagId) : null;
+
+                    lines.Add(new TransactionLine
+                    {
+                        Date = date,
+                        BookingDate = ParseDate(transaction.BookingDate),
+                        ValueDate = ParseDate(transaction.ValueDate),
+                        Status = StatusLabel(transaction.Status),
+                        Source = "Bank",
+                        TransactionId = transaction.Id.ToString(CultureInfo.InvariantCulture),
+                        SortId = transaction.Id,
+                        AccountId = transaction.AccountId,
+                        Account = account?.Name ?? "Bank account",
+                        Bank = account?.BankName,
+                        AccountType = account == null ? null : RoleLabel(account.Role),
+                        SharedBy = transaction.SharedBy ?? account?.SharedBy,
+                        Description = string.IsNullOrWhiteSpace(transaction.Description)
+                            ? transaction.BankTransactionCode ?? (transaction.Amount < 0 ? "Payment" : "Deposit")
+                            : transaction.Description,
+                        Counterparty = transaction.CounterpartyName,
+                        CounterpartyAccount = transaction.CounterpartyAccount,
+                        Message = string.Join(" | ", transaction.RemittanceInformation.Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line.Trim())),
+                        BankCode = transaction.BankTransactionCode,
+                        Amount = transaction.Amount,
+                        Currency = transaction.Currency,
+                        OriginalAmount = transaction.OriginalAmount,
+                        OriginalCurrency = transaction.OriginalAmount == null ? null : transaction.OriginalCurrency,
+                        Category = tag?.Name ?? "Uncategorized",
+                        CategoryKind = tag == null ? null : CategoryKindLabel(tag.Kind),
+                        CategorySetBy = tag == null ? null : CategorySourceLabel(transaction.TagSource),
+                        Type = TypeLabel(transaction.Type),
+                        Subtype = SubtypeLabel(transaction.Subtype),
+                        TypeSetBy = TypeSourceLabel(transaction.TypeSource),
+                        CountsAs = EffectLabel(transaction.Effect),
+                        CountedAmount = transaction.CountedAmount,
+                        CountingSetBy = EffectSourceLabel(transaction.EffectSource),
+                        Recurring = transaction.Recurring?.Label,
+                        CreditAccount = account?.CreditName,
+                        VirtualAccount = transaction.VirtualAccountId is long virtualId ? virtualNames.GetValueOrDefault(virtualId) : null,
+                        SharedCost = transaction.Shared?.Status switch
+                        {
+                            "SHARED" => "Shared",
+                            "NOT_VERIFIED" => "Not verified",
+                            _ => null
+                        },
+                        YourShare = transaction.Shared?.MyShare,
+                        PaidBy = transaction.Shared?.PaidBy,
+                        LinkedTransactionId = transaction.MatchedTransactionId
+                    });
+                }
+
+                foreach (ManualTransactionDto.ManualTransaction manual in month.ManualTransactions)
+                {
+                    if (manual.MatchedTransactionId != null || ParseDate(manual.Date) is not DateOnly date || date < input.From || date > input.To) continue;
+
+                    long? accountId = manual.FromAccountId ?? manual.ToAccountId;
+                    TransactionDto.Account? account = accountId is long id ? accounts.GetValueOrDefault(id) : null;
+                    bool fromAccount = manual.FromAccountId != null;
+                    bool sending = manual.FromAccountId != null || manual.FromVirtualAccountId != null;
+                    decimal amount = manual.Counting switch
+                    {
+                        "OUT" => -manual.Amount,
+                        "IN" => manual.Amount,
+                        _ => sending ? -manual.Amount : manual.Amount
+                    };
+                    decimal counted = LedgerEngine.CountedByCounting(manual.Amount, manual.Counting);
+                    string toLabel = manual.ToName ?? manual.ToAccountNumber ?? "another account";
+                    long? virtualAccountId = account == null ? manual.FromVirtualAccountId ?? manual.ToVirtualAccountId : null;
+
+                    lines.Add(new TransactionLine
+                    {
+                        Date = date,
+                        Status = "Added by you",
+                        Source = "Manual",
+                        TransactionId = "M" + manual.Id.ToString(CultureInfo.InvariantCulture),
+                        SortId = manual.Id,
+                        AccountId = account == null ? null : accountId,
+                        Account = account?.Name,
+                        Bank = account?.BankName,
+                        AccountType = account == null ? null : RoleLabel(account.Role),
+                        SharedBy = account?.SharedBy,
+                        Description = string.IsNullOrWhiteSpace(manual.Description) ? $"To {toLabel}" : manual.Description,
+                        Counterparty = fromAccount || manual.ToAccountId == null ? manual.ToName : manual.FromName,
+                        CounterpartyAccount = fromAccount || manual.ToAccountId == null ? manual.ToAccountNumber : manual.FromAccountNumber,
+                        Amount = amount,
+                        Currency = manual.Currency,
+                        Category = "Added by you",
+                        CategorySetBy = "You",
+                        Type = manual.Counting switch
+                        {
+                            "OUT" => TypeLabel(TransactionTypes.Expense),
+                            "IN" => TypeLabel(TransactionTypes.Income),
+                            _ => TypeLabel(TransactionTypes.Transfer)
+                        },
+                        Subtype = manual.Counting switch
+                        {
+                            "OUT" => SubtypeLabel(Subtypes.Purchase),
+                            "IN" => SubtypeLabel(Subtypes.OtherIncome),
+                            _ => SubtypeLabel(Subtypes.OwnTransfer)
+                        },
+                        TypeSetBy = "You",
+                        CountsAs = EffectLabel(counted < 0 ? Effects.Out : counted > 0 ? Effects.In : Effects.Neutral),
+                        CountedAmount = counted,
+                        CountingSetBy = "You",
+                        CreditAccount = account?.CreditName,
+                        VirtualAccount = virtualAccountId is long virtualId ? virtualNames.GetValueOrDefault(virtualId) : null
+                    });
+                }
+            }
+
+            TransactionLine[] ordered = lines.OrderBy(line => line.Date)
+                                             .ThenBy(line => line.Source == "Bank" ? 0 : 1)
+                                             .ThenBy(line => line.SortId)
+                                             .ToArray();
+
+            return new ExportFile($"zenith-transactions-{PeriodName(input.From, input.To)}.csv",
+                                  Csv.Write(dialect, TransactionColumns, ordered));
+        }
+
+        public static string PeriodName(DateOnly from,
+                                        DateOnly to)
+        {
+            bool monthStart = from.Day == 1;
+            bool monthEnd = to.AddDays(1).Day == 1;
+            bool yearStart = monthStart && from.Month == 1;
+            bool yearEnd = monthEnd && to.Month == 12;
+
+            string Format(DateOnly date, string pattern) => date.ToString(pattern, CultureInfo.InvariantCulture);
+
+            if (yearStart && yearEnd)
+                return from.Year == to.Year ? Format(from, "yyyy") : $"{Format(from, "yyyy")}-to-{Format(to, "yyyy")}";
+
+            if (monthStart && monthEnd)
+                return from.Year == to.Year && from.Month == to.Month
+                    ? Format(from, "yyyy-MM")
+                    : $"{Format(from, "yyyy-MM")}-to-{Format(to, "yyyy-MM")}";
+
+            return from == to ? Format(from, "yyyy-MM-dd") : $"{Format(from, "yyyy-MM-dd")}-to-{Format(to, "yyyy-MM-dd")}";
+        }
+
         private static DateOnly? AverageFrom(DateOnly? historyStart,
                                              DateOnly averageStart,
                                              DateOnly thisMonth)
@@ -438,6 +656,114 @@ namespace ZenithFin.PostgreSQL.Models.Services
             };
         }
 
+        private static string StatusLabel(string status)
+        {
+            return status switch
+            {
+                "BOOK" => "Booked",
+                "PDNG" or "HOLD" => "Pending",
+                "SCHD" => "Scheduled",
+                "CNCL" => "Cancelled",
+                "RJCT" => "Rejected",
+                _ => status
+            };
+        }
+
+        private static string TypeLabel(string type)
+        {
+            return type switch
+            {
+                TransactionTypes.Income => "Income",
+                TransactionTypes.Expense => "Expense",
+                TransactionTypes.Transfer => "Transfer",
+                TransactionTypes.Credit => "Debt / credit",
+                TransactionTypes.Investment => "Investment",
+                _ => type
+            };
+        }
+
+        private static string SubtypeLabel(string subtype)
+        {
+            return subtype switch
+            {
+                Subtypes.Salary => "Salary & benefits",
+                Subtypes.OtherIncome => "Other money in",
+                Subtypes.Purchase => "Purchase",
+                Subtypes.CardPurchase => "Card purchase",
+                Subtypes.Refund => "Refund",
+                Subtypes.Fee => "Fee",
+                Subtypes.OwnTransfer => "Own transfer",
+                Subtypes.JointDeposit => "Into shared account",
+                Subtypes.JointWithdrawal => "From shared account",
+                Subtypes.JointInternal => "Between shared accounts",
+                Subtypes.Settlement => "Settlement",
+                Subtypes.CardPayment => "Card bill",
+                Subtypes.DebtPayment => "Debt payment",
+                Subtypes.LoanPayout => "Loan payout",
+                Subtypes.InvestmentDeposit => "Into investments",
+                Subtypes.InvestmentWithdrawal => "From investments",
+                _ => subtype
+            };
+        }
+
+        private static string TypeSourceLabel(string source)
+        {
+            return source switch
+            {
+                TypeSources.User => "You",
+                TypeSources.CreditAccount => "Credit account setup",
+                TypeSources.TransferMatch => "Matched transfer",
+                TypeSources.AccountNumber => "Known account number",
+                TypeSources.VirtualAccount => "Virtual account",
+                TypeSources.BankCode => "Bank's transfer code",
+                TypeSources.Category => "Category",
+                _ => "Direction of the money"
+            };
+        }
+
+        private static string EffectLabel(string effect)
+        {
+            return effect switch
+            {
+                Effects.In => "Money in",
+                Effects.Out => "Money out",
+                _ => "Neutral"
+            };
+        }
+
+        private static string EffectSourceLabel(string source)
+        {
+            return source switch
+            {
+                EffectSources.User => "You",
+                EffectSources.Status => "Not counted (status)",
+                EffectSources.VirtualAccount => "Virtual account setup",
+                _ => "Type"
+            };
+        }
+
+        private static string? CategorySourceLabel(string? source)
+        {
+            return source switch
+            {
+                "AI" => "AI",
+                "LEARNED" => "Learned",
+                "USER" => "You",
+                "RULE" => "Rule",
+                _ => null
+            };
+        }
+
+        private static string CategoryKindLabel(string kind)
+        {
+            return kind switch
+            {
+                "INCOME" => "Income",
+                "TRANSFER" => "Transfer",
+                _ => "Spending"
+            };
+        }
+
         private async Task<long?> GetUserIdAsync(string sessionId)
         {
             if (!Guid.TryParse(sessionId, out Guid activeSessionId)) return null;
@@ -465,6 +791,47 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 Withdrawals += Math.Max(-moved, 0);
                 Transactions += 1;
             }
+        }
+
+        private sealed class TransactionLine
+        {
+            public DateOnly Date { get; init; }
+            public DateOnly? BookingDate { get; init; }
+            public DateOnly? ValueDate { get; init; }
+            public string Status { get; init; } = "";
+            public string Source { get; init; } = "";
+            public string TransactionId { get; init; } = "";
+            public long SortId { get; init; }
+            public long? AccountId { get; init; }
+            public string? Account { get; init; }
+            public string? Bank { get; init; }
+            public string? AccountType { get; init; }
+            public string? SharedBy { get; init; }
+            public string Description { get; init; } = "";
+            public string? Counterparty { get; init; }
+            public string? CounterpartyAccount { get; init; }
+            public string? Message { get; init; }
+            public string? BankCode { get; init; }
+            public decimal Amount { get; init; }
+            public string Currency { get; init; } = "";
+            public decimal? OriginalAmount { get; init; }
+            public string? OriginalCurrency { get; init; }
+            public string Category { get; init; } = "";
+            public string? CategoryKind { get; init; }
+            public string? CategorySetBy { get; init; }
+            public string Type { get; init; } = "";
+            public string Subtype { get; init; } = "";
+            public string TypeSetBy { get; init; } = "";
+            public string CountsAs { get; init; } = "";
+            public decimal CountedAmount { get; init; }
+            public string CountingSetBy { get; init; } = "";
+            public string? Recurring { get; init; }
+            public string? CreditAccount { get; init; }
+            public string? VirtualAccount { get; init; }
+            public string? SharedCost { get; init; }
+            public decimal? YourShare { get; init; }
+            public string? PaidBy { get; init; }
+            public long? LinkedTransactionId { get; init; }
         }
 
         private sealed class AccountLine

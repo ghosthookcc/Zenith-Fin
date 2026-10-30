@@ -71,7 +71,10 @@ namespace ZenithFin.Utility
             if (_guarded && value.Length > 0 && FormulaStarts.Contains(value[0]))
                 value = "'" + value;
 
-            return value.IndexOfAny(new[] { dialect.Delimiter, '"', '\r', '\n' }) >= 0
+            bool quoted = value.IndexOfAny(new[] { dialect.Delimiter, '"', '\r', '\n' }) >= 0 ||
+                          _guarded && value.IndexOfAny(new[] { ',', ';', '\t' }) >= 0;
+
+            return quoted
                 ? "\"" + value.Replace("\"", "\"\"") + "\""
                 : value;
         }

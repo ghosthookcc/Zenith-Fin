@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace ZenithFin.Api.Models.Dtos
 {
     public static class TransactionDto
@@ -43,6 +45,8 @@ namespace ZenithFin.Api.Models.Dtos
             public decimal CountedAmount { get; set; }
             public bool Counted { get; set; }
             public long? MatchedTransactionId { get; set; }
+            [JsonIgnore]
+            public long? VirtualAccountId { get; set; }
             public string AutomaticType { get; set; } = string.Empty;
             public string AutomaticSubtype { get; set; } = string.Empty;
             public string AutomaticReason { get; set; } = string.Empty;

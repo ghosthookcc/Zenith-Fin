@@ -80,16 +80,41 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             await CategorizeAsync(userId.Value, reviewRuleTags: false);
 
-            TransactionAccountRow[] ownAccounts = await _transactionRepository.GetAccountsForUserAsync(userId.Value);
-            TransactionAccountRow[] sharedAccounts = await _transactionRepository.GetSharedAccountsForUserAsync(userId.Value);
-            TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId.Value);
-            TransactionDto.Transaction[] transactions = await _transactionRepository.GetTransactionsForUserAsync(userId.Value,
+            return await ReadTransactionsAsync(userId.Value, from, to);
+        }
+
+        public async Task<TransactionDto.TransactionsResponse[]?> GetTransactionsByMonthAsync(string sessionId,
+                                                                                             DateOnly from,
+                                                                                             DateOnly to)
+        {
+            long? userId = await GetUserIdAsync(sessionId);
+
+            if (userId == null) return null;
+
+            await CategorizeAsync(userId.Value, reviewRuleTags: false);
+
+            List<TransactionDto.TransactionsResponse> months = new();
+
+            for (DateOnly month = new(from.Year, from.Month, 1); month <= to; month = month.AddMonths(1))
+                months.Add(await ReadTransactionsAsync(userId.Value, month, month.AddMonths(1).AddDays(-1)));
+
+            return months.ToArray();
+        }
+
+        public async Task<TransactionDto.TransactionsResponse> ReadTransactionsAsync(long userId,
+                                                                                     DateOnly from,
+                                                                                     DateOnly to)
+        {
+            TransactionAccountRow[] ownAccounts = await _transactionRepository.GetAccountsForUserAsync(userId);
+            TransactionAccountRow[] sharedAccounts = await _transactionRepository.GetSharedAccountsForUserAsync(userId);
+            TagDto.Tag[] tags = await _tagRepository.GetTagsForUserAsync(userId);
+            TransactionDto.Transaction[] transactions = await _transactionRepository.GetTransactionsForUserAsync(userId,
                                                                                                                 from,
                                                                                                                 to,
                                                                                                                 sharedAccounts.Select(account => account.Id).ToArray());
 
-            OwnerProfile owner = await _categorizationService.GetOwnerAsync(userId.Value);
-            Dictionary<CorrectionKey, RecurringSeries> recurring = await _recurringService.DetectAsync(userId.Value, owner);
+            OwnerProfile owner = await _categorizationService.GetOwnerAsync(userId);
+            Dictionary<CorrectionKey, RecurringSeries> recurring = await _recurringService.DetectAsync(userId, owner);
 
             foreach (TransactionDto.Transaction transaction in transactions)
             {
@@ -118,7 +143,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 }
             }
 
-            LedgerResult ledger = await _ledgerService.ClassifyAsync(userId.Value, from, to);
+            LedgerResult ledger = await _ledgerService.ClassifyAsync(userId, from, to);
             Dictionary<long, LedgerEntry> entries = ledger.Entries.ToDictionary(entry => entry.TransactionId);
 
             Dictionary<string, long> ownByKey = ownAccounts.GroupBy(account => LedgerService.PhysicalKey(account.Id, account.IdentificationHash, account.Iban))
@@ -138,7 +163,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     transaction.AccountId = ownAccountId;
             }
 
-            Dictionary<long, EconomyDto.SharedStatus> sharedStatuses = await _economyService.GetSharedStatusesAsync(userId.Value, from, to);
+            Dictionary<long, EconomyDto.SharedStatus> sharedStatuses = await _economyService.GetSharedStatusesAsync(userId, from, to);
 
             foreach (TransactionDto.Transaction transaction in transactions)
                 transaction.Shared = sharedStatuses.GetValueOrDefault(transaction.Id);
@@ -161,6 +186,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 transaction.CountedAmount = entry.CountedAmount;
                 transaction.Counted = entry.Counted;
                 transaction.MatchedTransactionId = entry.CounterTransactionId;
+                transaction.VirtualAccountId = entry.VirtualAccountId;
                 transaction.AutomaticType = entry.AutomaticType;
                 transaction.AutomaticSubtype = entry.AutomaticSubtype;
                 transaction.AutomaticReason = entry.AutomaticReason;
@@ -173,7 +199,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             string first = from.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             string last = to.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-            ManualTransactionDto.ManualTransaction[] manualTransactions = (await _manualTransactionService.GetManualTransactionsAsync(userId.Value))
+            ManualTransactionDto.ManualTransaction[] manualTransactions = (await _manualTransactionService.GetManualTransactionsAsync(userId))
                 .Where(transaction => string.CompareOrdinal(transaction.Date, first) >= 0 &&
                                       string.CompareOrdinal(transaction.Date, last) <= 0)
                 .ToArray();
@@ -199,9 +225,9 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     SharedBy = account.SharedBy
                 }).ToArray(),
                 Tags = tags,
-                CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId.Value),
-                ExpectedSalaries = await _expectedSalaryRepository.GetExpectedSalariesForUserAsync(userId.Value),
-                VirtualAccounts = await _virtualAccountRepository.GetVirtualAccountsForUserAsync(userId.Value),
+                CreditAccounts = await _creditAccountRepository.GetCreditAccountsForUserAsync(userId),
+                ExpectedSalaries = await _expectedSalaryRepository.GetExpectedSalariesForUserAsync(userId),
+                VirtualAccounts = await _virtualAccountRepository.GetVirtualAccountsForUserAsync(userId),
                 ManualTransactions = manualTransactions,
                 Transactions = transactions
             };
