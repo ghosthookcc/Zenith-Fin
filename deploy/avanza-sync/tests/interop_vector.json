@@ -1,0 +1,11 @@
+{
+  "testPrivateKey": "QA7As/8nIWw6Q/HdNzWj95vTjxmPNFdZvkMaiYGzuuc=",
+  "publicKey": "h9lE187u/gOvCzI1Bzmmr6MDFxuPec0RbheUiD1zdGw=",
+  "fingerprint": "89bb74133bd1f6acca8a275095958c221ae058772d20d78f92b2075925a00c2b",
+  "ciphertext": "twaNMKhtfNcBUw7/wsNOKN/2FtPVifCPd/1mP37wiTkzGS7pl0bS84+OZx5pkaeMjpB1rVdrDfz1EYKPMWvq9LGvXJktA9QzGWUxFv1ILSHdvpRTrVSxEDIVNG60Kt181pYxLuC0ONSBRBQHA2KacDJ3SRv6CFtE8JalUNpE9kFB9vThVil8FGkl7rHDhO75JBBAeg==",
+  "expected": {
+    "username": "testare-1234",
+    "password": "påhittat lösen! 9",
+    "totpSecret": "JBSWY3DPEHPK3PXP"
+  }
+}
