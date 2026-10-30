@@ -32,6 +32,7 @@ const paths: Record<string, string> = {
   trend: "m3 17 6-6 4 4 8-8m0 0h-5m5 0v5",
   receipt: "M6 3h12v18l-3-2-3 2-3-2-3 2V3Zm3.5 5h5m-5 4h5m-5 4h3",
   income: "M12 3v11m0 0-4-4m4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3",
+  download: "M12 3v11m0 0-4-4m4 4 4-4M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3",
   transfer: "M4 8h14m0 0-4-4m4 4-4 4m6 4H6m0 0 4-4m-4 4 4 4",
   tag: "M3.5 12.3V4.5a1 1 0 0 1 1-1h7.8l8.2 8.2-8.8 8.8-8.2-8.2ZM9 8a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z",
   coffee:

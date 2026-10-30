@@ -16,6 +16,7 @@ import {
   type BankConnection,
 } from "./BankConnections";
 import { CreditAccounts } from "./CreditAccounts";
+import { ExportMenu } from "./ExportMenu";
 import { VirtualAccounts } from "./VirtualAccounts";
 import {
   accountShareKey,
@@ -39,6 +40,7 @@ import {
 } from "../utils/manual";
 import { Icon } from "./Icon";
 import { accountColors as colors } from "../utils/accounts";
+import { downloadFile } from "../utils/download";
 import { roleChoices, roleLabel } from "../utils/ledger";
 
 interface BalanceAmount {
@@ -344,6 +346,30 @@ export const AccountOverview = component$(() => {
       await Promise.all([loadMonth(), loadVirtualAccounts()]);
     }),
   );
+
+  const exporting = useSignal(false);
+  const exportError = useSignal<string | null>(null);
+
+  const exportAccounts = $(async (format: string) => {
+    if (exporting.value) {
+      return;
+    }
+
+    exporting.value = true;
+    exportError.value = null;
+
+    try {
+      await downloadFile(
+        `/api/exports/accounts?format=${format}`,
+        "zenith-accounts.csv",
+      );
+    } catch (err) {
+      exportError.value =
+        err instanceof Error ? err.message : "Could not export your accounts.";
+    } finally {
+      exporting.value = false;
+    }
+  });
 
   const reconnectingId = useSignal<number | null>(null);
   const removingId = useSignal<number | null>(null);
@@ -834,8 +860,25 @@ export const AccountOverview = component$(() => {
               <Icon name="plus" />
               New transaction
             </button>
+
+            <ExportMenu
+              id="accounts-export-list"
+              label="Export CSV"
+              description="Export the accounts overview as a CSV file"
+              exporting={exporting.value}
+              onExport$={exportAccounts}
+            />
           </div>
         </section>
+
+        {exportError.value && (
+          <div class="cal-alert" role="alert">
+            <Icon name="info" />
+            <div>
+              <strong>{`Could not export your accounts: ${exportError.value}`}</strong>
+            </div>
+          </div>
+        )}
 
         {bankNotice.value && (
           <div class="cal-alert bank-notice" role="status">

@@ -58,6 +58,9 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<AccountShareRepository>();
             builder.Services.AddSingleton<AccountShareService>();
 
+            builder.Services.AddSingleton<ExportRepository>();
+            builder.Services.AddSingleton<ExportService>();
+
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CorrectionRepository>();
             builder.Services.AddSingleton<CategorizationService>();

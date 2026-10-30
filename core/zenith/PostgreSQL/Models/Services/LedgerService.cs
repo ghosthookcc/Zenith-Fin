@@ -101,6 +101,20 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                     result.DuplicateOf);
         }
 
+        public async Task<LedgerEntry[]> ClassifyByMonthAsync(long viewerUserId,
+                                                              DateOnly from,
+                                                              DateOnly to)
+        {
+            List<Task<LedgerResult>> months = new();
+
+            for (DateOnly month = new(from.Year, from.Month, 1); month <= to; month = month.AddMonths(1))
+                months.Add(ClassifyAsync(viewerUserId, month, month.AddMonths(1).AddDays(-1)));
+
+            return (await Task.WhenAll(months)).SelectMany(result => result.Entries)
+                                               .Where(entry => entry.Date >= from && entry.Date <= to)
+                                               .ToArray();
+        }
+
         public static LedgerAccount ToAccount(LedgerAccountRow row)
         {
             return new LedgerAccount(row.Id,

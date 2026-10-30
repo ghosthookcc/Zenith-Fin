@@ -51,6 +51,55 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+export async function downloadFromBackend(
+  cookies: AstroCookies,
+  path: string,
+): Promise<Response> {
+  const jwt = cookies.get("AuthToken")?.value;
+
+  if (!jwt) {
+    return json(401, {
+      success: false,
+      message: "No token provided",
+    });
+  }
+
+  try {
+    const response = await fetchWithTimeout(`${backendUrl}${path}`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${jwt}`,
+        Accept: "text/csv, application/json",
+      },
+      dispatcher: insecureDispatcher,
+    });
+
+    const headers = new Headers({
+      "Content-Type":
+        response.headers.get("Content-Type") ?? "application/octet-stream",
+      "Cache-Control": "no-store",
+    });
+    const disposition = response.headers.get("Content-Disposition");
+
+    if (disposition) {
+      headers.set("Content-Disposition", disposition);
+    }
+
+    return new Response(await response.arrayBuffer(), {
+      status: response.status,
+      headers,
+    });
+  } catch (errno) {
+    console.error(`🔴 SERVER: GET ${path} failed:`, errno);
+
+    return json(503, {
+      success: false,
+      message: "Could not connect to banking server",
+      error: errno instanceof Error ? errno.message : "Unknown error",
+    });
+  }
+}
+
 export async function forwardToBackend(
   cookies: AstroCookies,
   method: string,

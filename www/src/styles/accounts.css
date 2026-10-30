@@ -117,6 +117,10 @@
   box-shadow: 0 12px 32px #00000059;
 }
 
+.export-menu-list {
+  min-width: 280px;
+}
+
 .reconnect-menu-item {
   display: flex;
   flex-direction: column;
@@ -246,7 +250,16 @@
 
 @media (max-width: 640px) {
   .page-actions {
+    position: relative;
     justify-content: flex-start;
+  }
+
+  .page-actions .reconnect-menu {
+    position: static;
+  }
+
+  .reconnect-menu-list {
+    max-width: calc(100vw - 32px);
   }
 
   .bank-list {
