@@ -57,6 +57,8 @@ namespace ZenithFin.Api.Models.Dtos
             public EconomyDto.SharedStatus? Shared { get; set; }
 
             public RecurringInfo? Recurring { get; set; }
+            [JsonIgnore]
+            public string? SeriesKey { get; set; }
         }
 
         public sealed class RecurringInfo

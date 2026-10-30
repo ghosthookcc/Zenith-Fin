@@ -1,0 +1,403 @@
+.recurring-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.recurring-shell .page-heading {
+  margin-bottom: 16px;
+}
+
+.recurring-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.recurring-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px 24px;
+  color: var(--cal-ink);
+}
+
+.recurring-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.recurring-head h2 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.recurring-flow {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+.recurring-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--cal-line);
+}
+
+.recurring-line:last-child {
+  border-bottom: 0;
+}
+
+.recurring-line dt {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.875rem;
+  color: var(--cal-ink-2);
+}
+
+.recurring-line dt small {
+  font-size: 0.75rem;
+  color: var(--cal-muted);
+}
+
+.recurring-line dd {
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.recurring-total dt,
+.recurring-total dd {
+  color: var(--cal-ink);
+}
+
+.recurring-final dd {
+  font-size: 1.25rem;
+  color: var(--cal-income);
+}
+
+.recurring-shell .recurring-negative {
+  color: #f3a19a;
+}
+
+.recurring-bar {
+  display: flex;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #262d3a;
+}
+
+.recurring-bar span {
+  height: 100%;
+}
+
+.recurring-bar-costs,
+.recurring-key-costs::before {
+  background: #d98b74;
+}
+
+.recurring-bar-savings,
+.recurring-key-savings::before {
+  background: #8fb6d9;
+}
+
+.recurring-bar-left,
+.recurring-key-left::before {
+  background: #8fd19e;
+}
+
+.recurring-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--cal-ink-2);
+}
+
+.recurring-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.recurring-key::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+}
+
+.recurring-figures {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.recurring-figures div {
+  padding: 12px 14px;
+  border: 1px solid var(--cal-line);
+  border-radius: 10px;
+  background: #171c27;
+}
+
+.recurring-figures dt {
+  font-size: 0.75rem;
+  color: var(--cal-muted);
+}
+
+.recurring-figures dd {
+  margin: 4px 0 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurring-figures small {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--cal-ink-2);
+}
+
+.recurring-hint {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--cal-muted);
+}
+
+.recurring-hint a {
+  color: var(--cal-mint);
+}
+
+.recurring-table-wrap {
+  overflow-x: auto;
+}
+
+.recurring-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.recurring-table th,
+.recurring-table td {
+  padding: 9px 10px;
+  border-bottom: 1px solid var(--cal-line);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.recurring-table th:first-child {
+  text-align: left;
+}
+
+.recurring-table thead th {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--cal-muted);
+}
+
+.recurring-table tbody th {
+  font-weight: 500;
+  color: var(--cal-ink);
+}
+
+.recurring-table th small {
+  margin-left: 6px;
+  font-weight: 400;
+  color: var(--cal-muted);
+}
+
+.recurring-table .recurring-current {
+  background: #1f2635;
+}
+
+.recurring-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.recurring-row {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--cal-line);
+  border-radius: 10px;
+}
+
+.recurring-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--recurring-color) 18%, transparent);
+  color: var(--recurring-color);
+}
+
+.recurring-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.recurring-name {
+  min-width: 0;
+}
+
+.recurring-name strong,
+.recurring-name small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recurring-name strong {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.recurring-name small,
+.recurring-amount small {
+  font-size: 0.75rem;
+  color: var(--cal-muted);
+}
+
+.recurring-amount {
+  text-align: right;
+}
+
+.recurring-amount strong {
+  display: block;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.recurring-status {
+  padding: 4px 10px;
+  border: 1px solid #3a4352;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--cal-ink-2);
+  white-space: nowrap;
+}
+
+.recurring-status-paid {
+  border-color: #4c7a55;
+  color: #b9e3c2;
+}
+
+.recurring-status-due {
+  border-color: #4d6b8f;
+  color: #bcd3ee;
+}
+
+.recurring-status-late {
+  border-color: #8a5a2e;
+  color: #f3c98b;
+}
+
+.recurring-remove {
+  font-size: 0.75rem;
+}
+
+.recurring-retry {
+  margin-top: 8px;
+}
+
+.recurring-notice {
+  border-color: #4c7a55;
+  background: #1f3326;
+}
+
+.recurring-ended summary {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.recurring-ended summary small {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--cal-muted);
+}
+
+.recurring-ended[open] summary {
+  margin-bottom: 4px;
+}
+
+@media (max-width: 900px) {
+  .recurring-top {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .recurring-panel {
+    padding: 18px 16px;
+  }
+
+  .recurring-figures {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .recurring-row {
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    grid-template-areas:
+      "icon name amount"
+      "icon status action";
+    row-gap: 8px;
+  }
+
+  .recurring-icon {
+    grid-area: icon;
+    align-self: start;
+  }
+
+  .recurring-name {
+    grid-area: name;
+  }
+
+  .recurring-amount {
+    grid-area: amount;
+  }
+
+  .recurring-status {
+    grid-area: status;
+    justify-self: start;
+  }
+
+  .recurring-remove {
+    grid-area: action;
+    justify-self: end;
+  }
+
+  .recurring-optional {
+    display: none;
+  }
+}

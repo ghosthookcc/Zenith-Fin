@@ -140,6 +140,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                         Next = series.Next.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
                         Manual = series.Manual
                     };
+                    transaction.SeriesKey = $"{key.Value.CreditDebitIndicator}|{key.Value.OwnTransfer}|{key.Value.Signature}";
                 }
             }
 

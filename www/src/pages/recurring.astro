@@ -1,0 +1,16 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+import SideMenu from "../components/SideMenu";
+import { RecurringPayments } from "../components/RecurringPayments";
+
+import "../styles/calendar.css";
+import "../styles/recurring.css";
+
+export const prerender = false;
+---
+
+<Layout title="Recurring">
+    <SideMenu currentPath={Astro.url.pathname} />
+    <RecurringPayments />
+</Layout>

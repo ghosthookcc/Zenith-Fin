@@ -38,6 +38,12 @@ const items: MenuItem[] = [
     hint: "Every transaction, day by day",
   },
   {
+    label: "Recurring",
+    href: "/recurring",
+    icon: "refresh",
+    hint: "Bills, income and what is left each month",
+  },
+  {
     label: "Categories",
     href: "/categories",
     icon: "tag",
