@@ -19,6 +19,9 @@ model User {
   partnerships_sent     Partnership[] @relation("PartnershipInviter")
   partnerships_received Partnership[] @relation("PartnershipInvitee")
   notifications         Notification[]
+  avanza_credential     AvanzaCredential?
+  avanza_snapshots      AvanzaBalanceSnapshot[]
+  avanza_sync_status    AvanzaSyncStatus?
 
   @@index([email])
 }
