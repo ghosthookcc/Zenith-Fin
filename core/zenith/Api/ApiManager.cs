@@ -2,7 +2,11 @@
 using Microsoft.AspNetCore.CookiePolicy;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
+using System.Threading.RateLimiting;
 using ZenithFin.Api.Auth;
 using ZenithFin.EnableBanking;
 using ZenithFin.AI;
@@ -62,6 +66,23 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<ExportService>();
 
             builder.Services.AddSingleton<RecurringPaymentsService>();
+
+            builder.Services.Configure<AvanzaOptions>(builder.Configuration.GetSection("Avanza"));
+            builder.Services.AddSingleton<AvanzaRepository>();
+            builder.Services.AddSingleton<AvanzaService>();
+
+            builder.Services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy(AvanzaService.CredentialsRateLimit, context =>
+                    RateLimitPartition.GetFixedWindowLimiter(Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(context.Request.Headers.Authorization.ToString()))),
+                                                             _ => new FixedWindowRateLimiterOptions
+                                                             {
+                                                                 PermitLimit = 5,
+                                                                 Window = TimeSpan.FromMinutes(15),
+                                                                 QueueLimit = 0
+                                                             }));
+            });
 
             builder.Services.AddSingleton<TagRepository>();
             builder.Services.AddSingleton<CorrectionRepository>();
@@ -123,6 +144,7 @@ namespace ZenithFin.Api
 
             _app.UseHttpsRedirection();
             _app.UseRouting();
+            _app.UseRateLimiter();
 
             _app.UseCors("Frontend");
             _app.UseCookiePolicy();
