@@ -1,0 +1,17 @@
+---
+import Layout from "../layouts/Layout.astro";
+
+import SideMenu from "../components/SideMenu";
+import { AvanzaOverview } from "../components/AvanzaOverview";
+
+import "../styles/calendar.css";
+import "../styles/accounts.css";
+import "../styles/avanza.css";
+
+export const prerender = false;
+---
+
+<Layout title="Avanza">
+    <SideMenu currentPath={Astro.url.pathname} />
+    <AvanzaOverview />
+</Layout>

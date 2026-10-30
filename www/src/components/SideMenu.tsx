@@ -44,6 +44,12 @@ const items: MenuItem[] = [
     hint: "Bills, income and what is left each month",
   },
   {
+    label: "Avanza",
+    href: "/avanza",
+    icon: "trend",
+    hint: "Account values over time",
+  },
+  {
     label: "Categories",
     href: "/categories",
     icon: "tag",

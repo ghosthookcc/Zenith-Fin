@@ -51,6 +51,18 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+export function isSameOrigin(request: Request): boolean {
+  const site = request.headers.get("Sec-Fetch-Site");
+
+  if (site && site !== "same-origin") {
+    return false;
+  }
+
+  const origin = request.headers.get("Origin");
+
+  return !origin || origin === new URL(request.url).origin;
+}
+
 export async function downloadFromBackend(
   cookies: AstroCookies,
   path: string,
@@ -129,7 +141,7 @@ export async function forwardToBackend(
 
     const text = await response.text();
 
-    return new Response(text, {
+    return new Response(response.status === 204 ? null : text, {
       status: response.status,
       headers: {
         "Content-Type":
