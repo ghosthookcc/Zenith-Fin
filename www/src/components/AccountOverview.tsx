@@ -42,6 +42,11 @@ import { Icon } from "./Icon";
 import { accountColors as colors } from "../utils/accounts";
 import { downloadFile } from "../utils/download";
 import { roleChoices, roleLabel } from "../utils/ledger";
+import {
+  type AvanzaAccount,
+  avanzaTypeLabel,
+  loadAvanzaBalances,
+} from "../utils/avanza";
 
 interface BalanceAmount {
   currency: string;
@@ -95,7 +100,7 @@ interface DisplayAccount {
   color: string;
   purpose: string;
   icon: "plane" | "home" | "heart" | "wallet" | "shield" | "layers";
-  kind: "connected" | "virtual";
+  kind: "connected" | "virtual" | "avanza";
   shareKey: string;
 }
 
@@ -202,6 +207,15 @@ export const AccountOverview = component$(() => {
   const sharesError = useSignal<string | null>(null);
   const virtualAccounts = useSignal<VirtualAccountRule[] | null>(null);
   const virtualError = useSignal<string | null>(null);
+  const avanzaAccounts = useSignal<AvanzaAccount[]>([]);
+
+  const loadAvanza = $(async () => {
+    try {
+      avanzaAccounts.value = (await loadAvanzaBalances()).accounts;
+    } catch {
+      avanzaAccounts.value = [];
+    }
+  });
 
   const loadMonth = $(async () => {
     monthError.value = false;
@@ -731,6 +745,7 @@ export const AccountOverview = component$(() => {
       void loadShares();
       void loadVirtualAccounts();
       void loadAvailableBanks();
+      void loadAvanza();
     },
     {
       strategy: "document-ready",
@@ -761,7 +776,35 @@ export const AccountOverview = component$(() => {
       shareKey: virtualShareKey(account.id),
     }));
 
-  const overviewAccounts = [...accounts, ...virtualOverview];
+  const avanzaOverview: DisplayAccount[] = avanzaAccounts.value.map(
+    (account, index) => ({
+      id: `avanza-${account.accountId}`,
+      backendId: 0,
+      name: account.accountName,
+      originalName: null,
+      alias: null,
+      bank: "Avanza",
+      iban: null,
+      currency: account.currency,
+      inConsent: true,
+      role: "INVESTMENT",
+      roleSource: "DEFAULT",
+      balance: account.totalValue,
+      color:
+        colors[
+          (accounts.length + virtualOverview.length + index) % colors.length
+        ],
+      purpose: `${avanzaTypeLabel(account.accountType)} · fetched ${new Intl.DateTimeFormat(
+        "en-GB",
+        { day: "numeric", month: "short" },
+      ).format(new Date(account.fetchedAt))}`,
+      icon: "layers",
+      kind: "avanza",
+      shareKey: `avanza:${account.accountId}`,
+    }),
+  );
+
+  const overviewAccounts = [...accounts, ...virtualOverview, ...avanzaOverview];
 
   const connectedBanks = new Set(accounts.map((account) => account.bank)).size;
 

@@ -20,7 +20,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                              IReadOnlyList<AccountShareRow> Shares,
                                              IReadOnlyList<VirtualAccountDto.VirtualAccount> VirtualAccounts,
                                              IReadOnlyList<ManualTransactionDto.ManualTransaction> ManualTransactions,
-                                             IReadOnlyList<LedgerEntry> Entries);
+                                             IReadOnlyList<LedgerEntry> Entries,
+                                             IReadOnlyList<AvanzaDto.Account> AvanzaAccounts);
 
     public sealed record TransactionsExportInput(DateOnly From,
                                                  DateOnly To,
@@ -37,6 +38,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private readonly ManualTransactionService _manualTransactionService;
         private readonly LedgerService _ledgerService;
         private readonly TransactionService _transactionService;
+        private readonly AvanzaRepository _avanzaRepository;
 
         private const int AverageMonths = 12;
 
@@ -131,21 +133,21 @@ namespace ZenithFin.PostgreSQL.Models.Services
             new("Counting", line => CsvCell.Text(line.Counting)),
             new("Starting balance", line => CsvCell.Number(line.StartingBalance)),
             new("Starting balance set at", line => CsvCell.Time(line.StartingBalanceSetAt)),
-            new("This month", line => CsvCell.Text(line.ThisMonth)),
-            new("Money in this month", line => CsvCell.Number(line.Current.MoneyIn)),
-            new("Money out this month", line => CsvCell.Number(line.Current.MoneyOut)),
-            new("Net this month", line => CsvCell.Number(line.Current.Net)),
-            new("Deposits this month", line => CsvCell.Number(line.Current.Deposits)),
-            new("Withdrawals this month", line => CsvCell.Number(line.Current.Withdrawals)),
-            new("Transactions this month", line => CsvCell.Count(line.Current.Transactions)),
-            new("Last month", line => CsvCell.Text(line.LastMonth)),
-            new("Money in last month", line => CsvCell.Number(line.Previous.MoneyIn)),
-            new("Money out last month", line => CsvCell.Number(line.Previous.MoneyOut)),
-            new("Net last month", line => CsvCell.Number(line.Previous.Net)),
-            new("Deposits last month", line => CsvCell.Number(line.Previous.Deposits)),
-            new("Withdrawals last month", line => CsvCell.Number(line.Previous.Withdrawals)),
-            new("Transactions last month", line => CsvCell.Count(line.Previous.Transactions)),
-            new("Months in average", line => CsvCell.Count(line.AverageMonths)),
+            new("This month", line => FlowText(line, line.ThisMonth)),
+            new("Money in this month", line => FlowNumber(line, line.Current.MoneyIn)),
+            new("Money out this month", line => FlowNumber(line, line.Current.MoneyOut)),
+            new("Net this month", line => FlowNumber(line, line.Current.Net)),
+            new("Deposits this month", line => FlowNumber(line, line.Current.Deposits)),
+            new("Withdrawals this month", line => FlowNumber(line, line.Current.Withdrawals)),
+            new("Transactions this month", line => FlowCount(line, line.Current.Transactions)),
+            new("Last month", line => FlowText(line, line.LastMonth)),
+            new("Money in last month", line => FlowNumber(line, line.Previous.MoneyIn)),
+            new("Money out last month", line => FlowNumber(line, line.Previous.MoneyOut)),
+            new("Net last month", line => FlowNumber(line, line.Previous.Net)),
+            new("Deposits last month", line => FlowNumber(line, line.Previous.Deposits)),
+            new("Withdrawals last month", line => FlowNumber(line, line.Previous.Withdrawals)),
+            new("Transactions last month", line => FlowCount(line, line.Previous.Transactions)),
+            new("Months in average", line => FlowCount(line, line.AverageMonths)),
             new("Average money in per month", line => CsvCell.Number(line.AveragePerMonth(flow => flow.MoneyIn))),
             new("Average money out per month", line => CsvCell.Number(line.AveragePerMonth(flow => flow.MoneyOut))),
             new("Average net per month", line => CsvCell.Number(line.AveragePerMonth(flow => flow.Net))),
@@ -161,7 +163,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                              VirtualAccountService virtualAccountService,
                              ManualTransactionService manualTransactionService,
                              LedgerService ledgerService,
-                             TransactionService transactionService)
+                             TransactionService transactionService,
+                             AvanzaRepository avanzaRepository)
         {
             _userRepository = userRepository;
             _exportRepository = exportRepository;
@@ -172,6 +175,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             _manualTransactionService = manualTransactionService;
             _ledgerService = ledgerService;
             _transactionService = transactionService;
+            _avanzaRepository = avanzaRepository;
         }
 
         public async Task<ExportFile?> ExportAccountsAsync(string sessionId,
@@ -200,7 +204,8 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                                          shares,
                                                          virtualAccounts,
                                                          manualTransactions,
-                                                         entries),
+                                                         entries,
+                                                         AvanzaService.BuildBalances(await _avanzaRepository.GetSnapshotsAsync(userId.Value)).Accounts),
                                  dialect);
         }
 
@@ -298,6 +303,24 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
                 lines.Add(line);
                 virtualLines[account.Id] = line;
+            }
+
+            foreach (AvanzaDto.Account account in input.AvanzaAccounts)
+            {
+                lines.Add(new AccountLine
+                {
+                    ExportedAt = exportedAt,
+                    Kind = "Avanza account",
+                    Id = long.TryParse(account.AccountId, NumberStyles.None, CultureInfo.InvariantCulture, out long avanzaId) ? avanzaId : 0,
+                    Name = account.AccountName,
+                    Bank = "Avanza",
+                    AccountType = AvanzaTypeLabel(account.AccountType),
+                    AccountNumber = account.AccountId,
+                    Currency = account.Currency,
+                    Balance = account.TotalValue,
+                    BalanceUpdatedAt = account.FetchedAt,
+                    TracksFlows = false
+                });
             }
 
             foreach (AccountLine line in lines)
@@ -604,6 +627,24 @@ namespace ZenithFin.PostgreSQL.Models.Services
             return DateOnly.TryParseExact(date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly value) ? value : null;
         }
 
+        private static CsvCell FlowNumber(AccountLine line,
+                                          decimal value) => line.TracksFlows ? CsvCell.Number(value) : CsvCell.Empty;
+
+        private static CsvCell FlowCount(AccountLine line,
+                                         long value) => line.TracksFlows ? CsvCell.Count(value) : CsvCell.Empty;
+
+        private static CsvCell FlowText(AccountLine line,
+                                        string value) => line.TracksFlows ? CsvCell.Text(value) : CsvCell.Empty;
+
+        private static string AvanzaTypeLabel(string? type)
+        {
+            if (string.IsNullOrWhiteSpace(type)) return "Avanza account";
+
+            string words = type.Replace('_', ' ').Trim().ToLowerInvariant();
+
+            return char.ToUpperInvariant(words[0]) + words[1..];
+        }
+
         private static string? SharedWith(IEnumerable<AccountShareRow> shares)
         {
             string[] names = shares.Select(share => $"{share.FirstName} {share.LastName}".Trim())
@@ -868,6 +909,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
             public DateTime? StartingBalanceSetAt { get; init; }
             public string ThisMonth { get; init; } = "";
             public string LastMonth { get; init; } = "";
+            public bool TracksFlows { get; init; } = true;
             public DateOnly? HistoryStart { get; init; }
             public string PhysicalKey { get; init; } = "";
             public DateOnly? AverageFrom { get; private set; }
