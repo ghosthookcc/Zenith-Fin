@@ -141,12 +141,19 @@ export async function forwardToBackend(
 
     const text = await response.text();
 
+    const headers = new Headers({
+      "Content-Type":
+        response.headers.get("Content-Type") ?? "application/json",
+    });
+    const cacheControl = response.headers.get("Cache-Control");
+
+    if (cacheControl) {
+      headers.set("Cache-Control", cacheControl);
+    }
+
     return new Response(response.status === 204 ? null : text, {
       status: response.status,
-      headers: {
-        "Content-Type":
-          response.headers.get("Content-Type") ?? "application/json",
-      },
+      headers,
     });
   } catch (errno) {
     console.error(`🔴 SERVER: ${method} ${path} failed:`, errno);
