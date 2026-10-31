@@ -1,0 +1,1039 @@
+import {
+  $,
+  component$,
+  useSignal,
+  useStore,
+  type PropFunction,
+} from "@builder.io/qwik";
+
+import { Icon } from "./Icon";
+import {
+  count,
+  formatDay,
+  formatKr,
+  formatMonth,
+  maskedAmount,
+  type Plan,
+  type PlanDirection,
+  type PlanItem,
+  type PlanOccurrence,
+  type PlanSuggestion,
+} from "../utils/recurring";
+
+type EditableUnit = "MONTH" | "YEAR";
+
+interface PlanProps {
+  plan: Plan;
+  today: string;
+  hidden: boolean;
+  onChange$: PropFunction<() => Promise<void>>;
+}
+
+interface EditorState {
+  mode: "add" | "edit";
+  itemId: number | null;
+  bank: boolean;
+  title: string;
+  direction: PlanDirection;
+  name: string;
+  amount: string;
+  every: string;
+  unit: EditableUnit;
+  followBank: boolean;
+  lastDate: string;
+  endDate: string;
+  bankAmount: number | null;
+  bankCadence: string;
+  saving: boolean;
+  error: string | null;
+}
+
+const planItemsUrl = "/api/recurring/plan/items";
+const maxNameLength = 60;
+
+const suggestionGroups: { kind: string; title: string }[] = [
+  { kind: "INCOME", title: "Income" },
+  { kind: "COST", title: "Costs" },
+  { kind: "SAVING", title: "Savings" },
+  { kind: "TRANSFER", title: "Card bills and transfers" },
+];
+
+function parseAmount(text: string): number | null {
+  const normalized = text.replace(/\s/g, "").replace(",", ".");
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const amount = Number(normalized);
+
+  return amount > 0 ? amount : null;
+}
+
+function amountText(amount: number | null | undefined): string {
+  return amount == null ? "" : String(amount).replace(".", ",");
+}
+
+function plainName(name: string): string {
+  return name.replace(/\s+/g, " ").trim().slice(0, maxNameLength).trim();
+}
+
+async function send(
+  method: string,
+  url: string,
+  body?: Record<string, unknown>,
+): Promise<void> {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Accept: "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    credentials: "same-origin",
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => null)) as {
+      message?: string;
+    } | null;
+
+    throw new Error(
+      payload?.message ?? `Could not change your plan (${response.status})`,
+    );
+  }
+}
+
+function statusText(occurrence: PlanOccurrence, kind?: string | null): string {
+  switch (occurrence.status) {
+    case "PAID":
+      return occurrence.direction === "IN"
+        ? "Received, from your bank"
+        : kind === "SAVING"
+          ? "Saved, from your bank"
+          : "Paid, from your bank";
+    case "LATE":
+      return "Not seen at your bank yet";
+    case "PASSED":
+      return "The date has passed";
+    default:
+      return "Coming up";
+  }
+}
+
+function stateText(item: PlanItem, today: string): string {
+  switch (item.state) {
+    case "MISSING":
+      return "Not in your history now";
+    case "ENDED":
+      return item.endDate ? `Ended ${formatDay(item.endDate, true)}` : "Ended";
+    case "QUIET":
+      return item.lastDate
+        ? `Nothing since ${formatDay(item.lastDate, true)}`
+        : "Nothing seen lately";
+    default:
+      return item.next
+        ? `Next ${formatDay(item.next, item.next.slice(0, 4) !== today.slice(0, 4))}`
+        : "No more dates";
+  }
+}
+
+export const RecurringPlan = component$<PlanProps>((props) => {
+  const selected = useSignal(0);
+  const dialog = useSignal<HTMLDialogElement>();
+  const busy = useSignal<string | null>(null);
+  const notice = useSignal<string | null>(null);
+  const failure = useSignal<string | null>(null);
+  const editor = useStore<EditorState>({
+    mode: "add",
+    itemId: null,
+    bank: false,
+    title: "",
+    direction: "OUT",
+    name: "",
+    amount: "",
+    every: "1",
+    unit: "MONTH",
+    followBank: false,
+    lastDate: "",
+    endDate: "",
+    bankAmount: null,
+    bankCadence: "",
+    saving: false,
+    error: null,
+  });
+
+  const closeEditor = $(() => {
+    dialog.value?.close();
+  });
+
+  const openAdd = $((direction: PlanDirection) => {
+    editor.mode = "add";
+    editor.itemId = null;
+    editor.bank = false;
+    editor.title = direction === "IN" ? "Add money in" : "Add money out";
+    editor.direction = direction;
+    editor.name = "";
+    editor.amount = "";
+    editor.every = "1";
+    editor.unit = "MONTH";
+    editor.followBank = false;
+    editor.lastDate = props.today;
+    editor.endDate = "";
+    editor.bankAmount = null;
+    editor.bankCadence = "";
+    editor.saving = false;
+    editor.error = null;
+
+    if (dialog.value && !dialog.value.open) {
+      dialog.value.showModal();
+    }
+  });
+
+  const openEdit = $((item: PlanItem) => {
+    const bank = item.source === "BANK";
+
+    editor.mode = "edit";
+    editor.itemId = item.id;
+    editor.bank = bank;
+    editor.title = `Change ${item.name}`;
+    editor.direction = item.direction;
+    editor.name = item.customName ?? "";
+    editor.amount = amountText(item.customAmount);
+    editor.every = String(
+      item.unit === "WEEK" || item.every < 1 ? 1 : item.every,
+    );
+    editor.unit = item.unit === "YEAR" ? "YEAR" : "MONTH";
+    editor.followBank = bank && !item.customCadence;
+    editor.lastDate = item.lastDate ?? "";
+    editor.endDate = item.endDate ?? "";
+    editor.bankAmount = item.bankAmount ?? null;
+    editor.bankCadence = item.bankCadenceLabel ?? "";
+    editor.saving = false;
+    editor.error = null;
+
+    if (dialog.value && !dialog.value.open) {
+      dialog.value.showModal();
+    }
+  });
+
+  const save = $(async () => {
+    const typed = editor.amount.trim();
+    const amount = typed === "" ? null : parseAmount(typed);
+    const ownCadence = !editor.bank || !editor.followBank;
+    const every = Number(editor.every);
+
+    if (typed !== "" && amount === null) {
+      editor.error = "Enter the amount in kronor, like 1 250 or 99,50.";
+      return;
+    }
+
+    if (!editor.bank && amount === null) {
+      editor.error = "Enter an amount.";
+      return;
+    }
+
+    if (ownCadence && (!Number.isInteger(every) || every < 1 || every > 120)) {
+      editor.error = "It can repeat every 1 to 120 months or years.";
+      return;
+    }
+
+    if (!editor.bank && !editor.lastDate) {
+      editor.error = "Enter when it last happened.";
+      return;
+    }
+
+    if (!editor.bank && editor.endDate && editor.endDate < editor.lastDate) {
+      editor.error = "It cannot end before it last happened.";
+      return;
+    }
+
+    const name = editor.name.trim();
+    const adding = editor.mode === "add";
+
+    editor.saving = true;
+    editor.error = null;
+    notice.value = null;
+    failure.value = null;
+
+    try {
+      await send(
+        adding ? "POST" : "PUT",
+        adding ? planItemsUrl : `${planItemsUrl}/${editor.itemId}`,
+        {
+          direction: editor.bank ? null : editor.direction,
+          name: name === "" ? null : name,
+          amount,
+          every: ownCadence ? every : null,
+          unit: ownCadence ? editor.unit : null,
+          lastDate: editor.bank ? null : editor.lastDate,
+          endDate: editor.endDate === "" ? null : editor.endDate,
+        },
+      );
+
+      dialog.value?.close();
+      notice.value = adding
+        ? `${name === "" ? "The row" : name} is in your plan.`
+        : "Your change is saved.";
+      await props.onChange$();
+    } catch (err) {
+      editor.error =
+        err instanceof Error ? err.message : "Could not save the row.";
+    } finally {
+      editor.saving = false;
+    }
+  });
+
+  const addSuggestion = $(async (suggestion: PlanSuggestion) => {
+    if (busy.value !== null) {
+      return;
+    }
+
+    busy.value = `add:${suggestion.key}`;
+    notice.value = null;
+    failure.value = null;
+
+    try {
+      await send("POST", planItemsUrl, {
+        seriesKey: suggestion.key,
+        name: plainName(suggestion.name) || null,
+        direction: suggestion.direction,
+      });
+
+      notice.value = `${suggestion.name} is in your plan. It follows the amount and dates from your bank.`;
+      await props.onChange$();
+    } catch (err) {
+      failure.value =
+        err instanceof Error
+          ? err.message
+          : `Could not add ${suggestion.name}.`;
+    } finally {
+      busy.value = null;
+    }
+  });
+
+  const remove = $(async (item: PlanItem) => {
+    if (
+      busy.value !== null ||
+      !window.confirm(`Remove ${item.name} from your plan?`)
+    ) {
+      return;
+    }
+
+    busy.value = `remove:${item.id}`;
+    notice.value = null;
+    failure.value = null;
+
+    try {
+      await send("DELETE", `${planItemsUrl}/${item.id}`);
+
+      notice.value = `${item.name} is no longer in your plan.`;
+      await props.onChange$();
+    } catch (err) {
+      failure.value =
+        err instanceof Error ? err.message : `Could not remove ${item.name}.`;
+    } finally {
+      busy.value = null;
+    }
+  });
+
+  const kr = (amount: number) =>
+    props.hidden ? maskedAmount : formatKr(amount);
+  const plan = props.plan;
+  const months = plan.months;
+  const index = Math.min(selected.value, Math.max(0, months.length - 1));
+  const month = months.length > 0 ? months[index] : null;
+  const occurrences = month?.occurrences ?? [];
+  const settled = (occurrence: PlanOccurrence) =>
+    occurrence.status === "PAID" || occurrence.status === "PASSED";
+  const sumOf = (list: PlanOccurrence[]) =>
+    list.reduce((sum, occurrence) => sum + occurrence.amount, 0);
+  const incoming = occurrences.filter(
+    (occurrence) => occurrence.direction === "IN",
+  );
+  const outgoing = occurrences.filter(
+    (occurrence) => occurrence.direction === "OUT",
+  );
+  const groups: {
+    direction: PlanDirection;
+    title: string;
+    items: PlanItem[];
+  }[] = [
+    {
+      direction: "IN",
+      title: "Money in",
+      items: plan.items.filter((item) => item.direction === "IN"),
+    },
+    {
+      direction: "OUT",
+      title: "Money out",
+      items: plan.items.filter((item) => item.direction === "OUT"),
+    },
+  ];
+
+  const renderOccurrence = (occurrence: PlanOccurrence, position: number) => (
+    <li
+      key={`${occurrence.itemId}-${occurrence.date}-${position}`}
+      class={{
+        "plan-occurrence": true,
+        "plan-settled": settled(occurrence),
+        "plan-late": occurrence.status === "LATE",
+      }}
+    >
+      <span class="plan-date">{formatDay(occurrence.date)}</span>
+      <span class="plan-name">
+        <strong title={occurrence.name}>{occurrence.name}</strong>
+        {month?.current && (
+          <small>
+            {statusText(
+              occurrence,
+              plan.items.find((item) => item.id === occurrence.itemId)?.kind,
+            )}
+          </small>
+        )}
+      </span>
+      <span
+        class={{
+          "plan-amount": true,
+          "plan-amount-in": occurrence.direction === "IN",
+        }}
+      >
+        {`${occurrence.direction === "IN" ? "+" : "−"} ${kr(occurrence.amount)} kr`}
+      </span>
+    </li>
+  );
+
+  const renderItem = (item: PlanItem) => {
+    const icon =
+      item.source === "BANK"
+        ? (item.categoryIcon ?? "refresh")
+        : item.direction === "IN"
+          ? "income"
+          : "receipt";
+    const spread =
+      item.amount != null &&
+      item.state !== "ENDED" &&
+      item.state !== "MISSING" &&
+      Math.abs(item.monthly - item.amount) >= 0.01;
+
+    return (
+      <li
+        key={item.id}
+        class={{
+          "recurring-row": true,
+          "plan-row": true,
+          "plan-row-off": item.state === "ENDED" || item.state === "MISSING",
+        }}
+      >
+        <span
+          class="recurring-icon"
+          style={{
+            "--recurring-color":
+              item.categoryColor ??
+              (item.direction === "IN" ? "#8fd19e" : "#8792a5"),
+          }}
+        >
+          <Icon key={icon} name={icon} />
+        </span>
+
+        <span class="recurring-name">
+          <strong title={item.name}>{item.name}</strong>
+          <small>
+            {[
+              item.cadenceLabel || null,
+              item.source === "BANK"
+                ? item.customAmount != null || item.customCadence
+                  ? "From your bank, changed by you"
+                  : "From your bank"
+                : "Your own",
+              item.endDate && item.state !== "ENDED"
+                ? `Until ${formatDay(item.endDate, true)}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </span>
+
+        <span class="recurring-amount">
+          <strong>
+            {item.amount == null ? "No amount" : `${kr(item.amount)} kr`}
+          </strong>
+          {spread && <small>{`${kr(item.monthly)} kr a month`}</small>}
+        </span>
+
+        <span
+          class={`recurring-status plan-state plan-state-${item.state.toLowerCase()}`}
+        >
+          {stateText(item, props.today)}
+        </span>
+
+        <span class="plan-row-actions">
+          <button
+            type="button"
+            class="cal-chip"
+            disabled={busy.value !== null}
+            title={`Change ${item.name}`}
+            onClick$={() => openEdit(item)}
+          >
+            Change
+          </button>
+          <button
+            type="button"
+            class="cal-chip plan-remove"
+            disabled={busy.value !== null}
+            title={`Remove ${item.name} from your plan`}
+            onClick$={() => remove(item)}
+          >
+            {busy.value === `remove:${item.id}` ? "Removing…" : "Remove"}
+          </button>
+        </span>
+      </li>
+    );
+  };
+
+  const renderSuggestion = (suggestion: PlanSuggestion) => {
+    const icon = suggestion.categoryIcon ?? "refresh";
+
+    return (
+      <li key={suggestion.key} class="recurring-row plan-suggestion">
+        <span
+          class="recurring-icon"
+          style={{
+            "--recurring-color": suggestion.categoryColor ?? "#8792a5",
+          }}
+        >
+          <Icon key={icon} name={icon} />
+        </span>
+
+        <span class="recurring-name">
+          <strong title={suggestion.name}>{suggestion.name}</strong>
+          <small>
+            {[
+              suggestion.cadenceLabel,
+              `Last ${formatDay(suggestion.last, true)}`,
+              suggestion.accounts.join(", "),
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </span>
+
+        <span class="recurring-amount">
+          <strong>{`${kr(suggestion.amount)} kr`}</strong>
+          {Math.abs(suggestion.monthly - suggestion.amount) >= 0.01 && (
+            <small>{`${kr(suggestion.monthly)} kr a month`}</small>
+          )}
+        </span>
+
+        <button
+          type="button"
+          class="cal-chip plan-add"
+          disabled={busy.value !== null}
+          title={`Add ${suggestion.name} to your plan`}
+          onClick$={() => addSuggestion(suggestion)}
+        >
+          {busy.value === `add:${suggestion.key}` ? (
+            "Adding…"
+          ) : (
+            <>
+              <Icon name="plus" />
+              Add
+            </>
+          )}
+        </button>
+      </li>
+    );
+  };
+
+  return (
+    <>
+      <section
+        class="overview-panel recurring-panel plan-panel"
+        aria-labelledby="plan-title"
+      >
+        <div class="recurring-head plan-head">
+          <div>
+            <h2 id="plan-title">Monthly plan</h2>
+            <p class="recurring-hint">
+              What comes in and goes out each month from the rows in your plan.
+            </p>
+          </div>
+
+          {month && (
+            <div class="plan-switcher">
+              <button
+                type="button"
+                class="cal-chip plan-step"
+                aria-label="Previous month"
+                disabled={index === 0}
+                onClick$={() => {
+                  selected.value = Math.max(0, index - 1);
+                }}
+              >
+                <Icon name="chevronLeft" />
+              </button>
+              <span class="plan-month" aria-live="polite">
+                {formatMonth(month.month, "long")}
+              </span>
+              <button
+                type="button"
+                class="cal-chip plan-step"
+                aria-label="Next month"
+                disabled={index >= months.length - 1}
+                onClick$={() => {
+                  selected.value = Math.min(months.length - 1, index + 1);
+                }}
+              >
+                <Icon name="chevronRight" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {month && (
+          <div class="plan-grid">
+            <div class="plan-month-view">
+              <dl class="recurring-figures plan-figures">
+                <div>
+                  <dt>Money in</dt>
+                  <dd>{`${kr(month.in)} kr`}</dd>
+                  <small>
+                    {month.current
+                      ? `${kr(sumOf(incoming.filter(settled)))} kr received so far`
+                      : count(incoming.length, "payment", "payments")}
+                  </small>
+                </div>
+                <div>
+                  <dt>Money out</dt>
+                  <dd>{`${kr(month.out)} kr`}</dd>
+                  <small>
+                    {month.current
+                      ? `${kr(sumOf(outgoing.filter((occurrence) => !settled(occurrence))))} kr still to pay`
+                      : count(outgoing.length, "payment", "payments")}
+                  </small>
+                </div>
+                <div class="plan-left">
+                  <dt>Left</dt>
+                  <dd class={{ "recurring-negative": month.left < 0 }}>
+                    {`${kr(month.left)} kr`}
+                  </dd>
+                  <small>Money in minus money out</small>
+                </div>
+              </dl>
+
+              {occurrences.length === 0 ? (
+                <p class="recurring-hint">Nothing in your plan this month.</p>
+              ) : (
+                <ul
+                  class="plan-list"
+                  aria-label={`Payments in ${formatMonth(month.month, "long")}`}
+                >
+                  {occurrences.map(renderOccurrence)}
+                </ul>
+              )}
+            </div>
+
+            <div class="plan-year">
+              <div class="recurring-table-wrap">
+                <table class="recurring-table plan-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Month</th>
+                      <th scope="col">In</th>
+                      <th scope="col">Out</th>
+                      <th scope="col">Left</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {months.map((entry, position) => (
+                      <tr
+                        key={entry.month}
+                        class={{ "recurring-current": position === index }}
+                      >
+                        <th scope="row">
+                          <button
+                            type="button"
+                            class="plan-month-button"
+                            aria-pressed={position === index}
+                            onClick$={() => {
+                              selected.value = position;
+                            }}
+                          >
+                            {formatMonth(entry.month, "short")}
+                          </button>
+                          {entry.current && <small>now</small>}
+                        </th>
+                        <td>{kr(entry.in)}</td>
+                        <td>{kr(entry.out)}</td>
+                        <td class={{ "recurring-negative": entry.left < 0 }}>
+                          {kr(entry.left)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th scope="row">Average month</th>
+                      <td>{kr(plan.average.in)}</td>
+                      <td>{kr(plan.average.out)}</td>
+                      <td
+                        class={{ "recurring-negative": plan.average.left < 0 }}
+                      >
+                        {kr(plan.average.left)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p class="recurring-hint">
+                The average spreads rows that come every few months or years
+                over every month.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section
+        class="overview-panel recurring-panel"
+        aria-labelledby="plan-rows"
+      >
+        <div class="recurring-head plan-rows-head">
+          <h2 id="plan-rows">Rows in your plan</h2>
+          <div class="plan-actions">
+            <button
+              type="button"
+              class="cal-chip"
+              onClick$={() => openAdd("IN")}
+            >
+              <Icon name="plus" />
+              Money in
+            </button>
+            <button
+              type="button"
+              class="cal-chip"
+              onClick$={() => openAdd("OUT")}
+            >
+              <Icon name="plus" />
+              Money out
+            </button>
+          </div>
+        </div>
+
+        {notice.value && (
+          <p class="plan-notice" role="status">
+            <Icon name="check" />
+            {notice.value}
+          </p>
+        )}
+
+        {failure.value && (
+          <p class="plan-error" role="alert">
+            {failure.value}
+          </p>
+        )}
+
+        {plan.items.length === 0 && (
+          <p class="recurring-hint">
+            Your plan is empty. Add your income and the costs you know about, or
+            add payments Zenith found in your history.
+          </p>
+        )}
+
+        {groups.map((group) =>
+          group.items.length === 0 ? null : (
+            <div key={group.direction} class="plan-group">
+              <h3 class="plan-group-title">
+                {group.title}
+                <span>{`${kr(
+                  group.items.reduce((sum, item) => sum + item.monthly, 0),
+                )} kr a month`}</span>
+              </h3>
+              <ul class="recurring-list">{group.items.map(renderItem)}</ul>
+            </div>
+          ),
+        )}
+      </section>
+
+      {plan.suggestions.length > 0 && (
+        <section
+          class="overview-panel recurring-panel"
+          aria-labelledby="plan-suggestions"
+        >
+          <div class="recurring-head">
+            <h2 id="plan-suggestions">Add from your history</h2>
+            <span class="soft-badge">
+              {count(plan.suggestions.length, "payment", "payments")}
+            </span>
+          </div>
+          <p class="recurring-hint">
+            Payments Zenith found that are not in your plan. An added payment
+            follows your bank: the plan uses its usual amount and the date it
+            last came, and you can change both.
+          </p>
+
+          {suggestionGroups.map((group) => {
+            const list = plan.suggestions.filter(
+              (suggestion) => suggestion.kind === group.kind,
+            );
+
+            return list.length === 0 ? null : (
+              <div key={group.kind} class="plan-group">
+                <h3 class="plan-group-title">{group.title}</h3>
+                <ul class="recurring-list">{list.map(renderSuggestion)}</ul>
+              </div>
+            );
+          })}
+        </section>
+      )}
+
+      <dialog
+        ref={dialog}
+        class="plan-dialog"
+        aria-labelledby="plan-dialog-title"
+        onClose$={() => {
+          editor.error = null;
+        }}
+      >
+        <form class="plan-form" preventdefault:submit onSubmit$={save}>
+          <div class="plan-dialog-head">
+            <div>
+              <h2 id="plan-dialog-title">{editor.title}</h2>
+              <p>
+                {editor.bank
+                  ? "This row follows a payment from your bank. Leave a field empty to keep following it."
+                  : "The plan counts this again from the date it last happened."}
+              </p>
+            </div>
+            <button
+              type="button"
+              class="plan-close"
+              aria-label="Close"
+              onClick$={closeEditor}
+            >
+              <Icon name="close" />
+            </button>
+          </div>
+
+          {!editor.bank && (
+            <fieldset class="plan-section">
+              <legend class="plan-label">Direction</legend>
+              <div class="plan-choices">
+                {(["IN", "OUT"] as const).map((direction) => (
+                  <label
+                    key={direction}
+                    class={{
+                      "plan-choice": true,
+                      "plan-choice-selected": editor.direction === direction,
+                    }}
+                  >
+                    <input
+                      type="radio"
+                      name="plan-direction"
+                      value={direction}
+                      checked={editor.direction === direction}
+                      onChange$={() => {
+                        editor.direction = direction;
+                      }}
+                    />
+                    {direction === "IN" ? "Money in" : "Money out"}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          )}
+
+          <label class="plan-field">
+            <span class="plan-label">
+              Name <small>optional</small>
+            </span>
+            <input
+              class="plan-input"
+              type="text"
+              maxLength={maxNameLength}
+              autoComplete="off"
+              value={editor.name}
+              placeholder={
+                editor.bank
+                  ? "The name from your bank"
+                  : editor.direction === "IN"
+                    ? "Salary, side job…"
+                    : "Rent, insurance…"
+              }
+              onInput$={(_, element) => {
+                editor.name = element.value;
+              }}
+            />
+          </label>
+
+          <label class="plan-field">
+            <span class="plan-label">
+              Amount {editor.bank && <small>optional</small>}
+            </span>
+            <span class="plan-money">
+              <input
+                class="plan-input"
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                required={!editor.bank}
+                value={editor.amount}
+                placeholder={
+                  editor.bank && editor.bankAmount != null
+                    ? formatKr(editor.bankAmount)
+                    : "0,00"
+                }
+                onInput$={(_, element) => {
+                  editor.amount = element.value;
+                }}
+              />
+              <span>kr</span>
+            </span>
+            {editor.bank && (
+              <span class="plan-hint">
+                {editor.bankAmount != null
+                  ? `Empty uses your bank's usual amount, ${formatKr(editor.bankAmount)} kr.`
+                  : "Empty uses your bank's usual amount."}
+              </span>
+            )}
+          </label>
+
+          <fieldset class="plan-section">
+            <legend class="plan-label">How often</legend>
+            {editor.bank && (
+              <div class="plan-choices">
+                <label
+                  class={{
+                    "plan-choice": true,
+                    "plan-choice-selected": editor.followBank,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="plan-cadence"
+                    checked={editor.followBank}
+                    onChange$={() => {
+                      editor.followBank = true;
+                    }}
+                  />
+                  {editor.bankCadence
+                    ? `Like your bank: ${editor.bankCadence.toLowerCase()}`
+                    : "Like your bank"}
+                </label>
+                <label
+                  class={{
+                    "plan-choice": true,
+                    "plan-choice-selected": !editor.followBank,
+                  }}
+                >
+                  <input
+                    type="radio"
+                    name="plan-cadence"
+                    checked={!editor.followBank}
+                    onChange$={() => {
+                      editor.followBank = false;
+                    }}
+                  />
+                  My own
+                </label>
+              </div>
+            )}
+            {(!editor.bank || !editor.followBank) && (
+              <div class="plan-every">
+                <span>Every</span>
+                <input
+                  class="plan-input plan-number"
+                  type="number"
+                  min={1}
+                  max={120}
+                  step={1}
+                  required
+                  aria-label="How many months or years"
+                  value={editor.every}
+                  onInput$={(_, element) => {
+                    editor.every = element.value;
+                  }}
+                />
+                <select
+                  class="plan-input"
+                  aria-label="Months or years"
+                  onChange$={(_, element) => {
+                    editor.unit = element.value === "YEAR" ? "YEAR" : "MONTH";
+                  }}
+                >
+                  <option value="MONTH" selected={editor.unit === "MONTH"}>
+                    {editor.every === "1" ? "month" : "months"}
+                  </option>
+                  <option value="YEAR" selected={editor.unit === "YEAR"}>
+                    {editor.every === "1" ? "year" : "years"}
+                  </option>
+                </select>
+              </div>
+            )}
+          </fieldset>
+
+          {editor.bank ? (
+            <p class="plan-summary">
+              {editor.lastDate
+                ? `Last payment ${formatDay(editor.lastDate, true)}, from your bank. The plan counts on from there.`
+                : "Zenith cannot find this payment in your history right now, so it is not counted."}
+            </p>
+          ) : (
+            <label class="plan-field">
+              <span class="plan-label">Last happened</span>
+              <input
+                class="plan-input"
+                type="date"
+                required
+                min="2000-01-01"
+                value={editor.lastDate}
+                onInput$={(_, element) => {
+                  editor.lastDate = element.value;
+                }}
+              />
+              <span class="plan-hint">
+                Pick a later date if it has not started yet.
+              </span>
+            </label>
+          )}
+
+          <label class="plan-field">
+            <span class="plan-label">
+              Ends <small>optional</small>
+            </span>
+            <input
+              class="plan-input"
+              type="date"
+              min={editor.bank ? "2000-01-01" : editor.lastDate || "2000-01-01"}
+              value={editor.endDate}
+              onInput$={(_, element) => {
+                editor.endDate = element.value;
+              }}
+            />
+            <span class="plan-hint">Leave it empty if it keeps going.</span>
+          </label>
+
+          {editor.error && (
+            <p class="plan-error" role="alert">
+              {editor.error}
+            </p>
+          )}
+
+          <div class="plan-dialog-actions">
+            <button type="button" class="plan-secondary" onClick$={closeEditor}>
+              Cancel
+            </button>
+            <button type="submit" class="plan-primary" disabled={editor.saving}>
+              {editor.saving
+                ? "Saving…"
+                : editor.mode === "add"
+                  ? "Add to plan"
+                  : "Save"}
+            </button>
+          </div>
+        </form>
+      </dialog>
+    </>
+  );
+});

@@ -1,6 +1,15 @@
 import { $, component$, useSignal, useVisibleTask$ } from "@builder.io/qwik";
 
 import { Icon } from "./Icon";
+import { RecurringPlan } from "./RecurringPlan";
+import {
+  count,
+  formatDay,
+  formatKr,
+  formatMonth,
+  maskedAmount,
+  type Plan,
+} from "../utils/recurring";
 
 type Kind = "INCOME" | "COST" | "SAVING" | "TRANSFER";
 type Status = "PAID" | "DUE" | "LATE" | "LATER" | "ENDED";
@@ -68,9 +77,8 @@ interface Overview {
   typical: Summary;
   months: MonthTotals[];
   series: RecurringSeries[];
+  plan?: Plan | null;
 }
-
-const maskedAmount = "•• •••,••";
 
 const sections: { kind: Kind; title: string; note?: string }[] = [
   { kind: "COST", title: "Recurring costs" },
@@ -82,28 +90,6 @@ const sections: { kind: Kind; title: string; note?: string }[] = [
     note: "These move money between accounts or pay a card bill, so they are not counted as costs. Card purchases count on the day you make them.",
   },
 ];
-
-function formatKr(amount: number): string {
-  return new Intl.NumberFormat("sv-SE", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(amount);
-}
-
-function formatDay(date: string, withYear = false): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    ...(withYear ? { year: "numeric" } : {}),
-  }).format(new Date(`${date}T12:00:00`));
-}
-
-function formatMonth(month: string, style: "short" | "long"): string {
-  return new Intl.DateTimeFormat("en-GB", {
-    month: style,
-    year: "numeric",
-  }).format(new Date(`${month}-01T12:00:00`));
-}
 
 function typicalOf(series: RecurringSeries): number {
   return Math.abs(
@@ -132,10 +118,6 @@ function statusText(series: RecurringSeries): string {
     default:
       return `Last ${formatDay(series.last, true)}`;
   }
-}
-
-function count(value: number, singular: string, plural: string): string {
-  return `${value} ${value === 1 ? singular : plural}`;
 }
 
 export const RecurringPayments = component$(() => {
@@ -332,8 +314,8 @@ export const RecurringPayments = component$(() => {
             Recurring<span>.</span>
           </h1>
           <p class="page-subtitle">
-            Payments that come back, found in your history, and what is left
-            each month.
+            Plan each month with your own income and costs, next to the payments
+            that come back in your history.
           </p>
         </div>
 
@@ -387,6 +369,15 @@ export const RecurringPayments = component$(() => {
 
       {data && typical && (
         <>
+          {data.plan && (
+            <RecurringPlan
+              plan={data.plan}
+              today={data.today}
+              hidden={hidden.value}
+              onChange$={load}
+            />
+          )}
+
           <div class="recurring-top">
             <section
               class="overview-panel recurring-panel"
