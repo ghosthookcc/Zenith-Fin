@@ -22,6 +22,8 @@ model User {
   avanza_credential     AvanzaCredential?
   avanza_snapshots      AvanzaBalanceSnapshot[]
   avanza_sync_status    AvanzaSyncStatus?
+  recurring_plan        RecurringPlan?
+  recurring_plan_items  RecurringPlanItem[]
 
   @@index([email])
 }
