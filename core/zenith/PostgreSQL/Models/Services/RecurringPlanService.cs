@@ -24,6 +24,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
         private const int MaxEvery = 120;
         private const int MaxYearsAhead = 10;
         private const int MaxEndYearsAhead = 50;
+        private const int MaxParts = 30;
         private const int SalaryDay = 25;
         private const decimal MaxAmount = 1_000_000_000m;
 
@@ -151,10 +152,15 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
             if (row == null) return Invalid(error!);
 
+            (List<RecurringPlanPartRow>? parts, string? partsError) = ParseParts(request.Parts, row.Direction);
+
+            if (partsError != null) return Invalid(partsError);
+
             if (await _recurringPlanRepository.CountItemsAsync(userId.Value) >= MaxItems)
                 return Invalid($"A plan can have at most {MaxItems} rows");
 
             row.SeriesKey = seriesKey;
+            row.Parts = parts ?? new List<RecurringPlanPartRow>();
 
             long? itemId = await _recurringPlanRepository.InsertItemAsync(userId.Value, row);
 
@@ -182,7 +188,13 @@ namespace ZenithFin.PostgreSQL.Models.Services
             row.Id = itemId;
             row.Direction ??= existing.Direction;
 
-            return await _recurringPlanRepository.UpdateItemAsync(userId.Value, row)
+            (List<RecurringPlanPartRow>? parts, string? partsError) = ParseParts(request.Parts, row.Direction);
+
+            if (partsError != null) return Invalid(partsError);
+
+            row.Parts = parts ?? new List<RecurringPlanPartRow>();
+
+            return await _recurringPlanRepository.UpdateItemAsync(userId.Value, row, parts != null)
                 ? new RecurringPlanResult(StatusCodes.Status200OK, null, itemId)
                 : NotFound;
         }
@@ -302,6 +314,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
                 }
 
                 bool counted = (state is States.Active or States.Quiet) && cadence != null && amount != null;
+                RecurringDto.PlanPart[] parts = direction == Effects.Out
+                    ? row.Parts.Select(part => new RecurringDto.PlanPart { Id = part.Id, Name = part.Name, Amount = part.Amount }).ToArray()
+                    : Array.Empty<RecurringDto.PlanPart>();
+                decimal partsTotal = parts.Sum(part => part.Amount);
 
                 items.Add(new RecurringDto.PlanItem
                 {
@@ -327,7 +343,10 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     Kind = linked?.Kind,
                     CategoryIcon = linked?.CategoryIcon,
                     CategoryColor = linked?.CategoryColor,
-                    Accounts = linked?.Accounts ?? Array.Empty<string>()
+                    Accounts = linked?.Accounts ?? Array.Empty<string>(),
+                    Parts = parts,
+                    PartsTotal = partsTotal,
+                    Unexplained = parts.Length > 0 && amount is decimal total ? total - partsTotal : null
                 });
             }
 
@@ -463,6 +482,35 @@ namespace ZenithFin.PostgreSQL.Models.Services
             }, null);
         }
 
+        private static (List<RecurringPlanPartRow>? Parts, string? Error) ParseParts(IReadOnlyList<RecurringDto.SavePlanPart>? requested,
+                                                                                    string? direction)
+        {
+            if (requested == null) return (null, null);
+
+            if (requested.Count > MaxParts) return (null, $"A row can have at most {MaxParts} parts");
+
+            if (requested.Count > 0 && direction == Effects.In) return (null, "Only money out can be split into parts");
+
+            List<RecurringPlanPartRow> parts = new();
+
+            foreach (RecurringDto.SavePlanPart part in requested)
+            {
+                string name = part.Name?.Trim() ?? string.Empty;
+
+                if (name.Length == 0 || name.Length > MaxNameLength || name.Any(char.IsControl))
+                    return (null, $"Give each part a name of at most {MaxNameLength} characters on one line");
+
+                decimal? amount = part.Amount is decimal entered ? Math.Round(entered, 2, MidpointRounding.AwayFromZero) : null;
+
+                if (amount is not decimal value || value <= 0 || value > MaxAmount)
+                    return (null, "Each part needs an amount above 0 and at most 1 000 000 000 kr");
+
+                parts.Add(new RecurringPlanPartRow { Name = name, Amount = value });
+            }
+
+            return (parts, null);
+        }
+
         private static IEnumerable<DateOnly> DatesBetween(DateOnly anchor,
                                                           Cadence cadence,
                                                           int firstStep,
@@ -518,7 +566,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
 
         private static decimal TypicalOf(RecurringDto.Series series)
         {
-            return Math.Abs(CountsAsCounted(series.Kind) ? series.TypicalCounted : series.TypicalAmount);
+            return Math.Round(Math.Abs(CountsAsCounted(series.Kind) ? series.TypicalCounted : series.TypicalAmount), 2);
         }
 
         private static string DirectionOf(RecurringDto.Series series)

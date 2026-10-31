@@ -2,6 +2,7 @@ using System.Data;
 
 using Dapper;
 
+using ZenithFin.Ledger;
 using ZenithFin.PostgreSQL.Models.Entities;
 
 namespace ZenithFin.PostgreSQL.Models.Repositories
@@ -37,6 +38,16 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                              ON CONFLICT (user_id, series_key) DO NOTHING
                                              RETURNING id;
                                              """;
+
+        private const string InsertPartSql = """
+                                             INSERT INTO "RecurringPlanItemPart" (item_id, name, amount, position)
+                                             VALUES (@ItemId, @Name, @Amount, @Position);
+                                             """;
+
+        private const string DeletePartsSql = """
+                                              DELETE FROM "RecurringPlanItemPart"
+                                              WHERE item_id = @ItemId;
+                                              """;
 
         public RecurringPlanRepository(IDatabaseConnectionFactory connectionFactory)
         {
@@ -86,10 +97,28 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                           ORDER BY id;
                           """;
 
-            using var connection = _connectionFactory.Create();
-            IEnumerable<RecurringPlanItemRow> items = await connection.QueryAsync<RecurringPlanItemRow>(sql, new { UserId = userId });
+            const string partsSql = """
+                                    SELECT
+                                        p.id AS "Id",
+                                        p.item_id AS "ItemId",
+                                        p.name AS "Name",
+                                        p.amount AS "Amount"
+                                    FROM "RecurringPlanItemPart" p
+                                    INNER JOIN "RecurringPlanItem" i
+                                        ON i.id = p.item_id
+                                    WHERE i.user_id = @UserId
+                                    ORDER BY p.item_id, p.position, p.id;
+                                    """;
 
-            return items.ToArray();
+            using var connection = _connectionFactory.Create();
+            RecurringPlanItemRow[] items = (await connection.QueryAsync<RecurringPlanItemRow>(sql, new { UserId = userId })).ToArray();
+            ILookup<long, RecurringPlanPartRow> parts = (await connection.QueryAsync<RecurringPlanPartRow>(partsSql, new { UserId = userId }))
+                                                        .ToLookup(part => part.ItemId);
+
+            foreach (RecurringPlanItemRow item in items)
+                item.Parts = parts[item.Id].ToList();
+
+            return items;
         }
 
         public async Task<RecurringPlanItemRow?> GetItemAsync(long userId,
@@ -132,13 +161,17 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
 
             long? id = await connection.QuerySingleOrDefaultAsync<long?>(InsertItemSql, ItemParameters(userId, item), transaction);
 
+            if (id is long itemId && item.Parts.Count > 0)
+                await connection.ExecuteAsync(InsertPartSql, PartParameters(itemId, item.Parts), transaction);
+
             transaction.Commit();
 
             return id;
         }
 
         public async Task<bool> UpdateItemAsync(long userId,
-                                                RecurringPlanItemRow item)
+                                                RecurringPlanItemRow item,
+                                                bool replaceParts)
         {
             const string sql = """
                                UPDATE "RecurringPlanItem"
@@ -155,7 +188,12 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                                """;
 
             using var connection = _connectionFactory.Create();
-            return await connection.ExecuteAsync(sql, new
+
+            if (connection.State != ConnectionState.Open) connection.Open();
+
+            using var transaction = connection.BeginTransaction();
+
+            bool updated = await connection.ExecuteAsync(sql, new
             {
                 UserId = userId,
                 ItemId = item.Id,
@@ -166,7 +204,21 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
                 item.Unit,
                 item.LastDate,
                 item.EndDate
-            }) > 0;
+            }, transaction) > 0;
+
+            if (!updated) return false;
+
+            bool moneyIn = item.Direction == Effects.In;
+
+            if (replaceParts || moneyIn)
+                await connection.ExecuteAsync(DeletePartsSql, new { ItemId = item.Id }, transaction);
+
+            if (replaceParts && !moneyIn && item.Parts.Count > 0)
+                await connection.ExecuteAsync(InsertPartSql, PartParameters(item.Id, item.Parts), transaction);
+
+            transaction.Commit();
+
+            return true;
         }
 
         public async Task<bool> DeleteItemAsync(long userId,
@@ -180,6 +232,18 @@ namespace ZenithFin.PostgreSQL.Models.Repositories
 
             using var connection = _connectionFactory.Create();
             return await connection.ExecuteAsync(sql, new { UserId = userId, ItemId = itemId }) > 0;
+        }
+
+        private static IEnumerable<object> PartParameters(long itemId,
+                                                         IReadOnlyList<RecurringPlanPartRow> parts)
+        {
+            return parts.Select((part, position) => new
+            {
+                ItemId = itemId,
+                part.Name,
+                part.Amount,
+                Position = position
+            });
         }
 
         private static object ItemParameters(long userId,

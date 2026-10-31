@@ -109,6 +109,16 @@ namespace ZenithFin.Api.Models.Dtos
             public string? CategoryIcon { get; set; }
             public string? CategoryColor { get; set; }
             public IReadOnlyList<string> Accounts { get; set; } = Array.Empty<string>();
+            public IReadOnlyList<PlanPart> Parts { get; set; } = Array.Empty<PlanPart>();
+            public decimal PartsTotal { get; set; }
+            public decimal? Unexplained { get; set; }
+        }
+
+        public sealed class PlanPart
+        {
+            public long Id { get; set; }
+            public string Name { get; set; } = string.Empty;
+            public decimal Amount { get; set; }
         }
 
         public sealed class PlanMonth
@@ -163,6 +173,13 @@ namespace ZenithFin.Api.Models.Dtos
             public string? LastDate { get; set; }
             public string? EndDate { get; set; }
             public string? SeriesKey { get; set; }
+            public IReadOnlyList<SavePlanPart>? Parts { get; set; }
+        }
+
+        public sealed class SavePlanPart
+        {
+            public string? Name { get; set; }
+            public decimal? Amount { get; set; }
         }
     }
 }
