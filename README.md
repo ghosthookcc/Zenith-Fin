@@ -1,8 +1,8 @@
 # Zenith-Fin
 
-Zenith is a personal finance dashboard for Swedish bank accounts. It connects to your banks through [Enable Banking](https://enablebanking.com/docs/api/reference/), keeps every account and transaction in your own PostgreSQL database, sorts transactions into categories (rules, your own corrections and an optional AI), and shows balances, credit accounts, virtual accounts, recurring payments and a monthly calendar.
+Zenith is a personal finance dashboard for Swedish bank accounts. It connects to your banks through [Enable Banking](https://enablebanking.com/docs/api/reference/), keeps every account and transaction in your own PostgreSQL database, sorts transactions into categories (rules, your own corrections and an optional AI), and shows balances, credit accounts, virtual accounts, a monthly calendar, recurring payments with a monthly plan, and the value of your Avanza accounts. Accounts and transactions can be exported to CSV.
 
-It runs entirely on your own computer. With the optional nginx setup, every device on your home network can use it at `https://zenith.fin.se`.
+It runs entirely on your own computer and is never published on the internet. Devices on your home network use it at `https://zenith.fin.se` through nginx, and your own devices away from home reach the same address through Tailscale.
 
 ## Contents
 
@@ -14,22 +14,30 @@ It runs entirely on your own computer. With the optional nginx setup, every devi
 6. [Run it for development](#5-run-it-for-development)
 7. [Always-on deployment](#6-always-on-deployment)
 8. [HTTPS on your network with nginx](#7-https-on-your-network-with-nginx)
-9. [Everyday tasks](#8-everyday-tasks)
-10. [Troubleshooting](#9-troubleshooting)
+9. [Away from home with Tailscale](#8-away-from-home-with-tailscale)
+10. [Avanza values (optional)](#9-avanza-values-optional)
+11. [systemd services](#10-systemd-services)
+12. [Everyday tasks](#11-everyday-tasks)
+13. [Troubleshooting](#12-troubleshooting)
 
 ## How it fits together
 
 ```
-Phone / laptop ──https──▶ nginx :443 (zenith.fin.se)
-                             │
-                             ▼
-                     Website :4480 (Astro + Qwik, localhost only)
-                             │
-                             ▼
-                     API :4456 (.NET 8, localhost only) ──▶ PostgreSQL
-                             │
-                             ├──▶ Enable Banking API (accounts, balances, transactions)
-                             └──▶ AI provider (optional, OpenAI-compatible)
+Phone / laptop at home ──────┐
+Your devices, via Tailscale ─┴─https─▶ nginx :443 on the LAN address (zenith.fin.se)
+                                         │
+                                         ▼
+                                 Website :4480 (Astro + Qwik, localhost only)
+                                         │
+                                         ▼
+                                 API :4456 (.NET 8, localhost only) ──▶ PostgreSQL
+                                         │
+                                         ├──▶ Enable Banking API (accounts, balances, transactions)
+                                         └──▶ AI provider (optional, OpenAI-compatible)
+
+avanza-sync.timer (Mon + Thu) ──▶ avanza-sync.service ──▶ Avanza (optional, read only)
+                                    │
+                                    └──▶ PostgreSQL (encrypted login in, account values out)
 ```
 
 | Folder | What it is |
@@ -38,6 +46,7 @@ Phone / laptop ──https──▶ nginx :443 (zenith.fin.se)
 | `www` | The website (Astro 5 + Qwik + Tailwind) |
 | `tools` | Prisma schema and SQL migrations for the database |
 | `deploy` | `deploy.sh`, which builds and runs Zenith as background services |
+| `deploy/avanza-sync` | The optional Avanza fetcher: script, systemd service and timer, setup script and tests |
 
 | Port | Used by |
 | --- | --- |
@@ -45,9 +54,12 @@ Phone / laptop ──https──▶ nginx :443 (zenith.fin.se)
 | 4445 / 4446 | API in development (Rider or `dotnet run`) |
 | 4455 / 4456 | API of the always-on deployment |
 | 4480 | Website of the always-on deployment (only reachable through nginx) |
-| 80 / 443 | nginx (`zenith.fin.se`) |
+| 80 / 443 | nginx (`zenith.fin.se`), on the LAN address only |
+| 53 | AdGuard Home, if it answers DNS for `zenith.fin.se` |
 
 Development and the always-on deployment use different ports, so both can run at the same time. They share the same database.
+
+Only nginx listens on the network, and only on this computer's LAN address. The website and the API listen on localhost, and nothing is forwarded from your router. Away from home, Zenith can only be reached through Tailscale.
 
 ## 1. Prerequisites
 
@@ -69,6 +81,8 @@ You also need:
 - an **Enable Banking** application (see [step 3](#3-enable-banking))
 - optionally an **AI provider** with an OpenAI-compatible API (for example Groq or OpenAI) for sorting the transactions the rules leave in "Other"
 - optionally **AdGuard Home** (or another local DNS server) so devices on your network can find `zenith.fin.se`
+- optionally **Tailscale** to use Zenith away from home ([step 8](#8-away-from-home-with-tailscale))
+- for the optional **Avanza** values: `sudo apt install python3-venv`, systemd 250 or newer (for `systemd-creds`) and a synchronised clock ([step 9](#9-avanza-values-optional))
 
 Create the local certificate authority once. It is used for every HTTPS certificate below:
 
@@ -100,6 +114,8 @@ npx prisma migrate deploy
 ```
 
 Every change to the schema in `tools/prisma/schema/models` comes with a migration in `tools/prisma/migrations`. Run `npx prisma migrate deploy` again whenever new migrations arrive. Use `migrate deploy`, not `migrate dev`: `migrate dev` can offer to wipe the database and also runs the ERD generator (puppeteer).
+
+The Avanza fetcher gets its own database role, `avanza-sync`, which logs in over the unix socket without a password. Its setup script creates it ([step 9](#9-avanza-values-optional)).
 
 ## 3. Enable Banking
 
@@ -156,6 +172,8 @@ Set `"Enabled": false` to run without AI. Other settings you can add:
 | `Sync:BackgroundIntervalHours` | `6` | How often the API fetches new transactions on its own. Banks allow about four background fetches per account per day. `0` turns it off. |
 | `AI:BatchSize` | `40` | Transactions per AI request |
 | `AI:MaxBatchesPerRun` | `5` | AI requests per sync |
+| `Avanza:PublicKeyFile` | `/etc/avanza-sync/public.key` | The public key the API encrypts your Avanza login with. The Avanza setup script creates it ([step 9](#9-avanza-values-optional)). |
+| `Avanza:PublicKey` | empty | The same key as base64 text, used instead of the file when set |
 
 Things the API creates by itself in `core/zenith` (all ignored by git):
 
@@ -205,23 +223,16 @@ The website reads two optional environment variables: `ZENITH_API_URL` (default 
 4. writes two systemd user services:
    - `zenith-api`: Production mode on localhost 4455/4456. Its working folder is `core/zenith`, so it shares `workspace.json`, the bank key and the encryption keys with development.
    - `zenith-web`: the website on `127.0.0.1:4480`
-5. writes the nginx site to `~/.config/zenith-fin/nginx/zenith.conf` and tells you when it needs installing
+5. writes the nginx site to `~/.config/zenith-fin/nginx/zenith.conf`, listening only on this computer's LAN address, and tells you when it needs installing
 6. enables both services and "linger", so Zenith starts at boot even before anyone logs in
 
 ```bash
 ./deploy/deploy.sh
 ```
 
-Run it again after every update. The previous build is kept as `api.previous` / `web.previous`. You can override `ZENITH_DOMAIN`, `ZENITH_WEB_PORT`, `ZENITH_API_HTTP_PORT` and `ZENITH_API_HTTPS_PORT`.
+Run it again after every update. The previous build is kept as `api.previous` / `web.previous`, and the website's build log is in `~/.local/share/zenith-fin/build.log`. You can override `ZENITH_DOMAIN`, `ZENITH_WEB_PORT`, `ZENITH_API_HTTP_PORT`, `ZENITH_API_HTTPS_PORT` and `ZENITH_ADDRESS` (the LAN address nginx listens on; by default the address `ip -4 route get 1.1.1.1` reports).
 
-Managing the services:
-
-```bash
-systemctl --user status zenith-api zenith-web
-journalctl --user -u zenith-api -u zenith-web -f
-systemctl --user restart zenith-api zenith-web
-systemctl --user stop zenith-web zenith-api
-```
+How to check, restart and read the logs of the services is in [step 10](#10-systemd-services).
 
 ## 7. HTTPS on your network with nginx
 
@@ -251,7 +262,7 @@ sudo ln -sf /etc/nginx/sites-available/zenith /etc/nginx/sites-enabled/zenith
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-The site redirects `http://` to `https://`, serves the certificate authority file, and forwards everything else to the website.
+The site listens only on the LAN address, redirects `http://` to `https://`, serves the certificate authority file, forwards everything else to the website, and refuses requests for any other host name.
 
 ### 7.3 Firewall
 
@@ -259,7 +270,13 @@ The site redirects `http://` to `https://`, serves the certificate authority fil
 sudo ufw allow from 192.168.1.0/24 to any port 80,443 proto tcp
 ```
 
-Use your own network range if it isn't `192.168.1.0/24`.
+If AdGuard Home on this computer answers DNS for your network ([7.4](#74-dns-let-every-device-find-zenithfinse)), open its port for the same range:
+
+```bash
+sudo ufw allow from 192.168.1.0/24 to any port 53
+```
+
+Use your own network range if it isn't `192.168.1.0/24`. Never forward ports 80 or 443 on your router: Zenith is not meant to be reachable from the internet.
 
 ### 7.4 DNS: let every device find `zenith.fin.se`
 
@@ -290,7 +307,90 @@ Open `http://zenith.fin.se/zenith-ca.crt` (plain `http`) on the device and insta
 
 Make sure `https://zenith.fin.se/api/callback/auth/aspsp` is one of the application's redirect URLs ([step 3](#3-enable-banking)). Without it, connecting a bank from the deployed site fails.
 
-## 8. Everyday tasks
+## 8. Away from home with Tailscale
+
+Zenith is never opened to the internet. To use it away from home, put this computer and your own devices in the same [Tailscale](https://tailscale.com) network (tailnet). Tailscale carries the traffic to this computer's LAN address, so `https://zenith.fin.se`, the certificate and the Enable Banking redirect work exactly as at home.
+
+### 8.1 This computer
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+sudo tailscale set --advertise-routes=192.168.1.178/32
+```
+
+Use your own LAN address. The `/32` route shares this computer only, not the rest of your network. Then, in the [admin console](https://login.tailscale.com/admin/machines):
+
+1. **Machines** → this computer → **⋯** → **Edit route settings** → approve `192.168.1.178/32`.
+2. **⋯** → **Disable key expiry**, so the server doesn't drop out of the tailnet when its key expires.
+
+### 8.2 DNS for `zenith.fin.se`
+
+In the admin console under **DNS** → **Nameservers** → **Add nameserver** → **Custom**, enter this computer's LAN address (`192.168.1.178`, where AdGuard Home answers, [7.4](#74-dns-let-every-device-find-zenithfinse)) and turn on **Restrict to domain** with `zenith.fin.se`. Your devices then ask AdGuard for `zenith.fin.se` through Tailscale and keep their usual DNS for everything else.
+
+`tailscale dns status` on this computer lists the route as `zenith.fin.se -> 192.168.1.178` under **Split DNS Routes**.
+
+### 8.3 Your devices
+
+1. Install Tailscale and sign in to the same tailnet. Keep **Use Tailscale DNS** on (the default).
+2. Phones, tablets, Windows and Mac use the approved route automatically. On Linux run `sudo tailscale set --accept-routes`.
+3. Install the certificate authority as in [7.5](#75-trust-the-certificate-on-each-device) if the device hasn't already.
+
+With Tailscale connected, open `https://zenith.fin.se` from anywhere.
+
+### 8.4 Keep it private
+
+- Don't use Tailscale Funnel or `tailscale serve` for Zenith. Funnel publishes a service on the internet. `tailscale funnel status` should say `No serve config`.
+- Tailscale's access controls decide which devices in your tailnet may use the route. The default policy lets all of them in, so tighten it if you share your tailnet with others.
+
+## 9. Avanza values (optional)
+
+The **Avanza** page shows the total value of each of your Avanza accounts and how it changes over time, and the accounts count in the total on **Accounts** and in its CSV export. Avanza has no official API, so a separate fetcher uses an unofficial one. That breaks Avanza's terms of use, so the fetcher only reads the account overview and logs in at most twice a week.
+
+Set it up after the first deployment:
+
+```bash
+./deploy/deploy.sh
+sudo ./deploy/avanza-sync/setup.sh
+```
+
+The script creates the `avanza-sync` system user, installs the fetcher in `/opt/avanza-sync`, creates the key pair (the public key in `/etc/avanza-sync/public.key`, the private key encrypted with `systemd-creds`), creates the database role and installs and starts the timer. If it says the service user could not connect to the database, add this line above the other `local` lines in `pg_hba.conf` and reload PostgreSQL:
+
+```
+local   zenith   avanza-sync   peer
+```
+
+Then open **Avanza** in Zenith and enter your username, password and TOTP secret. The API only holds the public key, so it can encrypt your details but never read them back. Only the fetcher can decrypt them.
+
+How the keys are kept, the schedule and its limits, the statuses, key rotation, the tests and how to remove it are described in [deploy/avanza-sync/README.md](deploy/avanza-sync/README.md).
+
+## 10. systemd services
+
+| Unit | Kind | Unit file | What it does |
+| --- | --- | --- | --- |
+| `zenith-api.service` | user | `~/.config/systemd/user/`, written by `deploy.sh` | Runs `~/.local/share/zenith-fin/api/ZenithFin.dll` in Production on localhost 4455/4456 from `core/zenith` |
+| `zenith-web.service` | user | `~/.config/systemd/user/`, written by `deploy.sh` | Runs the website (`~/.local/share/zenith-fin/web/dist/server/entry.mjs`) on `127.0.0.1:4480` after the API |
+| `avanza-sync.service` | system | `/etc/systemd/system/`, copied from `deploy/avanza-sync` by `setup.sh` | Fetches Avanza values once as the `avanza-sync` user in a strict sandbox, then exits |
+| `avanza-sync.timer` | system | `/etc/systemd/system/`, copied from `deploy/avanza-sync` by `setup.sh` | Starts the fetch on Monday and Thursday at 07:00 with up to 90 minutes of random delay |
+
+The user services restart by themselves if they crash, and they start at boot because `deploy.sh` turns on linger for your user (`loginctl enable-linger`). `deploy.sh` rewrites their unit files on every run, so change the script, not the files. To change the Avanza units, edit them in `deploy/avanza-sync` and run `setup.sh` again.
+
+```bash
+systemctl --user status zenith-api zenith-web
+journalctl --user -u zenith-api -u zenith-web -f
+systemctl --user restart zenith-api zenith-web
+systemctl --user stop zenith-web zenith-api
+systemctl --user cat zenith-api
+
+systemctl list-timers avanza-sync.timer
+journalctl -u avanza-sync.service -n 20 --no-pager
+sudo systemctl start avanza-sync.service
+systemd-analyze security avanza-sync.service
+```
+
+Zenith also relies on these system services: `postgresql`, `nginx`, `tailscaled` ([step 8](#8-away-from-home-with-tailscale)), AdGuard Home if it answers your DNS, and `systemd-timesyncd` or `chrony`, because the Avanza login codes need the right time.
+
+## 11. Everyday tasks
 
 **Update Zenith**
 
@@ -300,9 +400,15 @@ cd tools && npx prisma migrate deploy && cd ..
 ./deploy/deploy.sh
 ```
 
+If the update changed `deploy/avanza-sync`, also run `sudo ./deploy/avanza-sync/setup.sh`. It keeps the existing key, so your saved Avanza details stay valid.
+
 **Connect or reconnect a bank**: Accounts → Connected banks → Reconnect, or Add a bank. Tick every account you want Zenith to see. An account the bank no longer shares is marked "no longer shares this account".
 
-**Start over with an empty database** (deletes all users, banks and transactions):
+**Export to CSV**: **Accounts → Export CSV** gives one row per account with balances and monthly figures. **Calendar → Export CSV** gives the transactions of any days, months or years, up to 10 years at a time. Choose **For Excel** (semicolons and decimal commas, for Swedish Excel) or **Standard CSV** (commas and decimal points, for LibreOffice, Google Sheets, Python and R).
+
+**Plan your months**: **Recurring → Monthly plan** shows what comes in, goes out and is left for this month and the next 11. Add income and fixed costs as your own rows (every few months or years from the date they last happened, with an optional end), or add payments from your history, which then follow your bank's amount and dates until you change them.
+
+**Start over with an empty database** (deletes all users, banks, transactions and Avanza values):
 
 ```bash
 systemctl --user stop zenith-web zenith-api
@@ -310,15 +416,20 @@ cd tools && npx prisma migrate reset && cd ..
 systemctl --user start zenith-api zenith-web
 ```
 
-Remove your banks in Zenith first if you also want to end Zenith's access at the banks.
+Remove your banks in Zenith first if you also want to end Zenith's access at the banks. If you use Avanza, run `sudo ./deploy/avanza-sync/setup.sh` afterwards to give the fetcher its database access back.
 
-## 9. Troubleshooting
+## 12. Troubleshooting
 
 | Problem | What to check |
 | --- | --- |
 | `502 Bad Gateway` right after a deploy | The website takes a second to start. Reload. |
 | Page never loads on a phone | DNS ([7.4](#74-dns-let-every-device-find-zenithfinse)): does `http://zenith.fin.se` reach this computer? Then check the firewall ([7.3](#73-firewall)). |
+| Works at home but not away | Is Tailscale connected on the device? Is the route approved ([8.1](#81-this-computer)), and accepted on Linux ([8.3](#83-your-devices))? Does `zenith.fin.se` resolve through the split DNS ([8.2](#82-dns-for-zenithfinse))? If the connection times out, let Tailscale traffic through ufw: `sudo ufw allow in on tailscale0 to any port 53` and `sudo ufw allow in on tailscale0 to any port 80,443 proto tcp`. |
 | Certificate warning | The device hasn't installed `zenith-ca.crt` yet ([7.5](#75-trust-the-certificate-on-each-device)). |
 | Connecting a bank fails after the bank login | The redirect URL for the address you use isn't registered at Enable Banking ([7.6](#76-enable-banking)). |
 | A credit or virtual account stays at 0 | The linked account isn't shared with Zenith anymore. Reconnect the bank and tick the account. |
-| Logs | `journalctl --user -u zenith-api -u zenith-web -f`, `/var/log/nginx/error.log` |
+| "Avanza is not set up on this server yet" | Run `sudo ./deploy/avanza-sync/setup.sh` ([step 9](#9-avanza-values-optional)). It creates `/etc/avanza-sync/public.key`, which the API reads. |
+| Avanza says "Login refused" or "Enter your details again" | Avanza refused the login (`AUTH_FAILED`), or the key was replaced (`KEY_MISMATCH`). Enter your details again on the Avanza page. The fetcher doesn't try again until you do. |
+| Avanza says "Last fetch failed" | The run hit an error, shown by its class (for example `ConnectionError`). It tries again at the next scheduled time. See `journalctl -u avanza-sync.service`. |
+| An exported CSV opens in one column or with broken numbers | Export again as **Standard CSV**, or tell the import that the separator is a semicolon and the decimal sign a comma. |
+| Logs | `journalctl --user -u zenith-api -u zenith-web -f`, `journalctl -u avanza-sync.service`, `/var/log/nginx/error.log` |
