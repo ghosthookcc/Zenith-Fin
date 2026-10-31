@@ -417,14 +417,77 @@
   color: #f3c1bd;
 }
 
-.plan-grid {
+.plan-pair {
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  gap: 22px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
   align-items: start;
 }
 
-.plan-month-view,
+.plan-column {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 18px;
+  border: 1px solid var(--cal-line);
+  border-radius: 14px;
+  background: #171c27;
+}
+
+.plan-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.plan-column-head h3 {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.plan-totals {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--cal-line);
+}
+
+.plan-totals div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.plan-totals dt {
+  font-size: 0.75rem;
+  color: var(--cal-muted);
+}
+
+.plan-totals dd {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.plan-totals-left dd {
+  color: var(--cal-income);
+}
+
+.plan-column-title {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--cal-ink-2);
+}
+
 .plan-year {
   display: flex;
   flex-direction: column;
@@ -432,12 +495,95 @@
   min-width: 0;
 }
 
-.plan-figures {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.plan-parts {
+  display: flex;
+  grid-column: 2 / -1;
+  flex-direction: column;
+  gap: 3px;
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid #2e3646;
+  list-style: none;
+  font-size: 0.75rem;
+  color: var(--cal-ink-2);
 }
 
-.plan-left dd {
-  color: var(--cal-income);
+.plan-parts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.plan-parts li span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-parts li span:last-child {
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.plan-part-rest {
+  color: #f3c98b;
+}
+
+.plan-split {
+  gap: 10px;
+}
+
+.plan-part-edit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px 36px;
+  grid-template-areas: "name money remove";
+  align-items: center;
+  gap: 8px;
+}
+
+.plan-part-name {
+  grid-area: name;
+}
+
+.plan-part-money {
+  grid-area: money;
+}
+
+.plan-part-remove {
+  display: grid;
+  grid-area: remove;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #2b3240;
+  border-radius: 10px;
+  background: transparent;
+  color: #b6becc;
+}
+
+.plan-part-remove:hover {
+  background: #1d2330;
+  color: #f1f2f5;
+}
+
+.plan-part-remove svg {
+  width: 16px;
+  height: 16px;
+}
+
+.plan-part-add {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+}
+
+.plan-part-add svg {
+  width: 14px;
+  height: 14px;
 }
 
 .plan-list {
@@ -849,7 +995,7 @@ html:has(.plan-dialog[open]) {
 
 @media (max-width: 900px) {
   .recurring-top,
-  .plan-grid {
+  .plan-pair {
     grid-template-columns: minmax(0, 1fr);
   }
 }
@@ -913,8 +1059,31 @@ html:has(.plan-dialog[open]) {
     justify-content: space-between;
   }
 
-  .plan-figures {
+  .plan-column {
+    padding: 14px;
+  }
+
+  .plan-totals {
     grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+
+  .plan-totals div {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: space-between;
+  }
+
+  .plan-split {
+    gap: 14px;
+  }
+
+  .plan-part-edit {
+    grid-template-columns: minmax(0, 1fr) 36px;
+    grid-template-areas:
+      "name remove"
+      "money .";
+    row-gap: 6px;
   }
 
   .plan-row {

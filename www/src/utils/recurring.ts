@@ -27,6 +27,15 @@ export interface PlanItem {
   categoryIcon?: string | null;
   categoryColor?: string | null;
   accounts: string[];
+  parts: PlanPart[];
+  partsTotal: number;
+  unexplained?: number | null;
+}
+
+export interface PlanPart {
+  id: number;
+  name: string;
+  amount: number;
 }
 
 export interface PlanOccurrence {

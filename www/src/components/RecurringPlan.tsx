@@ -16,7 +16,9 @@ import {
   type Plan,
   type PlanDirection,
   type PlanItem,
+  type PlanMonth,
   type PlanOccurrence,
+  type PlanPart,
   type PlanSuggestion,
 } from "../utils/recurring";
 
@@ -27,6 +29,12 @@ interface PlanProps {
   today: string;
   hidden: boolean;
   onChange$: PropFunction<() => Promise<void>>;
+}
+
+interface EditorPart {
+  key: number;
+  name: string;
+  amount: string;
 }
 
 interface EditorState {
@@ -44,6 +52,8 @@ interface EditorState {
   endDate: string;
   bankAmount: number | null;
   bankCadence: string;
+  parts: EditorPart[];
+  nextPart: number;
   saving: boolean;
   error: string | null;
 }
@@ -71,7 +81,17 @@ function parseAmount(text: string): number | null {
 }
 
 function amountText(amount: number | null | undefined): string {
-  return amount == null ? "" : String(amount).replace(".", ",");
+  if (amount == null) {
+    return "";
+  }
+
+  return (
+    Number.isInteger(amount) ? String(amount) : amount.toFixed(2)
+  ).replace(".", ",");
+}
+
+function restText(rest: number): string {
+  return rest > 0 ? "Unexplained" : "Parts over the amount";
 }
 
 function plainName(name: string): string {
@@ -159,6 +179,8 @@ export const RecurringPlan = component$<PlanProps>((props) => {
     endDate: "",
     bankAmount: null,
     bankCadence: "",
+    parts: [],
+    nextPart: 1,
     saving: false,
     error: null,
   });
@@ -182,6 +204,8 @@ export const RecurringPlan = component$<PlanProps>((props) => {
     editor.endDate = "";
     editor.bankAmount = null;
     editor.bankCadence = "";
+    editor.parts = [];
+    editor.nextPart = 1;
     editor.saving = false;
     editor.error = null;
 
@@ -209,12 +233,30 @@ export const RecurringPlan = component$<PlanProps>((props) => {
     editor.endDate = item.endDate ?? "";
     editor.bankAmount = item.bankAmount ?? null;
     editor.bankCadence = item.bankCadenceLabel ?? "";
+    editor.parts = item.parts.map((part, position) => ({
+      key: position + 1,
+      name: part.name,
+      amount: amountText(part.amount),
+    }));
+    editor.nextPart = item.parts.length + 1;
     editor.saving = false;
     editor.error = null;
 
     if (dialog.value && !dialog.value.open) {
       dialog.value.showModal();
     }
+  });
+
+  const addPart = $(() => {
+    editor.parts = [
+      ...editor.parts,
+      { key: editor.nextPart, name: "", amount: "" },
+    ];
+    editor.nextPart += 1;
+  });
+
+  const removePart = $((key: number) => {
+    editor.parts = editor.parts.filter((part) => part.key !== key);
   });
 
   const save = $(async () => {
@@ -248,6 +290,20 @@ export const RecurringPlan = component$<PlanProps>((props) => {
       return;
     }
 
+    const splitting = editor.direction === "OUT";
+    const parts = splitting
+      ? editor.parts.map((part) => ({
+          name: part.name.trim(),
+          amount: parseAmount(part.amount.trim()),
+        }))
+      : [];
+
+    if (parts.some((part) => part.name === "" || part.amount === null)) {
+      editor.error =
+        "Give every part a name and an amount, like 1 250 or 99,50.";
+      return;
+    }
+
     const name = editor.name.trim();
     const adding = editor.mode === "add";
 
@@ -268,6 +324,7 @@ export const RecurringPlan = component$<PlanProps>((props) => {
           unit: ownCadence ? editor.unit : null,
           lastDate: editor.bank ? null : editor.lastDate,
           endDate: editor.endDate === "" ? null : editor.endDate,
+          parts,
         },
       );
 
@@ -339,21 +396,17 @@ export const RecurringPlan = component$<PlanProps>((props) => {
 
   const kr = (amount: number) =>
     props.hidden ? maskedAmount : formatKr(amount);
+  const cents = (amount: number) => Math.round(amount * 100) / 100;
   const plan = props.plan;
   const months = plan.months;
-  const index = Math.min(selected.value, Math.max(0, months.length - 1));
-  const month = months.length > 0 ? months[index] : null;
-  const occurrences = month?.occurrences ?? [];
+  const itemsById = new Map(plan.items.map((item) => [item.id, item]));
+  const first = Math.max(0, Math.min(selected.value, months.length - 2));
+  const shown = months.slice(first, first + 2);
+  const currentIndex = months.findIndex((month) => month.current);
   const settled = (occurrence: PlanOccurrence) =>
     occurrence.status === "PAID" || occurrence.status === "PASSED";
   const sumOf = (list: PlanOccurrence[]) =>
-    list.reduce((sum, occurrence) => sum + occurrence.amount, 0);
-  const incoming = occurrences.filter(
-    (occurrence) => occurrence.direction === "IN",
-  );
-  const outgoing = occurrences.filter(
-    (occurrence) => occurrence.direction === "OUT",
-  );
+    cents(list.reduce((sum, occurrence) => sum + occurrence.amount, 0));
   const groups: {
     direction: PlanDirection;
     title: string;
@@ -370,38 +423,156 @@ export const RecurringPlan = component$<PlanProps>((props) => {
       items: plan.items.filter((item) => item.direction === "OUT"),
     },
   ];
+  const splitTotal = cents(
+    editor.parts.reduce(
+      (sum, part) => sum + (parseAmount(part.amount.trim()) ?? 0),
+      0,
+    ),
+  );
+  const splitBase =
+    parseAmount(editor.amount.trim()) ??
+    (editor.bank ? editor.bankAmount : null);
+  const splitRest = splitBase == null ? 0 : cents(splitBase - splitTotal);
+  const splitSummary =
+    splitBase == null
+      ? `The parts add up to ${formatKr(splitTotal)} kr.`
+      : Math.abs(splitRest) < 0.005
+        ? `The parts explain all ${formatKr(splitBase)} kr.`
+        : splitRest > 0
+          ? `The parts explain ${formatKr(splitTotal)} of ${formatKr(splitBase)} kr. ${formatKr(splitRest)} kr is unexplained.`
+          : `The parts add up to ${formatKr(-splitRest)} kr more than ${formatKr(splitBase)} kr.`;
 
-  const renderOccurrence = (occurrence: PlanOccurrence, position: number) => (
-    <li
-      key={`${occurrence.itemId}-${occurrence.date}-${position}`}
-      class={{
-        "plan-occurrence": true,
-        "plan-settled": settled(occurrence),
-        "plan-late": occurrence.status === "LATE",
-      }}
-    >
-      <span class="plan-date">{formatDay(occurrence.date)}</span>
-      <span class="plan-name">
-        <strong title={occurrence.name}>{occurrence.name}</strong>
-        {month?.current && (
-          <small>
-            {statusText(
-              occurrence,
-              plan.items.find((item) => item.id === occurrence.itemId)?.kind,
-            )}
-          </small>
-        )}
-      </span>
-      <span
+  const renderParts = (parts: PlanPart[], rest: number, label: string) => (
+    <ul class="plan-parts" aria-label={label}>
+      {parts.map((part) => (
+        <li key={part.id}>
+          <span>{part.name}</span>
+          <span>{`${kr(part.amount)} kr`}</span>
+        </li>
+      ))}
+      {Math.abs(rest) >= 0.005 && (
+        <li class="plan-part-rest">
+          <span>{restText(rest)}</span>
+          <span>{`${kr(Math.abs(rest))} kr`}</span>
+        </li>
+      )}
+    </ul>
+  );
+
+  const renderOccurrence = (
+    occurrence: PlanOccurrence,
+    position: number,
+    current: boolean,
+  ) => {
+    const item = itemsById.get(occurrence.itemId);
+    const parts = occurrence.direction === "OUT" ? (item?.parts ?? []) : [];
+
+    return (
+      <li
+        key={`${occurrence.itemId}-${occurrence.date}-${position}`}
         class={{
-          "plan-amount": true,
-          "plan-amount-in": occurrence.direction === "IN",
+          "plan-occurrence": true,
+          "plan-settled": settled(occurrence),
+          "plan-late": occurrence.status === "LATE",
         }}
       >
-        {`${occurrence.direction === "IN" ? "+" : "−"} ${kr(occurrence.amount)} kr`}
-      </span>
-    </li>
-  );
+        <span class="plan-date">{formatDay(occurrence.date)}</span>
+        <span class="plan-name">
+          <strong title={occurrence.name}>{occurrence.name}</strong>
+          {current && <small>{statusText(occurrence, item?.kind)}</small>}
+        </span>
+        <span
+          class={{
+            "plan-amount": true,
+            "plan-amount-in": occurrence.direction === "IN",
+          }}
+        >
+          {`${occurrence.direction === "IN" ? "+" : "−"} ${kr(occurrence.amount)} kr`}
+        </span>
+        {parts.length > 0 &&
+          renderParts(
+            parts,
+            cents(occurrence.amount - (item?.partsTotal ?? 0)),
+            `What ${occurrence.name} covers`,
+          )}
+      </li>
+    );
+  };
+
+  const renderMonth = (month: PlanMonth, position: number) => {
+    const title = formatMonth(month.month, "long");
+    const incoming = month.occurrences.filter(
+      (occurrence) => occurrence.direction === "IN",
+    );
+    const outgoing = month.occurrences.filter(
+      (occurrence) => occurrence.direction === "OUT",
+    );
+    const badge = month.current
+      ? "This month"
+      : currentIndex >= 0 && position === currentIndex + 1
+        ? "Next month"
+        : null;
+
+    return (
+      <section key={month.month} class="plan-column" aria-label={title}>
+        <div class="plan-column-head">
+          <h3>{title}</h3>
+          {badge && <span class="soft-badge">{badge}</span>}
+        </div>
+
+        <dl class="plan-totals">
+          <div>
+            <dt>Money in</dt>
+            <dd>{`${kr(month.in)} kr`}</dd>
+          </div>
+          <div>
+            <dt>Money out</dt>
+            <dd>{`${kr(month.out)} kr`}</dd>
+          </div>
+          <div class="plan-totals-left">
+            <dt>Left</dt>
+            <dd class={{ "recurring-negative": month.left < 0 }}>
+              {`${kr(month.left)} kr`}
+            </dd>
+          </div>
+        </dl>
+
+        {month.current && (
+          <p class="recurring-hint">
+            {`${kr(sumOf(incoming.filter(settled)))} kr received so far · ${kr(
+              sumOf(outgoing.filter((occurrence) => !settled(occurrence))),
+            )} kr still to pay`}
+          </p>
+        )}
+
+        {month.occurrences.length === 0 && (
+          <p class="recurring-hint">Nothing in your plan this month.</p>
+        )}
+
+        {incoming.length > 0 && (
+          <>
+            <h4 class="plan-column-title">Money in</h4>
+            <ul class="plan-list" aria-label={`Money in, ${title}`}>
+              {incoming.map((occurrence, index) =>
+                renderOccurrence(occurrence, index, month.current),
+              )}
+            </ul>
+          </>
+        )}
+
+        {outgoing.length > 0 && (
+          <>
+            <h4 class="plan-column-title">Money out</h4>
+            <ul class="plan-list" aria-label={`Money out, ${title}`}>
+              {outgoing.map((occurrence, index) =>
+                renderOccurrence(occurrence, index, month.current),
+              )}
+            </ul>
+          </>
+        )}
+      </section>
+    );
+  };
 
   const renderItem = (item: PlanItem) => {
     const icon =
@@ -488,6 +659,13 @@ export const RecurringPlan = component$<PlanProps>((props) => {
             {busy.value === `remove:${item.id}` ? "Removing…" : "Remove"}
           </button>
         </span>
+
+        {item.parts.length > 0 &&
+          renderParts(
+            item.parts,
+            item.unexplained ?? 0,
+            `What ${item.name} covers`,
+          )}
       </li>
     );
   };
@@ -556,33 +734,35 @@ export const RecurringPlan = component$<PlanProps>((props) => {
           <div>
             <h2 id="plan-title">Monthly plan</h2>
             <p class="recurring-hint">
-              What comes in and goes out each month from the rows in your plan.
+              What comes in, goes out and is left, from the rows in your plan.
             </p>
           </div>
 
-          {month && (
+          {shown.length > 0 && (
             <div class="plan-switcher">
               <button
                 type="button"
                 class="cal-chip plan-step"
-                aria-label="Previous month"
-                disabled={index === 0}
+                aria-label="Earlier months"
+                disabled={first === 0}
                 onClick$={() => {
-                  selected.value = Math.max(0, index - 1);
+                  selected.value = Math.max(0, first - 1);
                 }}
               >
                 <Icon name="chevronLeft" />
               </button>
               <span class="plan-month" aria-live="polite">
-                {formatMonth(month.month, "long")}
+                {shown
+                  .map((month) => formatMonth(month.month, "short"))
+                  .join(" – ")}
               </span>
               <button
                 type="button"
                 class="cal-chip plan-step"
-                aria-label="Next month"
-                disabled={index >= months.length - 1}
+                aria-label="Later months"
+                disabled={first >= months.length - 2}
                 onClick$={() => {
-                  selected.value = Math.min(months.length - 1, index + 1);
+                  selected.value = Math.min(months.length - 2, first + 1);
                 }}
               >
                 <Icon name="chevronRight" />
@@ -591,47 +771,10 @@ export const RecurringPlan = component$<PlanProps>((props) => {
           )}
         </div>
 
-        {month && (
-          <div class="plan-grid">
-            <div class="plan-month-view">
-              <dl class="recurring-figures plan-figures">
-                <div>
-                  <dt>Money in</dt>
-                  <dd>{`${kr(month.in)} kr`}</dd>
-                  <small>
-                    {month.current
-                      ? `${kr(sumOf(incoming.filter(settled)))} kr received so far`
-                      : count(incoming.length, "payment", "payments")}
-                  </small>
-                </div>
-                <div>
-                  <dt>Money out</dt>
-                  <dd>{`${kr(month.out)} kr`}</dd>
-                  <small>
-                    {month.current
-                      ? `${kr(sumOf(outgoing.filter((occurrence) => !settled(occurrence))))} kr still to pay`
-                      : count(outgoing.length, "payment", "payments")}
-                  </small>
-                </div>
-                <div class="plan-left">
-                  <dt>Left</dt>
-                  <dd class={{ "recurring-negative": month.left < 0 }}>
-                    {`${kr(month.left)} kr`}
-                  </dd>
-                  <small>Money in minus money out</small>
-                </div>
-              </dl>
-
-              {occurrences.length === 0 ? (
-                <p class="recurring-hint">Nothing in your plan this month.</p>
-              ) : (
-                <ul
-                  class="plan-list"
-                  aria-label={`Payments in ${formatMonth(month.month, "long")}`}
-                >
-                  {occurrences.map(renderOccurrence)}
-                </ul>
-              )}
+        {shown.length > 0 && (
+          <>
+            <div class="plan-pair">
+              {shown.map((month, offset) => renderMonth(month, first + offset))}
             </div>
 
             <div class="plan-year">
@@ -649,13 +792,18 @@ export const RecurringPlan = component$<PlanProps>((props) => {
                     {months.map((entry, position) => (
                       <tr
                         key={entry.month}
-                        class={{ "recurring-current": position === index }}
+                        class={{
+                          "recurring-current":
+                            position === first || position === first + 1,
+                        }}
                       >
                         <th scope="row">
                           <button
                             type="button"
                             class="plan-month-button"
-                            aria-pressed={position === index}
+                            aria-pressed={
+                              position === first || position === first + 1
+                            }
                             onClick$={() => {
                               selected.value = position;
                             }}
@@ -687,11 +835,12 @@ export const RecurringPlan = component$<PlanProps>((props) => {
                 </table>
               </div>
               <p class="recurring-hint">
-                The average spreads rows that come every few months or years
-                over every month.
+                Pick a month to show it next to the month after. The average
+                spreads rows that come every few months or years over every
+                month.
               </p>
             </div>
-          </div>
+          </>
         )}
       </section>
 
@@ -898,6 +1047,68 @@ export const RecurringPlan = component$<PlanProps>((props) => {
               </span>
             )}
           </label>
+
+          {editor.direction === "OUT" && (
+            <fieldset class="plan-section plan-split">
+              <legend class="plan-label">
+                Split into parts <small>optional</small>
+              </legend>
+              <span class="plan-hint">
+                Name what the payment covers. It still counts once, with its own
+                amount.
+              </span>
+              {editor.parts.map((part) => (
+                <div key={part.key} class="plan-part-edit">
+                  <input
+                    class="plan-input plan-part-name"
+                    type="text"
+                    maxLength={maxNameLength}
+                    autoComplete="off"
+                    aria-label="Part name"
+                    placeholder="Rent, food…"
+                    value={part.name}
+                    onInput$={(_, element) => {
+                      part.name = element.value;
+                    }}
+                  />
+                  <span class="plan-money plan-part-money">
+                    <input
+                      class="plan-input"
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      aria-label={`Amount for ${part.name.trim() || "this part"}`}
+                      placeholder="0,00"
+                      value={part.amount}
+                      onInput$={(_, element) => {
+                        part.amount = element.value;
+                      }}
+                    />
+                    <span>kr</span>
+                  </span>
+                  <button
+                    type="button"
+                    class="plan-part-remove"
+                    aria-label={`Remove ${part.name.trim() || "this part"}`}
+                    onClick$={() => removePart(part.key)}
+                  >
+                    <Icon name="close" />
+                  </button>
+                </div>
+              ))}
+              <button
+                type="button"
+                class="cal-chip plan-part-add"
+                onClick$={addPart}
+              >
+                <Icon name="plus" />
+                Add part
+              </button>
+              {editor.parts.length > 0 && (
+                <p class="plan-summary">{splitSummary}</p>
+              )}
+            </fieldset>
+          )}
 
           <fieldset class="plan-section">
             <legend class="plan-label">How often</legend>
