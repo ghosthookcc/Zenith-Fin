@@ -8,6 +8,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
     public sealed class RecurringPaymentsService
     {
         private readonly TransactionService _transactionService;
+        private readonly RecurringPlanService _recurringPlanService;
 
         private const int HistoryMonths = 12;
         private const int TypicalOccurrences = 6;
@@ -61,9 +62,11 @@ namespace ZenithFin.PostgreSQL.Models.Services
             ["YEARLY"] = new(12, 0, 1m / 12m)
         };
 
-        public RecurringPaymentsService(TransactionService transactionService)
+        public RecurringPaymentsService(TransactionService transactionService,
+                                        RecurringPlanService recurringPlanService)
         {
             _transactionService = transactionService;
+            _recurringPlanService = recurringPlanService;
         }
 
         public async Task<RecurringDto.Overview?> GetOverviewAsync(string sessionId)
@@ -75,7 +78,14 @@ namespace ZenithFin.PostgreSQL.Models.Services
                                                                                                           thisMonth.AddMonths(-HistoryMonths),
                                                                                                           thisMonth.AddMonths(1).AddDays(-1));
 
-            return response == null ? null : Build(today, response);
+            if (response == null) return null;
+
+            RecurringDto.Overview overview = Build(today, response);
+            RecurringDto.Plan? plan = await _recurringPlanService.GetPlanAsync(sessionId, today, overview);
+
+            if (plan != null) overview.Plan = plan;
+
+            return overview;
         }
 
         public static RecurringDto.Overview Build(DateOnly today,
@@ -165,6 +175,7 @@ namespace ZenithFin.PostgreSQL.Models.Services
                     Monthly = Math.Round(Math.Abs(kind is Kinds.Income or Kinds.Cost ? typicalCounted : typicalAmount) * cadence.PerMonth, 2),
                     Status = StatusOf(thisMonthRows.Length > 0, next, cadence, today, nextMonth),
                     ThisMonth = thisMonthRows.Sum(row => row.Transaction.Amount),
+                    ThisMonthCounted = thisMonthRows.Sum(row => row.Transaction.CountedAmount),
                     Currency = latest.Currency
                 });
             }

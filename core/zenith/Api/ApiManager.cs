@@ -65,6 +65,8 @@ namespace ZenithFin.Api
             builder.Services.AddSingleton<ExportRepository>();
             builder.Services.AddSingleton<ExportService>();
 
+            builder.Services.AddSingleton<RecurringPlanRepository>();
+            builder.Services.AddSingleton<RecurringPlanService>();
             builder.Services.AddSingleton<RecurringPaymentsService>();
 
             builder.Services.Configure<AvanzaOptions>(builder.Configuration.GetSection("Avanza"));
